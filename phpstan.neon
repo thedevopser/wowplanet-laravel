@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - app
+        - tests
+    excludePaths:
+        - ./vendor
+    ignoreErrors:
+        - '#Unsafe usage of new static\(\)#'
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
