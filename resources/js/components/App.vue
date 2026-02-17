@@ -1,5 +1,5 @@
 <template>
-    <div class="min-h-screen dark bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30">
+    <div class="min-h-screen dark bg-slate-900 text-slate-100 font-sans selection:bg-blue-500/30">
         <!-- Header / Search -->
         <header class="border-b border-white/10 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
             <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -96,9 +96,9 @@
             <div v-else-if="store.currentView === 'character' && store.character" class="space-y-8 animate-in fade-in duration-500">
                 <!-- Character Card -->
                 <div class="relative overflow-hidden rounded-2xl card-glass border shadow-2xl">
-                    <div class="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/80 to-slate-900/40 z-10"></div>
+                    <div class="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800/80 to-slate-800/40 z-10"></div>
                     <!-- Class icon as background -->
-                    <img v-if="store.character.classIconUrl" :src="store.character.classIconUrl" class="absolute right-8 top-1/2 -translate-y-1/2 w-48 h-48 object-contain opacity-10" alt="">
+                    <img v-if="store.character.classIconUrl" :src="store.character.classIconUrl" class="absolute right-8 top-1/2 -translate-y-1/2 w-48 h-48 object-contain opacity-25" :style="{ filter: `drop-shadow(0 0 20px ${classColor}80) drop-shadow(0 0 40px ${classColor}40)` }" alt="">
 
                     <div class="relative z-20 p-8 flex flex-col md:flex-row items-start md:items-end gap-6">
                         <img :src="store.character.avatarUrl" class="w-24 h-24 rounded-xl border-2 shadow-2xl bg-slate-800 object-cover" :style="{ borderColor: classColor + '40' }" alt="">
@@ -119,11 +119,11 @@
 
                         <!-- Global Stats -->
                         <div class="flex gap-4 mb-2">
-                            <div class="bg-slate-900/50 backdrop-blur px-4 py-2 rounded-xl border border-white/5 text-center">
+                            <div class="bg-slate-800/50 backdrop-blur px-4 py-2 rounded-xl border border-white/5 text-center">
                                 <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Montures</div>
                                 <div class="text-xl font-black text-amber-400">{{ store.character.mountsCount }}</div>
                             </div>
-                            <div class="bg-slate-900/50 backdrop-blur px-4 py-2 rounded-xl border border-white/5 text-center">
+                            <div class="bg-slate-800/50 backdrop-blur px-4 py-2 rounded-xl border border-white/5 text-center">
                                 <div class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Mascottes</div>
                                 <div class="text-xl font-black text-blue-400">{{ store.character.petsCount }}</div>
                             </div>
@@ -141,7 +141,7 @@
                             :class="[
                                 'px-5 py-2.5 rounded-t-xl text-sm font-bold transition-all border-b-2 -mb-[5px]',
                                 activeTab === tab.id
-                                    ? 'text-white border-blue-500 bg-slate-900/50'
+                                    ? 'text-white border-blue-500 bg-slate-800/50'
                                     : 'text-slate-500 border-transparent hover:text-slate-300 hover:border-slate-700'
                             ]"
                         >
@@ -162,13 +162,13 @@
                                     'px-4 py-3 rounded-2xl text-[13px] font-bold transition-all border flex flex-col items-center gap-1 group relative overflow-hidden',
                                     activeExpansion === exp.id
                                         ? 'bg-blue-600 border-blue-400 text-white shadow-xl shadow-blue-500/20 scale-105 z-10'
-                                        : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-white/10'
+                                        : 'bg-slate-800/80 border-white/5 text-slate-400 hover:text-white hover:bg-slate-700 hover:border-white/10'
                                 ]"
                             >
                                 <span class="relative z-10">{{ exp.name }}</span>
                                 <div v-if="store.character.collections[exp.id]" :class="[
                                     'text-[9px] font-mono px-2 py-0.5 rounded-full border relative z-10',
-                                    activeExpansion === exp.id ? 'bg-blue-700/50 border-white/20' : 'bg-slate-950 border-white/5 opacity-60'
+                                    activeExpansion === exp.id ? 'bg-blue-700/50 border-white/20' : 'bg-slate-800 border-white/5 opacity-60'
                                 ]">
                                     {{ store.character.collections[exp.id].quests.completed }} / {{ store.character.collections[exp.id].quests.total }}
                                 </div>
@@ -198,7 +198,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="h-3 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                                    <div class="h-3 bg-slate-800 rounded-full overflow-hidden border border-white/5">
                                         <div class="h-full bg-gradient-to-r from-blue-700 via-blue-500 to-blue-400 transition-all duration-1000 relative shadow-[0_0_15px_rgba(59,130,246,0.3)]" :style="{ width: (currentCollection.quests.total > 0 ? (currentCollection.quests.completed / currentCollection.quests.total * 100) : 0) + '%' }">
                                             <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
                                         </div>
@@ -211,7 +211,7 @@
                                 <div class="flex justify-between items-center mb-6">
                                     <h4 class="text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
                                         Décomposition par zone
-                                        <div class="flex-1 h-px bg-slate-800"></div>
+                                        <div class="flex-1 h-px bg-slate-700"></div>
                                     </h4>
                                     <div v-if="totalPagesZones > 1" class="flex items-center gap-2 ml-4">
                                         <button @click="pageZones--" :disabled="pageZones === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
@@ -228,13 +228,13 @@
                                         v-for="zone in paginatedZones"
                                         :key="zone.name"
                                         @click="toggleZone(zone)"
-                                        class="bg-slate-900/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                                        class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
                                     >
                                         <div class="flex justify-between items-start mb-3">
                                             <span class="text-sm font-bold text-slate-300 group-hover:text-blue-400 transition-colors">{{ zone.name }}</span>
                                             <span class="text-[10px] font-mono text-slate-500">{{ zone.completed }}/{{ zone.total }}</span>
                                         </div>
-                                        <div class="h-1 bg-slate-950 rounded-full overflow-hidden">
+                                        <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
                                             <div class="h-full bg-blue-600/80 transition-all duration-700" :style="{ width: (zone.completed / zone.total * 100) + '%' }"></div>
                                         </div>
                                         <div v-if="expandedZone === zone.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
@@ -262,13 +262,13 @@
                                     'px-4 py-3 rounded-2xl text-[13px] font-bold transition-all border flex flex-col items-center gap-1 group relative overflow-hidden',
                                     activeExpansion === exp.id
                                         ? 'bg-amber-600 border-amber-400 text-white shadow-xl shadow-amber-500/20 scale-105 z-10'
-                                        : 'bg-slate-900/80 border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-white/10'
+                                        : 'bg-slate-800/80 border-white/5 text-slate-400 hover:text-white hover:bg-slate-700 hover:border-white/10'
                                 ]"
                             >
                                 <span class="relative z-10">{{ exp.name }}</span>
                                 <div v-if="store.character.collections[exp.id]" :class="[
                                     'text-[9px] font-mono px-2 py-0.5 rounded-full border relative z-10',
-                                    activeExpansion === exp.id ? 'bg-amber-700/50 border-white/20' : 'bg-slate-950 border-white/5 opacity-60'
+                                    activeExpansion === exp.id ? 'bg-amber-700/50 border-white/20' : 'bg-slate-800 border-white/5 opacity-60'
                                 ]">
                                     {{ store.character.collections[exp.id].achievements.completed }} / {{ store.character.collections[exp.id].achievements.total }}
                                 </div>
@@ -298,7 +298,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="h-3 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+                                    <div class="h-3 bg-slate-800 rounded-full overflow-hidden border border-white/5">
                                         <div class="h-full bg-gradient-to-r from-amber-700 via-amber-500 to-amber-400 transition-all duration-1000 relative shadow-[0_0_15px_rgba(245,158,11,0.3)]" :style="{ width: (currentCollection.achievements.total > 0 ? (currentCollection.achievements.completed / currentCollection.achievements.total * 100) : 0) + '%' }">
                                             <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
                                         </div>
@@ -311,7 +311,7 @@
                                 <div class="flex justify-between items-center mb-6">
                                     <h4 class="text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
                                         Catégories de hauts-faits
-                                        <div class="flex-1 h-px bg-slate-800"></div>
+                                        <div class="flex-1 h-px bg-slate-700"></div>
                                     </h4>
                                     <div v-if="totalPagesCategories > 1" class="flex items-center gap-2 ml-4">
                                         <button @click="pageCategories--" :disabled="pageCategories === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
@@ -328,13 +328,13 @@
                                         v-for="cat in paginatedCategories"
                                         :key="cat.name"
                                         @click="toggleCategory(cat)"
-                                        class="bg-slate-900/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                                        class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
                                     >
                                         <div class="flex justify-between items-start mb-3">
                                             <span class="text-sm font-bold text-slate-300 group-hover:text-amber-400 transition-colors">{{ cat.name }}</span>
                                             <span class="text-[10px] font-mono text-slate-500">{{ cat.completed }}/{{ cat.total }}</span>
                                         </div>
-                                        <div class="h-1 bg-slate-950 rounded-full overflow-hidden">
+                                        <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
                                             <div class="h-full bg-amber-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
                                         </div>
                                         <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
@@ -385,7 +385,7 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <a v-for="mount in paginatedMounts" :key="mount.id" :href="`https://www.wowhead.com/fr/mount=${mount.id}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                            <a v-for="mount in paginatedMounts" :key="mount.id" :href="`https://www.wowhead.com/fr/mount=${mount.id}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
                                 <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-amber-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-amber-500/5">
                                     M
                                 </div>
@@ -435,7 +435,7 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <a v-for="pet in paginatedPets" :key="pet.id" :href="`https://www.wowhead.com/fr/pet=${pet.id}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl bg-slate-900/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+                            <a v-for="pet in paginatedPets" :key="pet.id" :href="`https://www.wowhead.com/fr/pet=${pet.id}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
                                 <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-blue-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/5">
                                     P
                                 </div>
@@ -499,7 +499,7 @@
                             v-for="char in filteredUserCharacters"
                             :key="char.name + '-' + char.realmSlug"
                             @click="selectCharacter(char)"
-                            class="bg-slate-900/40 border border-white/5 p-5 rounded-2xl hover:bg-slate-800/60 hover:border-blue-500/20 transition-all group text-left cursor-pointer"
+                            class="bg-slate-800/40 border border-white/5 p-5 rounded-2xl hover:bg-slate-800/60 hover:border-blue-500/20 transition-all group text-left cursor-pointer"
                         >
                             <div class="flex items-center gap-4">
                                 <img
@@ -547,7 +547,7 @@
             <div v-else-if="store.currentView === 'home'" class="space-y-16 py-8">
                 <!-- Hero -->
                 <div class="text-center max-w-3xl mx-auto">
-                    <div class="w-20 h-20 mx-auto bg-slate-900 rounded-3xl border border-white/10 flex items-center justify-center mb-8 shadow-2xl shadow-blue-500/10">
+                    <div class="w-20 h-20 mx-auto bg-slate-800 rounded-3xl border border-white/10 flex items-center justify-center mb-8 shadow-2xl shadow-blue-500/10">
                         <img src="/images/logo.png" alt="" class="w-14 h-14 rounded-xl object-cover">
                     </div>
                     <h2 class="text-4xl md:text-5xl font-black mb-4">
@@ -600,22 +600,22 @@
 
                 <!-- Features -->
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-                    <div class="bg-slate-900/40 border border-white/5 rounded-2xl p-6 text-center">
+                    <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 text-center">
                         <div class="w-12 h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-xl font-bold mb-4">Q</div>
                         <h4 class="font-bold text-white mb-1">Qu&ecirc;tes</h4>
                         <p class="text-xs text-slate-500">Progression par zone et par extension, avec plus de 21 000 qu&ecirc;tes r&eacute;f&eacute;renc&eacute;es.</p>
                     </div>
-                    <div class="bg-slate-900/40 border border-white/5 rounded-2xl p-6 text-center">
+                    <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 text-center">
                         <div class="w-12 h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-xl font-bold mb-4">HF</div>
                         <h4 class="font-bold text-white mb-1">Hauts-faits</h4>
                         <p class="text-xs text-slate-500">Plus de 8 600 hauts-faits tri&eacute;s par cat&eacute;gorie et par extension.</p>
                     </div>
-                    <div class="bg-slate-900/40 border border-white/5 rounded-2xl p-6 text-center">
+                    <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 text-center">
                         <div class="w-12 h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-xl font-bold mb-4">M</div>
                         <h4 class="font-bold text-white mb-1">Montures</h4>
                         <p class="text-xs text-slate-500">1 569 montures avec statut d'obtention et lien Wowhead.</p>
                     </div>
-                    <div class="bg-slate-900/40 border border-white/5 rounded-2xl p-6 text-center">
+                    <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 text-center">
                         <div class="w-12 h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-xl font-bold mb-4">P</div>
                         <h4 class="font-bold text-white mb-1">Mascottes</h4>
                         <p class="text-xs text-slate-500">2 117 mascottes de combat avec suivi de collection.</p>

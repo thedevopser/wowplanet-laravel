@@ -33,8 +33,8 @@
 }
 
 .dark {
-    --bg-gradient: linear-gradient(to bottom right, var(--color-slate-950), var(--color-slate-900), black);
-    --card-bg: rgba(30, 41, 59, 0.5);
+    --bg-gradient: linear-gradient(to bottom right, var(--color-slate-900), var(--color-slate-800), var(--color-slate-900));
+    --card-bg: rgba(30, 41, 59, 0.7);
     --card-border: rgba(51, 65, 85, 0.6);
     --text-primary: var(--color-slate-100);
     --text-secondary: var(--color-slate-400);
