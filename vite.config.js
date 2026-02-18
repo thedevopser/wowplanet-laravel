@@ -22,8 +22,12 @@ export default defineConfig({
     ],
     server: {
         host: '0.0.0.0',
+        origin: 'https://wowplanet-laravel.dev.local:8443',
         hmr: {
             host: 'wowplanet-laravel.dev.local',
+            protocol: 'wss',
+            clientPort: 8443,
+            path: '/@vite/ws',
         },
     },
     resolve: {

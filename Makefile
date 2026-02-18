@@ -19,8 +19,11 @@ install: ## Install dependencies (Composer & NPM)
 build-assets: ## Build assets for production
 	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npm run build
 
-dev: ## Start Vite dev server (requires port mapping)
-	docker run --rm -it -v $(shell pwd):/app -w /app -p 5173:5173 node:22-alpine npm run dev
+dev: ## Start Vite dev server (via Traefik HTTPS)
+	docker compose --profile dev up vite -d
+
+dev-stop: ## Stop Vite dev server
+	docker compose --profile dev stop vite
 
 clean: ## Clear Laravel caches
 	docker compose exec app php artisan config:clear

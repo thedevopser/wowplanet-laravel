@@ -6,7 +6,6 @@ export const useCharacterStore = defineStore('character', {
         character: null,
         loading: false,
         error: null,
-        currentView: 'home', // 'home' | 'character' | 'my-characters' | 'class-stats'
         isAuthenticated: false,
         userCharacters: [],
         classIcons: {},
@@ -43,7 +42,6 @@ export const useCharacterStore = defineStore('character', {
             try {
                 const response = await axios.get(`/api/character/${realm}/${name}`);
                 this.character = response.data;
-                this.currentView = 'character';
             } catch (err) {
                 this.error = err.response?.data?.message || 'Failed to fetch character';
                 this.character = null;
@@ -58,7 +56,6 @@ export const useCharacterStore = defineStore('character', {
             try {
                 const response = await axios.get('/api/user/characters');
                 this.userCharacters = response.data;
-                this.currentView = 'my-characters';
             } catch (err) {
                 this.error = err.response?.data?.message || 'Impossible de récupérer vos personnages';
             } finally {
@@ -84,14 +81,7 @@ export const useCharacterStore = defineStore('character', {
             }
             this.isAuthenticated = false;
             this.userCharacters = [];
-            this.currentView = 'home';
             this.character = null;
-        },
-
-        goHome() {
-            this.character = null;
-            this.error = null;
-            this.currentView = 'home';
         },
     },
 });
