@@ -316,6 +316,7 @@ class BlizzardBatchImporter
                         $this->info(sprintf('  [SKIP] %s (IDs: %d, %d) — no faction reputation.', $questName, $questIdA, $questIdB));
                         $skipped++;
                     }
+
                     continue;
                 }
             }

@@ -229,18 +229,23 @@ class CharacterProfileServiceTest extends TestCase
             if (str_contains($endpoint, 'quests/completed')) {
                 return ['quests' => [['id' => 1], ['id' => 2]]];
             }
+
             if (str_contains($endpoint, 'achievements')) {
                 return ['achievements' => []];
             }
+
             if (str_contains($endpoint, 'collections/mounts')) {
                 return ['mounts' => []];
             }
+
             if (str_contains($endpoint, 'collections/pets')) {
                 return ['pets' => []];
             }
+
             if (str_contains($endpoint, 'character-media')) {
                 return ['assets' => [['key' => 'avatar', 'value' => '']]];
             }
+
             if (str_contains($endpoint, 'playable-class')) {
                 return ['assets' => []];
             }
@@ -256,11 +261,11 @@ class CharacterProfileServiceTest extends TestCase
             ];
         });
 
-        $service = resolve(CharacterProfileService::class);
-        $dto = $service->getProfile('hyjal', 'thrall');
+        $characterProfileService = resolve(CharacterProfileService::class);
+        $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
 
         /** @var array{quests: array{total: int, completed: int}} $classicData */
-        $classicData = $dto->collections[0];
+        $classicData = $characterProfileDTO->collections[0];
         // Should see 2 quests (neutral + Horde), NOT the Alliance quest
         $this->assertSame(2, $classicData['quests']['total']);
         $this->assertSame(2, $classicData['quests']['completed']);

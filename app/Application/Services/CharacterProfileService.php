@@ -147,7 +147,7 @@ class CharacterProfileService
         /** @var Collection<int, WowQuest> $allQuestsRaw */
         $allQuestsRaw = WowQuest::query()
             ->where('is_active', true)
-            ->where(fn ($q) => $q->whereNull('faction')->orWhere('faction', $faction))
+            ->where(fn (\Illuminate\Contracts\Database\Query\Builder $builder) => $builder->whereNull('faction')->orWhere('faction', $faction))
             ->get();
         $allQuests = $allQuestsRaw->groupBy('expansion_id');
 
