@@ -192,4 +192,77 @@ class CharacterProfileServiceTest extends TestCase
         $this->assertSame(1, $twwData['quests']['total']);
         $this->assertSame(0, $twwData['quests']['completed']);
     }
+
+    #[Test]
+    public function aggregateProgressFiltersQuestsByCharacterFaction(): void
+    {
+        WowQuest::factory()->create([
+            'id' => 1,
+            'name_fr' => 'Quête neutre',
+            'expansion_id' => 0,
+            'zone_name' => 'Durotar',
+            'faction' => null,
+            'is_active' => true,
+        ]);
+        WowQuest::factory()->create([
+            'id' => 2,
+            'name_fr' => 'Quête Horde',
+            'expansion_id' => 0,
+            'zone_name' => 'Durotar',
+            'faction' => 'Horde',
+            'is_active' => true,
+        ]);
+        WowQuest::factory()->create([
+            'id' => 3,
+            'name_fr' => 'Quête Alliance',
+            'expansion_id' => 0,
+            'zone_name' => 'Durotar',
+            'faction' => 'Alliance',
+            'is_active' => true,
+        ]);
+
+        $mock = $this->mock(BlizzardApiClient::class);
+
+        /** @var \Mockery\Expectation $exp */
+        $exp = $mock->shouldReceive('get');
+        $exp->andReturnUsing(function (string $endpoint): array {
+            if (str_contains($endpoint, 'quests/completed')) {
+                return ['quests' => [['id' => 1], ['id' => 2]]];
+            }
+            if (str_contains($endpoint, 'achievements')) {
+                return ['achievements' => []];
+            }
+            if (str_contains($endpoint, 'collections/mounts')) {
+                return ['mounts' => []];
+            }
+            if (str_contains($endpoint, 'collections/pets')) {
+                return ['pets' => []];
+            }
+            if (str_contains($endpoint, 'character-media')) {
+                return ['assets' => [['key' => 'avatar', 'value' => '']]];
+            }
+            if (str_contains($endpoint, 'playable-class')) {
+                return ['assets' => []];
+            }
+
+            return [
+                'name' => 'Thrall',
+                'realm' => ['name' => 'Hyjal'],
+                'race' => ['name' => 'Orc'],
+                'character_class' => ['id' => 7, 'name' => 'Chaman'],
+                'level' => 80,
+                'equipped_item_level' => 600,
+                'faction' => ['name' => 'Horde'],
+            ];
+        });
+
+        $service = resolve(CharacterProfileService::class);
+        $dto = $service->getProfile('hyjal', 'thrall');
+
+        /** @var array{quests: array{total: int, completed: int}} $classicData */
+        $classicData = $dto->collections[0];
+        // Should see 2 quests (neutral + Horde), NOT the Alliance quest
+        $this->assertSame(2, $classicData['quests']['total']);
+        $this->assertSame(2, $classicData['quests']['completed']);
+    }
 }

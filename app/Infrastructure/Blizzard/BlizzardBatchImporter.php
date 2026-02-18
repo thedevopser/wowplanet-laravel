@@ -94,12 +94,20 @@ class BlizzardBatchImporter
      *
      * @param array<int, int> $areaExpansionMap [area_id => expansion_id] from DB2 data
      * @param array<int, int> $modernQuestOverrides [quest_id => expansion_id] only for expansion >= 10
+     * @param array<int, string> $questFactionMap [quest_id => 'Alliance'|'Horde'] from FiltRaces
+     * @param array<int, string> $zoneFactionMap [area_id => 'Alliance'|'Horde'] from FactionGroupMask
      */
-    public function importQuests(array $areaExpansionMap, array $modernQuestOverrides = []): void
-    {
+    public function importQuests(
+        array $areaExpansionMap,
+        array $modernQuestOverrides = [],
+        array $questFactionMap = [],
+        array $zoneFactionMap = [],
+    ): void {
         $this->info("Fetching quest area index...");
         $this->info("  DB2 area→expansion entries: " . count($areaExpansionMap));
         $this->info("  Modern per-quest overrides: " . count($modernQuestOverrides) . " entries (ContentTuning ≥ 10)");
+        $this->info("  Quest faction map: " . count($questFactionMap) . " faction-specific quests");
+        $this->info("  Zone faction map: " . count($zoneFactionMap) . " faction-specific zones");
 
         $index = $this->fetchWithRetry('data/wow/quest/area/index');
         if (!$index) {
@@ -134,7 +142,7 @@ class BlizzardBatchImporter
                 default => $area['name'],
             };
 
-            /** @var list<array{id: int, name: string}> $quests */
+            /** @var list<array{id: int, name: string|null}> $quests */
             $quests = $areaDetail['quests'] ?? [];
             if (empty($quests)) {
                 continue;
@@ -149,7 +157,7 @@ class BlizzardBatchImporter
             }
 
             foreach ($quests as $quest) {
-                $questName = $quest['name'];
+                $questName = $quest['name'] ?? '';
                 if ($questName === '') {
                     continue;
                 }
@@ -178,6 +186,7 @@ class BlizzardBatchImporter
                         'name_fr' => $questName,
                         'expansion_id' => $expansionId,
                         'zone_name' => $areaName,
+                        'faction' => $questFactionMap[$questId] ?? $zoneFactionMap[$areaId] ?? null,
                         'is_active' => true,
                     ]
                 );
@@ -251,6 +260,139 @@ class BlizzardBatchImporter
         }
 
         $this->info("Pet import complete.");
+    }
+
+    /**
+     * Tag mirror quest pairs (same name+zone, no faction) by checking API reputation rewards.
+     *
+     * @param array<int, string> $reputationFactionMap [reputation_faction_id => 'Alliance'|'Horde']
+     */
+    public function tagMirrorQuestFactions(array $reputationFactionMap): void
+    {
+        $this->info('Tagging mirror quest pairs via API reputation rewards...');
+        $pairs = $this->findMirrorPairs();
+        $this->info(sprintf('  Found %d mirror pairs to process.', count($pairs)));
+
+        if ($pairs === []) {
+            $this->info('  No mirror pairs found.');
+            return;
+        }
+
+        $tagged = 0;
+        $skipped = 0;
+        $errors = 0;
+
+        foreach ($pairs as $i => $pair) {
+            $questIdA = $pair['id_a'];
+            $questIdB = $pair['id_b'];
+            $questName = $pair['name'];
+
+            // Try quest A first
+            \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
+            $detailA = $this->fetchWithRetry('data/wow/quest/' . $questIdA);
+            $factionFromA = ($detailA !== null)
+                ? $this->detectFactionFromReputations($detailA, $reputationFactionMap)
+                : null;
+
+            if ($factionFromA !== null) {
+                $factionA = $factionFromA;
+                $factionB = $factionA === 'Alliance' ? 'Horde' : 'Alliance';
+            } else {
+                // Try quest B
+                \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
+                $detailB = $this->fetchWithRetry('data/wow/quest/' . $questIdB);
+                $factionFromB = ($detailB !== null)
+                    ? $this->detectFactionFromReputations($detailB, $reputationFactionMap)
+                    : null;
+
+                if ($factionFromB !== null) {
+                    $factionB = $factionFromB;
+                    $factionA = $factionB === 'Alliance' ? 'Horde' : 'Alliance';
+                } else {
+                    if ($detailA === null && $detailB === null) {
+                        $this->info(sprintf('  [ERR] %s (IDs: %d, %d) — API error.', $questName, $questIdA, $questIdB));
+                        $errors++;
+                    } else {
+                        $this->info(sprintf('  [SKIP] %s (IDs: %d, %d) — no faction reputation.', $questName, $questIdA, $questIdB));
+                        $skipped++;
+                    }
+                    continue;
+                }
+            }
+
+            $this->info(sprintf('  [TAG] %s → %d=%s, %d=%s', $questName, $questIdA, $factionA, $questIdB, $factionB));
+            WowQuest::query()->where('id', $questIdA)->update(['faction' => $factionA]);
+            WowQuest::query()->where('id', $questIdB)->update(['faction' => $factionB]);
+            $tagged++;
+
+            if (($i + 1) % 20 === 0) {
+                $this->info(sprintf('  Progress: %d/%d pairs.', $i + 1, count($pairs)));
+            }
+        }
+
+        $this->info(sprintf('Mirror tagging complete: %d tagged, %d skipped, %d errors.', $tagged, $skipped, $errors));
+    }
+
+    /**
+     * Find pairs of untagged quests that share the same name + zone.
+     *
+     * @return list<array{id_a: int, id_b: int, name: string, zone: string}>
+     */
+    private function findMirrorPairs(): array
+    {
+        /** @var \Illuminate\Support\Collection<int, WowQuest> $untagged */
+        $untagged = WowQuest::query()
+            ->where('is_active', true)
+            ->whereNull('faction')
+            ->get(['id', 'name_fr', 'zone_name']);
+
+        /** @var array<string, list<int>> $groups */
+        $groups = [];
+        foreach ($untagged as $quest) {
+            $key = $quest->name_fr . '|||' . $quest->zone_name;
+            $groups[$key][] = $quest->id;
+        }
+
+        $pairs = [];
+        foreach ($groups as $key => $ids) {
+            if (count($ids) < 2) {
+                continue;
+            }
+
+            sort($ids);
+            [$name, $zone] = explode('|||', $key);
+            $pairs[] = [
+                'id_a' => $ids[0],
+                'id_b' => $ids[1],
+                'name' => $name,
+                'zone' => $zone,
+            ];
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Detect faction from quest reputation rewards.
+     *
+     * @param array<string, mixed> $questDetail
+     * @param array<int, string> $reputationFactionMap
+     */
+    private function detectFactionFromReputations(array $questDetail, array $reputationFactionMap): ?string
+    {
+        /** @var array{reputations?: list<array{reward?: array{id: int}}>} $rewards */
+        $rewards = $questDetail['rewards'] ?? [];
+        /** @var list<array{reward?: array{id: int}}> $reputations */
+        $reputations = $rewards['reputations'] ?? [];
+
+        foreach ($reputations as $reputation) {
+            $factionId = $reputation['reward']['id'] ?? null;
+            if ($factionId !== null && isset($reputationFactionMap[$factionId])) {
+                return $reputationFactionMap[$factionId];
+            }
+        }
+
+        return null;
     }
 
     // ===================== PRIVATE =====================

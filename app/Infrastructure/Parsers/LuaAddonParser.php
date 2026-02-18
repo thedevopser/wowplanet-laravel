@@ -759,6 +759,151 @@ class LuaAddonParser
     }
 
     /**
+     * Parse QuestV2CliTask CSV for quest_id → faction from FiltRaces bitmask.
+     *
+     * Known FiltRaces values (compared as strings to avoid 64-bit precision issues):
+     * - '6130900294268439629'  → Alliance races only
+     * - '-6184943489809468494' → Horde races only
+     * - '-1' or anything else  → both factions (not included in map)
+     *
+     * @return array<int, string> [quest_id => 'Alliance'|'Horde']
+     */
+    public function getQuestFactionMap(): array
+    {
+        $csvPath = storage_path('app/blizzard/quest_v2_cli_task.csv');
+        if (!File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $filtRacesIdx = (int) array_search('FiltRaces', $headers, true);
+
+        $allianceBitmask = '6130900294268439629';
+        $hordeBitmask = '-6184943489809468494';
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $questId = (int) $row[$idIdx];
+            $filtRaces = trim((string) $row[$filtRacesIdx]);
+
+            if ($filtRaces === $allianceBitmask) {
+                $map[$questId] = 'Alliance';
+            } elseif ($filtRaces === $hordeBitmask) {
+                $map[$questId] = 'Horde';
+            }
+        }
+
+        fclose($handle);
+
+        return $map;
+    }
+
+    /**
+     * Build area_id → faction map from AreaTable FactionGroupMask.
+     *
+     * FactionGroupMask values:
+     * - 0 → no faction restriction (neutral)
+     * - 2 → Alliance only
+     * - 4 → Horde only
+     * - 6 → sanctuary/both factions
+     *
+     * @return array<int, string> [area_id => 'Alliance'|'Horde']
+     */
+    public function getZoneFactionMap(): array
+    {
+        $csvPath = storage_path('app/blizzard/area_table.csv');
+        if (!File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $fgmIdx = (int) array_search('FactionGroupMask', $headers, true);
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $fgm = (int) $row[$fgmIdx];
+            if ($fgm === 2) {
+                $map[(int) $row[$idIdx]] = 'Alliance';
+            } elseif ($fgm === 4) {
+                $map[(int) $row[$idIdx]] = 'Horde';
+            }
+        }
+
+        fclose($handle);
+
+        return $map;
+    }
+
+    /**
+     * Build reputation_faction_id → 'Alliance'|'Horde' map from Faction.csv.
+     *
+     * Uses ReputationBase values: if Alliance base >= 0 and Horde base < 0, it's Alliance.
+     * If Horde base >= 0 and Alliance base < 0, it's Horde.
+     *
+     * @return array<int, string> [reputation_faction_id => 'Alliance'|'Horde']
+     */
+    public function getReputationFactionMap(): array
+    {
+        $csvPath = storage_path('app/blizzard/faction.csv');
+        if (!File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $base0Idx = (int) array_search('ReputationBase_0', $headers, true);
+        $base1Idx = (int) array_search('ReputationBase_1', $headers, true);
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $allianceBase = (int) $row[$base0Idx];
+            $hordeBase = (int) $row[$base1Idx];
+
+            if ($allianceBase >= 0 && $hordeBase < 0) {
+                $map[(int) $row[$idIdx]] = 'Alliance';
+            } elseif ($hordeBase >= 0 && $allianceBase < 0) {
+                $map[(int) $row[$idIdx]] = 'Horde';
+            }
+        }
+
+        fclose($handle);
+
+        return $map;
+    }
+
+    /**
      * Build an achievement_id → expansion_id map from addon total_ids.
      * Used to assign expansion to achievements fetched from Blizzard API.
      *

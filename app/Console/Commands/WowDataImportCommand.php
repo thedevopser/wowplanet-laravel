@@ -37,8 +37,18 @@ class WowDataImportCommand extends Command
             $this->info("Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...");
             $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
-            $this->info(sprintf('Importing Quests (DB2 areas: %d, modern overrides: %d)...', count($areaExpansionMap), count($modernQuestOverrides)));
-            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides);
+            $questFactionMap = $luaAddonParser->getQuestFactionMap();
+            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
+            $this->info(sprintf(
+                'Importing Quests (DB2 areas: %d, modern overrides: %d, faction quests: %d, faction zones: %d)...',
+                count($areaExpansionMap),
+                count($modernQuestOverrides),
+                count($questFactionMap),
+                count($zoneFactionMap),
+            ));
+            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap);
+            $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
+            $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
             $this->newLine();
         }
 

@@ -30,6 +30,7 @@ class WowQuestFactory extends Factory
                 'Nagrand',
                 'Vallée des Quatre vents',
             ]),
+            'faction' => null,
             'is_active' => true,
         ];
     }

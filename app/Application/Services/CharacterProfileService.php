@@ -77,9 +77,14 @@ class CharacterProfileService
             $petsList,
         );
 
+        /** @var array{name?: string} $factionData */
+        $factionData = $summary['faction'] ?? [];
+        $characterFaction = (string) ($factionData['name'] ?? '');
+
         $collections = $this->aggregateProgress(
             $completedQuestIds,
             $completedAchievementIds,
+            $characterFaction,
         );
 
         $mounts = $this->processCollection(WowMount::all(), $characterMountIds);
@@ -102,8 +107,6 @@ class CharacterProfileService
         $realmData = $summary['realm'] ?? [];
         /** @var array{name?: string} $raceData */
         $raceData = $summary['race'] ?? [];
-        /** @var array{name?: string} $factionData */
-        $factionData = $summary['faction'] ?? [];
 
         $summaryName = is_string($summary['name'] ?? null) ? $summary['name'] : '';
         $summaryLevel = is_int($summary['level'] ?? null) ? $summary['level'] : 0;
@@ -118,7 +121,7 @@ class CharacterProfileService
             classId: $classId,
             level: $summaryLevel,
             ilvl: $summaryIlvl,
-            faction: (string) ($factionData['name'] ?? ''),
+            faction: $characterFaction,
             avatarUrl: (string) ($mediaAssets[1]['value'] ?? $mediaAssets[0]['value'] ?? ''),
             classIconUrl: $classIconUrl,
             collections: $collections,
@@ -137,11 +140,15 @@ class CharacterProfileService
     private function aggregateProgress(
         array $completedQuests,
         array $completedAchievements,
+        string $faction,
     ): array {
         $results = [];
 
         /** @var Collection<int, WowQuest> $allQuestsRaw */
-        $allQuestsRaw = WowQuest::query()->where('is_active', true)->get();
+        $allQuestsRaw = WowQuest::query()
+            ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('faction')->orWhere('faction', $faction))
+            ->get();
         $allQuests = $allQuestsRaw->groupBy('expansion_id');
 
         /** @var Collection<int, WowAchievement> $allAchievementsRaw */
@@ -215,8 +222,8 @@ class CharacterProfileService
                 ];
             }
 
-            $totalQuests = $expansionQuests->count();
-            $completedQuestsCount = $expansionQuests->whereIn('id', $completedQuests)->count();
+            $totalQuests = array_sum(array_column($zoneProgress, 'total'));
+            $completedQuestsCount = array_sum(array_column($zoneProgress, 'completed'));
 
             $totalAchievements = $expansionAchievements->count();
             $completedAchievementsCount = $expansionAchievements

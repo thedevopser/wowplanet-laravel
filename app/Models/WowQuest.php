@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $name_fr
  * @property int $expansion_id
  * @property string $zone_name
+ * @property string|null $faction
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -36,6 +37,7 @@ class WowQuest extends Model
         'name_fr',
         'expansion_id',
         'zone_name',
+        'faction',
         'is_active',
     ];
 
