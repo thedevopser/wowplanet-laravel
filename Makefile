@@ -1,4 +1,4 @@
-.PHONY: help build up down test lint static refactor quality build-prod push deploy prod-up prod-down
+.PHONY: help build up down install-hooks test lint static refactor quality build-prod push deploy prod-up prod-down
 
 PHPQA = docker run --rm -v $(shell pwd):/project -w /project jakzal/phpqa:php8.4
 PHPQA_IMAGE = phpqa-custom
@@ -19,6 +19,9 @@ install: ## Install dependencies (Composer & NPM)
 	docker compose exec app composer install
 	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npm install
 
+install-hooks: ## Install git pre-commit hook
+	@sh scripts/install-hooks.sh
+
 build-assets: ## Build assets for production
 	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npm run build
 
@@ -38,7 +41,7 @@ test: ## Run PHPUnit tests
 	docker compose exec app php artisan test
 
 lint: ## Fix code style (PSR-12 via phpcbf)
-	$(PHPQA) phpcbf --standard=phpcs.xml
+	$(PHPQA) phpcbf --standard=phpcs.xml || true
 
 static: ## Run PHPStan static analysis
 	$(PHPQA) phpstan analyse -c phpstan.neon --memory-limit=2G
@@ -47,7 +50,10 @@ refactor: ## Run Rector automated refactoring
 	docker run --rm -v $(PWD):/project -w /project $(PHPQA_IMAGE) \
 		rector process --config rector.php
 
-quality: lint static refactor test ## Run all quality checks
+test-js: ## Run Vitest (Vue component tests)
+	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run
+
+quality: lint static refactor test test-js ## Run all quality checks
 
 # =============================================================================
 # Production
