@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Application\Services;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 
@@ -43,6 +44,46 @@ class UserCharacterService
         $characters = $this->parseCharacters($response);
 
         return $this->fetchAvatars($characters, $token);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getClassIcons(): array
+    {
+        return Cache::remember('wow_class_icons', 86400 * 30, function () {
+            $classIds = range(1, 13);
+            $token = $this->apiClient->getAccessToken();
+            $baseUrl = "https://{$this->region}.api.blizzard.com";
+            $namespace = "static-{$this->region}";
+
+            $responses = Http::pool(function ($pool) use ($classIds, $baseUrl, $namespace, $token) {
+                foreach ($classIds as $classId) {
+                    $pool->as((string) $classId)
+                        ->withToken($token)
+                        ->withHeaders(['Battlenet-Namespace' => $namespace])
+                        ->get("{$baseUrl}/data/wow/media/playable-class/{$classId}", [
+                            'locale' => 'fr_FR',
+                            'namespace' => $namespace,
+                        ]);
+                }
+            });
+
+            $icons = [];
+            foreach ($classIds as $classId) {
+                $response = $responses[(string) $classId] ?? null;
+                if ($response && $response->ok()) {
+                    foreach ($response->json('assets') ?? [] as $asset) {
+                        if ($asset['key'] === 'icon') {
+                            $icons[$classId] = $asset['value'];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return $icons;
+        });
     }
 
     /**

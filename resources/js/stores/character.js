@@ -6,9 +6,10 @@ export const useCharacterStore = defineStore('character', {
         character: null,
         loading: false,
         error: null,
-        currentView: 'home', // 'home' | 'character' | 'my-characters'
+        currentView: 'home', // 'home' | 'character' | 'my-characters' | 'class-stats'
         isAuthenticated: false,
         userCharacters: [],
+        classIcons: {},
         loadingCharacters: false,
         expansions: [
             { id: 0, name: 'Classic' },
@@ -62,6 +63,16 @@ export const useCharacterStore = defineStore('character', {
                 this.error = err.response?.data?.message || 'Impossible de récupérer vos personnages';
             } finally {
                 this.loadingCharacters = false;
+            }
+        },
+
+        async fetchClassIcons() {
+            if (Object.keys(this.classIcons).length) return;
+            try {
+                const response = await axios.get('/api/class-icons');
+                this.classIcons = response.data;
+            } catch {
+                // fallback: icons stay empty, UI will show initial letter
             }
         },
 

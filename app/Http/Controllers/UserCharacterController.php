@@ -37,6 +37,15 @@ class UserCharacterController extends Controller
         ]);
     }
 
+    public function classIcons(): JsonResponse
+    {
+        try {
+            return response()->json($this->service->getClassIcons());
+        } catch (\Exception $e) {
+            return response()->json([], 500);
+        }
+    }
+
     public function logout(): JsonResponse
     {
         $this->service->logout();
