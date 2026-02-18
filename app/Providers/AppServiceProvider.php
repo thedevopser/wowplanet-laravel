@@ -19,12 +19,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (config('app.env') !== 'local' || env('FORCE_HTTPS', false)) {
+        /** @var string $env */
+        $env = config('app.env', 'production');
+        if ($env !== 'local' || env('FORCE_HTTPS', false)) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
 
-        // Always force HTTPS behind proxy if proxy handles SSL
-        if (str_contains(config('app.url'), 'https://')) {
+        /** @var string $appUrl */
+        $appUrl = config('app.url', '');
+        if (str_contains($appUrl, 'https://')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
         }
     }

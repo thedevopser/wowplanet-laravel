@@ -1,4 +1,7 @@
-.PHONY: help build up down test static refactor format quality build-prod push deploy prod-up prod-down
+.PHONY: help build up down test lint static refactor quality build-prod push deploy prod-up prod-down
+
+PHPQA = docker run --rm -v $(shell pwd):/project -w /project jakzal/phpqa:php8.4
+PHPQA_IMAGE = phpqa-custom
 
 help: ## Display this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -32,18 +35,19 @@ clean: ## Clear Laravel caches
 	docker compose exec app php artisan cache:clear
 
 test: ## Run PHPUnit tests
-	./vendor/bin/sail php unit
+	docker compose exec app php artisan test
+
+lint: ## Fix code style (PSR-12 via phpcbf)
+	$(PHPQA) phpcbf --standard=phpcs.xml
 
 static: ## Run PHPStan static analysis
-	docker run --rm -v $(shell pwd):/project jakzal/phpqa:php8.4 phpstan analyse --memory-limit=2G
+	$(PHPQA) phpstan analyse -c phpstan.neon --memory-limit=2G
 
-refactor: ## Run Rector for automated refactoring
-	docker run --rm -v $(shell pwd):/project jakzal/phpqa:php8.4 rector process app --dry-run
+refactor: ## Run Rector automated refactoring
+	docker run --rm -v $(PWD):/project -w /project $(PHPQA_IMAGE) \
+		rector process --config rector.php
 
-format: ## Run PHP CS Fixer to format code
-	docker run --rm -v $(shell pwd):/project jakzal/phpqa:php8.4 php-cs-fixer fix --dry-run --diff
-
-quality: static refactor format test ## Run all quality checks
+quality: lint static refactor test ## Run all quality checks
 
 # =============================================================================
 # Production

@@ -4,12 +4,31 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string $name_fr
+ * @property int $expansion_id
+ * @property string $zone_name
+ * @property bool $is_active
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder<static> query()
+ * @method static int count(string $columns = '*')
+ * @method static int truncate()
+ * @method static static updateOrCreate(array<string, mixed> $attributes, array<string, mixed> $values = [])
+ * @method static static create(array<string, mixed> $attributes = [])
+ */
 class WowQuest extends Model
 {
+    /** @use HasFactory<\Database\Factories\WowQuestFactory> */
+    use HasFactory;
+
     protected $table = 'wow_quests';
+
     protected $primaryKey = 'id';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -20,8 +39,13 @@ class WowQuest extends Model
         'is_active',
     ];
 
-    protected $casts = [
-        'expansion_id' => 'integer',
-        'is_active' => 'boolean',
-    ];
+    /**
+     * @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'expansion_id' => 'integer',
+            'is_active' => 'boolean',
+        ];
+    }
 }

@@ -11,38 +11,53 @@ use Illuminate\Support\Facades\Http;
 
 class BlizzardApiClient
 {
-    private string $clientId;
-    private string $clientSecret;
-    private string $region;
-    private string $namespace;
+    private readonly string $clientId;
 
-    public function __construct(private Client $client)
+    private readonly string $clientSecret;
+
+    private readonly string $region;
+
+    private readonly string $namespace;
+
+    public function __construct(private readonly Client $client)
     {
-        $this->clientId = (string)config('services.blizzard.client_id');
-        $this->clientSecret = (string)config('services.blizzard.client_secret');
-        $this->region = (string)config('services.blizzard.region', 'eu');
-        $this->namespace = "profile-{$this->region}";
+        /** @var string $clientId */
+        $clientId = config('services.blizzard.client_id', '');
+        $this->clientId = $clientId;
+
+        /** @var string $clientSecret */
+        $clientSecret = config('services.blizzard.client_secret', '');
+        $this->clientSecret = $clientSecret;
+
+        /** @var string $region */
+        $region = config('services.blizzard.region', 'eu');
+        $this->region = $region;
+
+        $this->namespace = 'profile-' . $this->region;
     }
 
     public function getAccessToken(): string
     {
-        return Cache::remember('blizzard_access_token', 3600, function () {
+        /** @var string $token */
+        $token = Cache::remember('blizzard_access_token', 3600, function (): string {
             $response = Http::asForm()
                 ->withBasicAuth($this->clientId, $this->clientSecret)
-                ->post("https://{$this->region}.battle.net/oauth/token", [
+                ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
                 'grant_type' => 'client_credentials',
             ]);
 
-            if ($response->failed()) {
-                throw new \RuntimeException('Failed to fetch Blizzard access token');
-            }
+            throw_if($response->failed(), \RuntimeException::class, 'Failed to fetch Blizzard access token');
 
-            return (string)$response->json('access_token');
+            /** @var string $accessToken */
+            $accessToken = $response->json('access_token');
+
+            return $accessToken;
         });
+
+        return $token;
     }
 
     /**
-     * @param string $endpoint
      * @param array<string, mixed> $query
      * @return array<string, mixed>
      * @throws GuzzleException
@@ -51,17 +66,20 @@ class BlizzardApiClient
     {
         $accessToken = $this->getAccessToken();
 
-        $namespace = $query['namespace'] ?? $this->namespace;
+        $namespace = is_string($query['namespace'] ?? null) ? $query['namespace'] : $this->namespace;
 
         $response = $this->client->get($endpoint, [
             'headers' => [
-                'Authorization' => "Bearer {$accessToken}",
+                'Authorization' => 'Bearer ' . $accessToken,
                 'Battlenet-Namespace' => $namespace,
             ],
             'query' => array_merge(['locale' => 'fr_FR'], $query),
         ]);
 
-        return json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+
+        return $decoded;
     }
 
     /**
@@ -73,13 +91,16 @@ class BlizzardApiClient
     {
         $response = $this->client->get($endpoint, [
             'headers' => [
-                'Authorization' => "Bearer {$userToken}",
+                'Authorization' => 'Bearer ' . $userToken,
                 'Battlenet-Namespace' => $this->namespace,
             ],
             'query' => array_merge(['locale' => 'fr_FR'], $query),
         ]);
 
-        return json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+
+        return $decoded;
     }
 
     public function getClient(): Client
@@ -87,16 +108,19 @@ class BlizzardApiClient
         return $this->client;
     }
 
+    /**
+     * @return array{headers: array{Authorization: string, Battlenet-Namespace: string}, query: array{locale: string, namespace: string}}
+     */
     public function getBaseOptions(): array
     {
         return [
             'headers' => [
-                'Authorization' => "Bearer {$this->getAccessToken()}",
-                'Battlenet-Namespace' => "static-{$this->region}",
+                'Authorization' => 'Bearer ' . $this->getAccessToken(),
+                'Battlenet-Namespace' => 'static-' . $this->region,
             ],
             'query' => [
                 'locale' => 'fr_FR',
-                'namespace' => "static-{$this->region}",
+                'namespace' => 'static-' . $this->region,
             ],
         ];
     }

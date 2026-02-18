@@ -13,10 +13,14 @@ use Illuminate\Support\Facades\Log;
 class BlizzardBatchImporter
 {
     private const REQUEST_DELAY_MS = 150;
+
     private const RATE_LIMIT_WAIT_S = 10;
+
     private const MAX_RETRIES = 3;
 
-    public function __construct(private BlizzardApiClient $apiClient) {}
+    public function __construct(private readonly BlizzardApiClient $blizzardApiClient)
+    {
+    }
 
     /**
      * Import ALL achievements by traversing the Blizzard category tree.
@@ -34,17 +38,18 @@ class BlizzardBatchImporter
             return;
         }
 
+        /** @var list<array{id: int, name: string}> $rootCategories */
         $rootCategories = $index['root_categories'] ?? [];
         $this->info("Found " . count($rootCategories) . " root categories.");
         $this->info("Addon expansion map: " . count($addonExpansionMap) . " achievement IDs.");
 
         $achievements = [];
 
-        foreach ($rootCategories as $rootCat) {
-            $this->info("  Traversing: {$rootCat['name']}");
+        foreach ($rootCategories as $rootCategory) {
+            $this->info('  Traversing: ' . $rootCategory['name']);
             $this->traverseAchievementCategory(
-                $rootCat['id'],
-                $rootCat['name'],
+                $rootCategory['id'],
+                $rootCategory['name'],
                 null,
                 $achievements,
             );
@@ -55,31 +60,28 @@ class BlizzardBatchImporter
         $unmapped = 0;
         $count = 0;
 
-        foreach ($achievements as $ach) {
+        foreach ($achievements as $achievement) {
             // Use addon map for expansion, fallback to category-based detection
-            $expansionId = $addonExpansionMap[$ach['id']] ?? $ach['expansion_id'];
-            if (isset($addonExpansionMap[$ach['id']])) {
-                $mapped++;
-            } else {
-                $unmapped++;
-            }
+            $expansionId = $addonExpansionMap[$achievement['id']] ?? $achievement['expansion_id'];
+            $mapped += isset($addonExpansionMap[$achievement['id']]) ? 1 : 0;
+            $unmapped += isset($addonExpansionMap[$achievement['id']]) ? 0 : 1;
 
             WowAchievement::updateOrCreate(
-                ['id' => $ach['id']],
+                ['id' => $achievement['id']],
                 [
-                    'name_fr' => $ach['name_fr'],
+                    'name_fr' => $achievement['name_fr'],
                     'expansion_id' => $expansionId,
-                    'category_name' => $ach['category_name'],
+                    'category_name' => $achievement['category_name'],
                     'is_active' => true,
                 ]
             );
             $count++;
             if ($count % 500 === 0) {
-                $this->info("  Saved {$count}...");
+                $this->info(sprintf('  Saved %d...', $count));
             }
         }
 
-        $this->info("Achievement import complete: {$count} total ({$mapped} mapped via addon, {$unmapped} from category tree).");
+        $this->info(sprintf('Achievement import complete: %d total (%d mapped via addon, %d from category tree).', $count, $mapped, $unmapped));
     }
 
     /**
@@ -105,9 +107,10 @@ class BlizzardBatchImporter
             return;
         }
 
+        /** @var list<array{id: int, name: string}> $areas */
         $areas = $index['areas'] ?? [];
         $totalAreas = count($areas);
-        $this->info("Found {$totalAreas} quest areas to process.");
+        $this->info(sprintf('Found %d quest areas to process.', $totalAreas));
 
         $totalImported = 0;
         $unmappedAreas = [];
@@ -115,45 +118,57 @@ class BlizzardBatchImporter
         $db2Count = 0;
 
         foreach ($areas as $i => $area) {
-            usleep(self::REQUEST_DELAY_MS * 1000);
+            \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
             $areaId = $area['id'];
-            $areaDetail = $this->fetchWithRetry("data/wow/quest/area/{$areaId}");
-            if (!$areaDetail) continue;
+            $areaDetail = $this->fetchWithRetry('data/wow/quest/area/' . $areaId);
+            if (!$areaDetail) {
+                continue;
+            }
 
-            $areaName = is_string($areaDetail['area'] ?? null)
-                ? $areaDetail['area']
-                : ($areaDetail['area']['name'] ?? $area['name'] ?? "Zone #{$areaId}");
+            /** @var string|array{name?: string}|null $areaField */
+            $areaField = $areaDetail['area'] ?? null;
+            $areaName = match (true) {
+                is_string($areaField) => $areaField,
+                is_array($areaField) => (string) ($areaField['name'] ?? $area['name']),
+                default => $area['name'],
+            };
 
+            /** @var list<array{id: int, name: string}> $quests */
             $quests = $areaDetail['quests'] ?? [];
-            if (empty($quests)) continue;
+            if (empty($quests)) {
+                continue;
+            }
 
             // Resolve area expansion from DB2 data
             $areaExpansionId = $areaExpansionMap[$areaId] ?? null;
 
             if ($areaExpansionId === null) {
-                $unmappedAreas[$areaName] = ($unmappedAreas[$areaName] ?? 0) + count($quests);
+                $unmappedAreas[$areaName] ??= count($quests);
                 $areaExpansionId = 0;
             }
 
             foreach ($quests as $quest) {
-                $questName = $quest['name'] ?? null;
-                if (!$questName) continue;
+                $questName = $quest['name'];
+                if ($questName === '') {
+                    continue;
+                }
 
                 $questId = $quest['id'];
                 $expansionId = $areaExpansionId;
 
                 // Per-quest override for modern expansions (≥ 10):
                 // If zone is modern AND ContentTuning says a different modern expansion
-                if ($areaExpansionId >= 10 && isset($modernQuestOverrides[$questId])) {
-                    $ctExpansion = $modernQuestOverrides[$questId];
-                    if ($ctExpansion !== $areaExpansionId) {
-                        $expansionId = $ctExpansion;
-                        $overrideCount++;
-                    } else {
-                        $db2Count++;
-                    }
-                } else {
+                $hasModernOverride = $areaExpansionId >= 10 && isset($modernQuestOverrides[$questId]);
+                $ctExpansion = $hasModernOverride ? $modernQuestOverrides[$questId] : $areaExpansionId;
+                $isOverridden = $hasModernOverride && $ctExpansion !== $areaExpansionId;
+
+                if ($isOverridden) {
+                    $expansionId = $ctExpansion;
+                    $overrideCount++;
+                }
+
+                if (!$isOverridden) {
                     $db2Count++;
                 }
 
@@ -170,20 +185,20 @@ class BlizzardBatchImporter
             }
 
             if (($i + 1) % 50 === 0 || ($i + 1) === $totalAreas) {
-                $this->info("  Areas: " . ($i + 1) . "/{$totalAreas} | Quests: {$totalImported}");
+                $this->info("  Areas: " . ($i + 1) . sprintf('/%d | Quests: %d', $totalAreas, $totalImported));
             }
         }
 
-        $this->info("  Mapping: {$db2Count} DB2-based | {$overrideCount} modern quest overrides (ContentTuning)");
+        $this->info(sprintf('  Mapping: %d DB2-based | %d modern quest overrides (ContentTuning)', $db2Count, $overrideCount));
 
-        if (!empty($unmappedAreas)) {
+        if ($unmappedAreas !== []) {
             $this->info("  WARNING: Areas not in DB2 AreaTable (defaulted to Classic): " . count($unmappedAreas));
             foreach ($unmappedAreas as $zone => $count) {
-                $this->info("    - {$zone} ({$count} quests)");
+                $this->info(sprintf('    - %s (%d quests)', $zone, $count));
             }
         }
 
-        $this->info("Quest import complete: {$totalImported} quests from {$totalAreas} areas.");
+        $this->info(sprintf('Quest import complete: %d quests from %d areas.', $totalImported, $totalAreas));
     }
 
     /**
@@ -198,13 +213,14 @@ class BlizzardBatchImporter
             return;
         }
 
+        /** @var list<array{id: int, name: string}> $mounts */
         $mounts = $response['mounts'] ?? [];
         $this->info("Found " . count($mounts) . " mounts.");
 
         foreach ($mounts as $mount) {
             WowMount::updateOrCreate(
                 ['id' => $mount['id']],
-                ['name_fr' => $mount['name'] ?? "Monture #{$mount['id']}", 'is_active' => true]
+                ['name_fr' => $mount['name'], 'is_active' => true]
             );
         }
 
@@ -223,13 +239,14 @@ class BlizzardBatchImporter
             return;
         }
 
+        /** @var list<array{id: int, name: string}> $pets */
         $pets = $response['pets'] ?? [];
         $this->info("Found " . count($pets) . " pets.");
 
         foreach ($pets as $pet) {
             WowPet::updateOrCreate(
                 ['id' => $pet['id']],
-                ['name_fr' => $pet['name'] ?? "Mascotte #{$pet['id']}", 'is_active' => true]
+                ['name_fr' => $pet['name'], 'is_active' => true]
             );
         }
 
@@ -238,37 +255,48 @@ class BlizzardBatchImporter
 
     // ===================== PRIVATE =====================
 
+    /**
+     * @param list<array{id: int, name_fr: string, expansion_id: int, category_name: string}> $achievements
+     */
     private function traverseAchievementCategory(
         int $categoryId,
         string $rootCategoryName,
         ?int $currentExpansionId,
         array &$achievements,
     ): void {
-        usleep(self::REQUEST_DELAY_MS * 1000);
+        \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
-        $category = $this->fetchWithRetry("data/wow/achievement-category/{$categoryId}");
-        if (!$category) return;
+        $category = $this->fetchWithRetry('data/wow/achievement-category/' . $categoryId);
+        if (!$category) {
+            return;
+        }
 
         // Try to determine expansion from this category's name
-        $matched = $this->matchExpansion($category['name'] ?? '');
+        /** @var string $categoryName */
+        $categoryName = $category['name'] ?? '';
+        $matched = $this->matchExpansion($categoryName);
         if ($matched !== null) {
             $currentExpansionId = $matched;
         }
 
         // Collect direct achievements
-        foreach ($category['achievements'] ?? [] as $ach) {
+        /** @var list<array{id: int, name: string}> $categoryAchievements */
+        $categoryAchievements = $category['achievements'] ?? [];
+        foreach ($categoryAchievements as $categoryAchievement) {
             $achievements[] = [
-                'id' => $ach['id'],
-                'name_fr' => $ach['name'],
+                'id' => $categoryAchievement['id'],
+                'name_fr' => $categoryAchievement['name'],
                 'expansion_id' => $currentExpansionId ?? 0,
                 'category_name' => $rootCategoryName,
             ];
         }
 
         // Recurse into sub-categories
-        foreach ($category['subcategories'] ?? [] as $sub) {
+        /** @var list<array{id: int}> $subcategories */
+        $subcategories = $category['subcategories'] ?? [];
+        foreach ($subcategories as $subcategory) {
             $this->traverseAchievementCategory(
-                $sub['id'],
+                $subcategory['id'],
                 $rootCategoryName,
                 $currentExpansionId,
                 $achievements,
@@ -284,7 +312,7 @@ class BlizzardBatchImporter
     {
         $keywords = [
             // Multi-word (most specific first)
-            'Royaumes de l\'Est' => 0,
+            "Royaumes de l'Est" => 0,
             'Battle for Azeroth' => 7,
             'Mists of Pandaria' => 4,
             'Burning Crusade' => 1,
@@ -320,24 +348,30 @@ class BlizzardBatchImporter
         return null;
     }
 
+    /**
+     * @return array<string, mixed>|null
+     */
     private function fetchWithRetry(string $endpoint, int $attempt = 1): ?array
     {
         try {
+            /** @var string $region */
             $region = config('services.blizzard.region', 'eu');
-            return $this->apiClient->get($endpoint, [
-                'namespace' => "static-{$region}",
+            return $this->blizzardApiClient->get($endpoint, [
+                'namespace' => 'static-' . $region,
             ]);
-        } catch (\Exception $e) {
-            if ($attempt < self::MAX_RETRIES && str_contains($e->getMessage(), '429')) {
+        } catch (\Exception $exception) {
+            if ($attempt < self::MAX_RETRIES && str_contains($exception->getMessage(), '429')) {
                 $delay = self::RATE_LIMIT_WAIT_S * $attempt;
-                $this->info("Rate limit hit, waiting {$delay}s (attempt {$attempt}/" . self::MAX_RETRIES . ")...");
-                sleep($delay);
+                $this->info(sprintf('Rate limit hit, waiting %ds (attempt %d/', $delay, $attempt) . self::MAX_RETRIES . ")...");
+                \Illuminate\Support\Sleep::sleep($delay);
                 return $this->fetchWithRetry($endpoint, $attempt + 1);
             }
-            if (str_contains($e->getMessage(), '404')) {
+
+            if (str_contains($exception->getMessage(), '404')) {
                 return null;
             }
-            Log::warning("API error [{$endpoint}]: " . $e->getMessage());
+
+            Log::warning(sprintf('API error [%s]: ', $endpoint) . $exception->getMessage());
             return null;
         }
     }
@@ -347,6 +381,7 @@ class BlizzardBatchImporter
         if (app()->runningInConsole()) {
             echo $message . PHP_EOL;
         }
+
         Log::info($message);
     }
 }

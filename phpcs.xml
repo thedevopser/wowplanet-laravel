@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<ruleset name="WowPlanet">
+    <description>WowPlanet coding standard - PSR-12 + Laravel conventions</description>
+
+    <!-- Paths to scan -->
+    <file>app</file>
+    <file>config</file>
+    <file>database</file>
+    <file>routes</file>
+    <file>tests</file>
+
+    <!-- Exclusions -->
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>storage/*</exclude-pattern>
+    <exclude-pattern>bootstrap/cache/*</exclude-pattern>
+    <exclude-pattern>*.blade.php</exclude-pattern>
+
+    <!-- PSR-12 as base -->
+    <rule ref="PSR12"/>
+
+    <!-- Array syntax: short -->
+    <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
+
+    <!-- No superfluous whitespace -->
+    <rule ref="Squiz.WhiteSpace.SuperfluousWhitespace">
+        <properties>
+            <property name="ignoreBlankLines" value="true"/>
+        </properties>
+    </rule>
+
+    <!-- Line length: soft 120, hard 150 -->
+    <rule ref="Generic.Files.LineLength">
+        <properties>
+            <property name="lineLimit" value="120"/>
+            <property name="absoluteLineLimit" value="150"/>
+        </properties>
+    </rule>
+
+    <!-- No space after NOT operator -->
+    <rule ref="Generic.Formatting.SpaceAfterNot">
+        <properties>
+            <property name="spacing" value="0"/>
+        </properties>
+    </rule>
+
+    <!-- Function opening brace on same line -->
+    <rule ref="Generic.Functions.OpeningFunctionBraceBsdAllman">
+        <exclude name="Generic.Functions.OpeningFunctionBraceBsdAllman.BraceOnSameLine"/>
+    </rule>
+
+    <!-- Concatenation spacing -->
+    <rule ref="Squiz.Strings.ConcatenationSpacing">
+        <properties>
+            <property name="spacing" value="1"/>
+            <property name="ignoreNewlines" value="true"/>
+        </properties>
+    </rule>
+</ruleset>

@@ -11,9 +11,11 @@ use Illuminate\Support\Facades\File;
 class ImportBlizzardMappings extends Command
 {
     protected $signature = 'blizzard:import-mappings';
+
     protected $description = 'Parse LUA addon data to extract achievement and quest IDs per expansion';
 
     private const BASE_PATH = 'storage/app/blizzard/mappings';
+
     private const OUTPUT_PATH = 'storage/app/blizzard/mappings/processed';
 
     public function handle(): void
@@ -63,7 +65,7 @@ class ImportBlizzardMappings extends Command
         ];
 
         foreach ($expansionMap as $folder => $expansionId) {
-            $path = base_path(self::BASE_PATH . "/Krowi_AchievementFilter/DataAddons/Retail/{$folder}/CategoryData.lua");
+            $path = base_path(self::BASE_PATH . sprintf('/Krowi_AchievementFilter/DataAddons/Retail/%s/CategoryData.lua', $folder));
 
             if (!File::exists($path)) {
                 continue;
@@ -131,7 +133,7 @@ class ImportBlizzardMappings extends Command
             $achievements[$expansionId] = $expansionData;
         }
 
-        File::put(base_path(self::OUTPUT_PATH . '/achievements.json'), json_encode($achievements, JSON_PRETTY_PRINT));
+        File::put(base_path(self::OUTPUT_PATH . '/achievements.json'), (string) json_encode($achievements, JSON_PRETTY_PRINT));
     }
 
     private function processQuests(): void
@@ -154,7 +156,7 @@ class ImportBlizzardMappings extends Command
         ];
 
         foreach ($btwMap as $folder => $expansionId) {
-            $folderPath = base_path(self::BASE_PATH . "/BTW/{$folder}");
+            $folderPath = base_path(self::BASE_PATH . ('/BTW/' . $folder));
 
             if (!File::isDirectory($folderPath)) {
                 continue;
@@ -177,20 +179,29 @@ class ImportBlizzardMappings extends Command
             }
 
             foreach (File::allFiles($folderPath) as $file) {
-                if ($file->getExtension() !== 'lua' || str_contains($file->getPathname(), '/Database/') || str_contains($file->getPathname(), '/Localization.'))
+                if ($file->getExtension() !== 'lua') {
                     continue;
+                }
+
+                if (str_contains($file->getPathname(), '/Database/')) {
+                    continue;
+                }
+
+                if (str_contains($file->getPathname(), '/Localization.')) {
+                    continue;
+                }
 
                 $enZoneName = $file->getBasename('.lua');
-                if ($enZoneName === 'Defines' || $enZoneName === 'General')
+                if ($enZoneName === 'Defines') {
                     continue;
+                }
+
+                if ($enZoneName === 'General') {
+                    continue;
+                }
 
                 // Filter out version-numbered files (e.g., 11.1, 11.2.7)
-                if (preg_match('/^\d+(\.\d+)*$/', $enZoneName)) {
-                    $frZoneName = 'Général / Patchs';
-                }
-                else {
-                    $frZoneName = $this->translateZoneName($enZoneName);
-                }
+                $frZoneName = preg_match('/^\d+(\.\d+)*$/', $enZoneName) ? 'Général / Patchs' : $this->translateZoneName($enZoneName);
 
                 $content = File::get($file->getRealPath());
 
@@ -203,16 +214,16 @@ class ImportBlizzardMappings extends Command
                 preg_match_all('/ids\s*=\s*\{\s*([\d\s,]+)\s*\}/', $content, $listMatches);
                 foreach ($listMatches[1] as $list) {
                     $listIds = explode(',', $list);
-                    foreach ($listIds as $id) {
-                        $id = trim($id);
-                        if (is_numeric($id)) {
-                            $zoneIds[] = (int)$id;
+                    foreach ($listIds as $listId) {
+                        $listId = trim($listId);
+                        if (is_numeric($listId)) {
+                            $zoneIds[] = (int)$listId;
                         }
                     }
                 }
 
                 $zoneIds = array_values(array_unique($zoneIds));
-                if (!empty($zoneIds)) {
+                if ($zoneIds !== []) {
                     $expansionData['zones'][$frZoneName] = [
                         'ids' => $zoneIds,
                         'names' => array_intersect_key($frenchNames, array_flip($zoneIds))
@@ -225,7 +236,7 @@ class ImportBlizzardMappings extends Command
             $quests[$expansionId] = $expansionData;
         }
 
-        File::put(base_path(self::OUTPUT_PATH . '/quests.json'), json_encode($quests, JSON_PRETTY_PRINT));
+        File::put(base_path(self::OUTPUT_PATH . '/quests.json'), (string) json_encode($quests, JSON_PRETTY_PRINT));
     }
 
     private function translateZoneName(string $name): string
@@ -237,7 +248,7 @@ class ImportBlizzardMappings extends Command
             'TheRingingDeeps' => 'Les Abîmes Retentissants',
             'SirenIsle' => 'Île aux Sirènes',
             'TheWakingShores' => 'Le Rivage de l\'Éveil',
-            'OhnahranPlains' => 'Plaines d\'Ohn\'ahra',
+            'OhnahranPlains' => "Plaines d'Ohn'ahra",
             'TheAzureSpan' => 'La Travée d\'Azur',
             'Thaldraszus' => 'Thaldraszus',
             'ForbiddenReach' => 'Confins Interdits',
@@ -256,11 +267,11 @@ class ImportBlizzardMappings extends Command
             'TiragardeSound' => 'Rade de Tiragarde',
             'Zuldazar' => 'Zuldazar',
             'Nazmir' => 'Nazmir',
-            'Voldun' => 'Vol\'dun',
+            'Voldun' => "Vol'dun",
             'Suramar' => 'Suramar',
             'Highmountain' => 'Haut-Roc',
             'Stormheim' => 'Tornheim',
-            'Valsharah' => 'Val\'sharah',
+            'Valsharah' => "Val'sharah",
             'Azsuna' => 'Azsuna',
             'ShadowmoonValley' => 'Vallée d\'Ombrelune',
             'FrostfireRidge' => 'Crête de Givrefeu',
@@ -274,10 +285,10 @@ class ImportBlizzardMappings extends Command
             'KrasarangWilds' => 'Étendues sauvages de Krasarang',
             'KunLaiSummit' => 'Sommet de Kun-Lai',
             'TownlongSteppes' => 'Steppes de Tanglong',
-            'DreadWastes' => 'Terres de l\'Angoisse',
+            'DreadWastes' => "Terres de l'Angoisse",
             'ValeOfEternalBlossoms' => 'Val de l\'Éternel printemps',
             'MountHyjal' => 'Mont Hyjal',
-            'Vashjir' => 'Vashj\'ir',
+            'Vashjir' => "Vashj'ir",
             'Deepholm' => 'Le Tréfonds',
             'Uldum' => 'Uldum',
             'TwilightHighlands' => 'Hautes-terres du Crépuscule',
@@ -285,7 +296,7 @@ class ImportBlizzardMappings extends Command
             'HowlingFjord' => 'Fjord Hurlant',
             'Dragonblight' => 'Désolation des dragons',
             'GrizzlyHills' => 'Les Grisonnes',
-            'ZulDrak' => 'Zul\'Drak',
+            'ZulDrak' => "Zul'Drak",
             'SholazarBasin' => 'Bassin de Sholazar',
             'TheStormPeaks' => 'Les Pics Foudroyés',
             'Icecrown' => 'La Couronne de glace',
@@ -296,6 +307,6 @@ class ImportBlizzardMappings extends Command
             'Netherstorm' => 'Raz-de-Néant',
         ];
 
-        return $map[$name] ?? preg_replace('/(?<!^)([A-Z])/', ' $1', $name);
+        return $map[$name] ?? (string) preg_replace('/(?<!^)([A-Z])/', ' $1', $name);
     }
 }

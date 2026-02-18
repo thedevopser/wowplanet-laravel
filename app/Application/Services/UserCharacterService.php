@@ -11,12 +11,14 @@ use Illuminate\Support\Facades\Session;
 
 class UserCharacterService
 {
-    private string $region;
+    private readonly string $region;
 
     public function __construct(
-        private BlizzardApiClient $apiClient,
+        private readonly BlizzardApiClient $blizzardApiClient,
     ) {
-        $this->region = (string) config('services.blizzard.region', 'eu');
+        /** @var string $region */
+        $region = config('services.blizzard.region', 'eu');
+        $this->region = $region;
     }
 
     public function isAuthenticated(): bool
@@ -34,13 +36,14 @@ class UserCharacterService
      */
     public function getUserCharacters(): array
     {
-        $token = Session::get('blizzard_user_token');
+        /** @var string $token */
+        $token = Session::get('blizzard_user_token', '');
 
-        if (!$token) {
+        if ($token === '') {
             return [];
         }
 
-        $response = $this->apiClient->getWithUserToken('profile/user/wow', $token);
+        $response = $this->blizzardApiClient->getWithUserToken('profile/user/wow', $token);
         $characters = $this->parseCharacters($response);
 
         return $this->fetchAvatars($characters, $token);
@@ -51,18 +54,20 @@ class UserCharacterService
      */
     public function getClassIcons(): array
     {
-        return Cache::remember('wow_class_icons', 86400 * 30, function () {
+        /** @var array<int, string> $icons */
+        $icons = Cache::remember('wow_class_icons', 86400 * 30, function (): array {
             $classIds = range(1, 13);
-            $token = $this->apiClient->getAccessToken();
-            $baseUrl = "https://{$this->region}.api.blizzard.com";
-            $namespace = "static-{$this->region}";
+            $token = $this->blizzardApiClient->getAccessToken();
+            $baseUrl = sprintf('https://%s.api.blizzard.com', $this->region);
+            $namespace = 'static-' . $this->region;
 
-            $responses = Http::pool(function ($pool) use ($classIds, $baseUrl, $namespace, $token) {
+            /** @var array<string, \Illuminate\Http\Client\Response> $responses */
+            $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($classIds, $baseUrl, $namespace, $token): void {
                 foreach ($classIds as $classId) {
                     $pool->as((string) $classId)
                         ->withToken($token)
                         ->withHeaders(['Battlenet-Namespace' => $namespace])
-                        ->get("{$baseUrl}/data/wow/media/playable-class/{$classId}", [
+                        ->get(sprintf('%s/data/wow/media/playable-class/%s', $baseUrl, $classId), [
                             'locale' => 'fr_FR',
                             'namespace' => $namespace,
                         ]);
@@ -70,60 +75,81 @@ class UserCharacterService
             });
 
             $icons = [];
-            foreach ($classIds as $classId) {
-                $response = $responses[(string) $classId] ?? null;
-                if ($response && $response->ok()) {
-                    foreach ($response->json('assets') ?? [] as $asset) {
-                        if ($asset['key'] === 'icon') {
-                            $icons[$classId] = $asset['value'];
-                            break;
-                        }
+            foreach ($responses as $key => $response) {
+                if (!$response->ok()) {
+                    continue;
+                }
+
+                /** @var list<array{key: string, value: string}> $assets */
+                $assets = $response->json('assets') ?? [];
+                foreach ($assets as $asset) {
+                    if ($asset['key'] === 'icon') {
+                        $icons[(int) $key] = $asset['value'];
+                        break;
                     }
                 }
             }
 
             return $icons;
         });
+
+        return $icons;
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @param array<string, mixed> $response
+     * @return list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}>
      */
     private function parseCharacters(array $response): array
     {
         $characters = [];
 
-        foreach ($response['wow_accounts'] ?? [] as $account) {
-            foreach ($account['characters'] ?? [] as $char) {
+        /** @var list<array{characters?: list<array<string, mixed>>}> $accounts */
+        $accounts = $response['wow_accounts'] ?? [];
+        foreach ($accounts as $account) {
+            /** @var list<array<string, mixed>> $chars */
+            $chars = $account['characters'] ?? [];
+            foreach ($chars as $char) {
+                /** @var array{name?: string, slug?: string} $charRealm */
+                $charRealm = $char['realm'] ?? [];
+                /** @var array{id?: int, name?: string} $charClass */
+                $charClass = $char['playable_class'] ?? [];
+                /** @var array{id?: int, name?: string} $charRace */
+                $charRace = $char['playable_race'] ?? [];
+                /** @var array{name?: string} $charFaction */
+                $charFaction = $char['faction'] ?? [];
+
                 $characters[] = [
-                    'name' => $char['name'] ?? '',
-                    'realm' => $char['realm']['name'] ?? '',
-                    'realmSlug' => $char['realm']['slug'] ?? '',
-                    'level' => $char['level'] ?? 0,
-                    'classId' => $char['playable_class']['id'] ?? 0,
-                    'className' => $char['playable_class']['name'] ?? '',
-                    'raceId' => $char['playable_race']['id'] ?? 0,
-                    'raceName' => $char['playable_race']['name'] ?? '',
-                    'faction' => $char['faction']['name'] ?? '',
+                    'name' => is_string($char['name'] ?? null) ? $char['name'] : '',
+                    'realm' => (string) ($charRealm['name'] ?? ''),
+                    'realmSlug' => (string) ($charRealm['slug'] ?? ''),
+                    'level' => is_int($char['level'] ?? null) ? $char['level'] : 0,
+                    'classId' => (int) ($charClass['id'] ?? 0),
+                    'className' => (string) ($charClass['name'] ?? ''),
+                    'raceId' => (int) ($charRace['id'] ?? 0),
+                    'raceName' => (string) ($charRace['name'] ?? ''),
+                    'faction' => (string) ($charFaction['name'] ?? ''),
                     'avatarUrl' => '',
                 ];
             }
         }
 
-        usort($characters, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+        usort($characters, fn(array $a, array $b): int => strcasecmp($a['name'], $b['name']));
 
         return $characters;
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @param list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}> $characters
+     * @return list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}>
      */
     private function fetchAvatars(array $characters, string $token): array
     {
-        $baseUrl = "https://{$this->region}.api.blizzard.com";
-        $namespace = "profile-{$this->region}";
+        $baseUrl = sprintf('https://%s.api.blizzard.com', $this->region);
+        $namespace = 'profile-' . $this->region;
 
-        $responses = Http::pool(function ($pool) use ($characters, $baseUrl, $namespace, $token) {
+        /** @var array<string, \Illuminate\Http\Client\Response> $responses */
+        $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($characters, $baseUrl, $namespace, $token): void {
             foreach ($characters as $i => $char) {
                 $realm = strtolower($char['realmSlug']);
                 $name = strtolower($char['name']);
@@ -131,17 +157,25 @@ class UserCharacterService
                 $pool->as((string) $i)
                     ->withToken($token)
                     ->withHeaders(['Battlenet-Namespace' => $namespace])
-                    ->get("{$baseUrl}/profile/wow/character/{$realm}/{$name}/character-media", [
+                    ->get(sprintf('%s/profile/wow/character/%s/%s/character-media', $baseUrl, $realm, $name), [
                         'locale' => 'fr_FR',
                     ]);
             }
         });
 
         foreach ($characters as $i => &$char) {
-            $response = $responses[(string) $i] ?? null;
-            if ($response && $response->ok()) {
+            $key = (string) $i;
+            if (!isset($responses[$key])) {
+                continue;
+            }
+
+            $response = $responses[$key];
+            if ($response->ok()) {
+                /** @var array<string, mixed> $data */
                 $data = $response->json();
-                foreach ($data['assets'] ?? [] as $asset) {
+                /** @var list<array{key: string, value: string}> $assets */
+                $assets = $data['assets'] ?? [];
+                foreach ($assets as $asset) {
                     if ($asset['key'] === 'avatar') {
                         $char['avatarUrl'] = $asset['value'];
                         break;

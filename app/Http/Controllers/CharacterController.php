@@ -11,21 +11,19 @@ use Illuminate\Http\Request;
 class CharacterController extends Controller
 {
     public function __construct(
-        private CharacterProfileService $service,
-        )
-    {
+        private readonly CharacterProfileService $characterProfileService,
+    ) {
     }
 
     public function show(string $realm, string $name): JsonResponse
     {
         try {
-            $profile = $this->service->getProfile($realm, $name);
+            $profile = $this->characterProfileService->getProfile($realm, $name);
             return response()->json($profile);
-        }
-        catch (\Exception $e) {
+        } catch (\Exception $exception) {
             return response()->json([
                 'error' => 'Character not found or Blizzard API error',
-                'message' => $e->getMessage(),
+                'message' => $exception->getMessage(),
             ], 404);
         }
     }

@@ -1,0 +1,9 @@
+grumphp:
+    process_timeout: 300
+    stop_on_failure: true
+    hide_circumvention_tip: true
+
+    tasks:
+        shell:
+            scripts:
+                - ["make", "quality"]

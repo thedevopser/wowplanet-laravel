@@ -7,14 +7,14 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('wow_pets', function (Blueprint $table) {
-            $table->integer('id')->primary(); // Blizzard Pet Species ID
-            $table->string('name_fr');
-            $table->string('source')->nullable();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
+        Schema::create('wow_pets', function (Blueprint $blueprint): void {
+            $blueprint->integer('id')->primary(); // Blizzard Pet Species ID
+            $blueprint->string('name_fr');
+            $blueprint->string('source')->nullable();
+            $blueprint->boolean('is_active')->default(true);
+            $blueprint->timestamps();
 
-            $table->index('is_active');
+            $blueprint->index('is_active');
         });
     }
 

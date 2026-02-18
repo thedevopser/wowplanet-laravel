@@ -6,68 +6,120 @@ namespace App\Application\Services;
 
 use App\Application\DTOs\CharacterProfileDTO;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Models\WowQuest;
 use App\Models\WowAchievement;
 use App\Models\WowMount;
 use App\Models\WowPet;
+use App\Models\WowQuest;
 use Illuminate\Support\Collection;
 
 class CharacterProfileService
 {
     public function __construct(
-        private BlizzardApiClient $apiClient
-    ) {}
+        private readonly BlizzardApiClient $blizzardApiClient,
+    ) {
+    }
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
     {
         $realm = strtolower($realm);
         $name = strtolower($name);
 
-        // 1. API Calls for Character Data
-        $summary = $this->apiClient->get("profile/wow/character/{$realm}/{$name}");
-        $media = $this->apiClient->get("profile/wow/character/{$realm}/{$name}/character-media");
+        $summary = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s', $realm, $name),
+        );
+        $media = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/character-media', $realm, $name),
+        );
 
-        $classId = $summary['character_class']['id'] ?? 0;
-        $classMedia = $this->apiClient->get("data/wow/media/playable-class/{$classId}", [
-            'namespace' => 'static-' . config('services.blizzard.region', 'eu'),
-        ]);
+        /** @var array{id?: int, name?: string} $charClass */
+        $charClass = $summary['character_class'] ?? [];
+        $classId = (int) ($charClass['id'] ?? 0);
 
-        $questsResponse = $this->apiClient->get("profile/wow/character/{$realm}/{$name}/quests/completed");
-        $achievementsResponse = $this->apiClient->get("profile/wow/character/{$realm}/{$name}/achievements");
-        $mountsResponse = $this->apiClient->get("profile/wow/character/{$realm}/{$name}/collections/mounts");
-        $petsResponse = $this->apiClient->get("profile/wow/character/{$realm}/{$name}/collections/pets");
+        /** @var string $region */
+        $region = config('services.blizzard.region', 'eu');
+        $classMedia = $this->blizzardApiClient->get(
+            'data/wow/media/playable-class/' . $classId,
+            ['namespace' => 'static-' . $region],
+        );
 
-        // 2. Extract Completed IDs
-        $completedQuestIds = array_column($questsResponse['quests'] ?? [], 'id');
-        $completedAchievementIds = array_column($achievementsResponse['achievements'] ?? [], 'id');
-        
-        $characterMountIds = array_column(array_map(fn($m) => $m['mount'], $mountsResponse['mounts'] ?? []), 'id');
-        $characterPetIds = array_column(array_map(fn($p) => $p['species'], $petsResponse['pets'] ?? []), 'id');
+        $questsResponse = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/quests/completed', $realm, $name),
+        );
+        $achievementsResponse = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/achievements', $realm, $name),
+        );
+        $mountsResponse = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/collections/mounts', $realm, $name),
+        );
+        $petsResponse = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/collections/pets', $realm, $name),
+        );
 
-        // 3. Compare with Local Database (The "Source of Truth")
-        $collections = $this->aggregateProgress($completedQuestIds, $completedAchievementIds);
-        
+        /** @var list<array{id: int}> $questsList */
+        $questsList = $questsResponse['quests'] ?? [];
+        $completedQuestIds = array_column($questsList, 'id');
+
+        /** @var list<array{id: int}> $achievementsList */
+        $achievementsList = $achievementsResponse['achievements'] ?? [];
+        $completedAchievementIds = array_column($achievementsList, 'id');
+
+        /** @var list<array{mount: array{id: int}}> $mountsList */
+        $mountsList = $mountsResponse['mounts'] ?? [];
+        $characterMountIds = array_map(
+            fn(array $m): int => $m['mount']['id'],
+            $mountsList,
+        );
+
+        /** @var list<array{species: array{id: int}}> $petsList */
+        $petsList = $petsResponse['pets'] ?? [];
+        $characterPetIds = array_map(
+            fn(array $p): int => $p['species']['id'],
+            $petsList,
+        );
+
+        $collections = $this->aggregateProgress(
+            $completedQuestIds,
+            $completedAchievementIds,
+        );
+
         $mounts = $this->processCollection(WowMount::all(), $characterMountIds);
         $pets = $this->processCollection(WowPet::all(), $characterPetIds);
 
         $classIconUrl = '';
-        foreach ($classMedia['assets'] ?? [] as $asset) {
-            if ($asset['key'] === 'icon') {
-                $classIconUrl = $asset['value'];
+        /** @var list<array{key: string, value: string}> $classAssets */
+        $classAssets = $classMedia['assets'] ?? [];
+        foreach ($classAssets as $classAsset) {
+            if ($classAsset['key'] === 'icon') {
+                $classIconUrl = $classAsset['value'];
                 break;
             }
         }
 
+        /** @var list<array{value: string}> $mediaAssets */
+        $mediaAssets = $media['assets'] ?? [];
+
+        /** @var array{name?: string} $realmData */
+        $realmData = $summary['realm'] ?? [];
+        /** @var array{name?: string} $raceData */
+        $raceData = $summary['race'] ?? [];
+        /** @var array{name?: string} $factionData */
+        $factionData = $summary['faction'] ?? [];
+
+        $summaryName = is_string($summary['name'] ?? null) ? $summary['name'] : '';
+        $summaryLevel = is_int($summary['level'] ?? null) ? $summary['level'] : 0;
+        $summaryIlvl = is_int($summary['equipped_item_level'] ?? null)
+            ? $summary['equipped_item_level'] : 0;
+
         return new CharacterProfileDTO(
-            name: $summary['name'],
-            realm: $summary['realm']['name'],
-            race: $summary['race']['name'],
-            class: $summary['character_class']['name'],
+            name: $summaryName,
+            realm: (string) ($realmData['name'] ?? ''),
+            race: (string) ($raceData['name'] ?? ''),
+            class: (string) ($charClass['name'] ?? ''),
             classId: $classId,
-            level: $summary['level'],
-            ilvl: $summary['equipped_item_level'],
-            faction: $summary['faction']['name'],
-            avatarUrl: $media['assets'][1]['value'] ?? $media['assets'][0]['value'] ?? '',
+            level: $summaryLevel,
+            ilvl: $summaryIlvl,
+            faction: (string) ($factionData['name'] ?? ''),
+            avatarUrl: (string) ($mediaAssets[1]['value'] ?? $mediaAssets[0]['value'] ?? ''),
             classIconUrl: $classIconUrl,
             collections: $collections,
             mountsCount: count($characterMountIds),
@@ -77,34 +129,50 @@ class CharacterProfileService
         );
     }
 
-    private function aggregateProgress(array $completedQuests, array $completedAchievements): array
-    {
+    /**
+     * @param list<int> $completedQuests
+     * @param list<int> $completedAchievements
+     * @return array<int, array<string, mixed>>
+     */
+    private function aggregateProgress(
+        array $completedQuests,
+        array $completedAchievements,
+    ): array {
         $results = [];
 
-        // Fetch ALL quests and achievements from local DB, grouped by expansion
-        // This is fast because of the indexes
-        $allQuests = WowQuest::where('is_active', true)->get()->groupBy('expansion_id');
-        $allAchievements = WowAchievement::where('is_active', true)->get()->groupBy('expansion_id');
+        /** @var Collection<int, WowQuest> $allQuestsRaw */
+        $allQuestsRaw = WowQuest::query()->where('is_active', true)->get();
+        $allQuests = $allQuestsRaw->groupBy('expansion_id');
 
-        // Iterate over expansions 0-11
-        for ($i = 0; $i <= 11; $i++) {
-            // Quests
-            $expansionQuests = $allQuests->get($i, new Collection());
+        /** @var Collection<int, WowAchievement> $allAchievementsRaw */
+        $allAchievementsRaw = WowAchievement::query()->where('is_active', true)->get();
+        $allAchievements = $allAchievementsRaw->groupBy('expansion_id');
+
+        for ($expansionIndex = 0; $expansionIndex <= 11; $expansionIndex++) {
+            /** @var Collection<int, WowQuest> $expansionQuests */
+            $expansionQuests = $allQuests->get($expansionIndex, new Collection());
+            /** @var Collection<string, Collection<int, WowQuest>> $questsByZone */
             $questsByZone = $expansionQuests->groupBy('zone_name');
-            
+
             $zoneProgress = [];
-            foreach ($questsByZone as $zoneName => $quests) {
-                if (empty($zoneName)) continue;
+            foreach ($questsByZone as $zoneName => $zoneQuests) {
+                if (empty($zoneName)) {
+                    continue;
+                }
 
-                $items = $quests->map(function ($quest) use ($completedQuests) {
-                    return [
-                        'id' => $quest->id,
-                        'name' => $quest->name_fr,
-                        'is_completed' => in_array($quest->id, $completedQuests),
+                $items = [];
+                $completedCount = 0;
+                foreach ($zoneQuests as $zoneQuest) {
+                    $isCompleted = in_array($zoneQuest->id, $completedQuests);
+                    $items[] = [
+                        'id' => $zoneQuest->id,
+                        'name' => $zoneQuest->name_fr,
+                        'is_completed' => $isCompleted,
                     ];
-                })->values()->toArray();
-
-                $completedCount = count(array_filter($items, fn($i) => $i['is_completed']));
+                    if ($isCompleted) {
+                        $completedCount++;
+                    }
+                }
 
                 $zoneProgress[] = [
                     'name' => $zoneName,
@@ -114,23 +182,30 @@ class CharacterProfileService
                 ];
             }
 
-            // Achievements
-            $expansionAchievements = $allAchievements->get($i, new Collection());
+            /** @var Collection<int, WowAchievement> $expansionAchievements */
+            $expansionAchievements = $allAchievements->get($expansionIndex, new Collection());
+            /** @var Collection<string, Collection<int, WowAchievement>> $achievementsByCategory */
             $achievementsByCategory = $expansionAchievements->groupBy('category_name');
 
             $categoryProgress = [];
-            foreach ($achievementsByCategory as $categoryName => $achievements) {
-                if (empty($categoryName)) continue;
+            foreach ($achievementsByCategory as $categoryName => $categoryAchievements) {
+                if (empty($categoryName)) {
+                    continue;
+                }
 
-                $items = $achievements->map(function ($ach) use ($completedAchievements) {
-                    return [
-                        'id' => $ach->id,
-                        'name' => $ach->name_fr,
-                        'is_completed' => in_array($ach->id, $completedAchievements),
+                $items = [];
+                $completedCount = 0;
+                foreach ($categoryAchievements as $categoryAchievement) {
+                    $isCompleted = in_array($categoryAchievement->id, $completedAchievements);
+                    $items[] = [
+                        'id' => $categoryAchievement->id,
+                        'name' => $categoryAchievement->name_fr,
+                        'is_completed' => $isCompleted,
                     ];
-                })->values()->toArray();
-
-                $completedCount = count(array_filter($items, fn($i) => $i['is_completed']));
+                    if ($isCompleted) {
+                        $completedCount++;
+                    }
+                }
 
                 $categoryProgress[] = [
                     'name' => $categoryName,
@@ -144,9 +219,10 @@ class CharacterProfileService
             $completedQuestsCount = $expansionQuests->whereIn('id', $completedQuests)->count();
 
             $totalAchievements = $expansionAchievements->count();
-            $completedAchievementsCount = $expansionAchievements->whereIn('id', $completedAchievements)->count();
+            $completedAchievementsCount = $expansionAchievements
+                ->whereIn('id', $completedAchievements)->count();
 
-            $results[$i] = [
+            $results[$expansionIndex] = [
                 'quests' => [
                     'total' => $totalQuests,
                     'completed' => $completedQuestsCount,
@@ -163,16 +239,23 @@ class CharacterProfileService
         return $results;
     }
 
+    /**
+     * @param Collection<int, WowMount|WowPet> $allItems
+     * @param list<int> $characterIds
+     * @return list<array{id: int, name: string, is_completed: bool, source: string|null}>
+     */
     private function processCollection(Collection $allItems, array $characterIds): array
     {
-        return $allItems->map(function ($item) use ($characterIds) {
-            return [
-                'id' => $item->id,
-                'name' => $item->name_fr,
-                'is_completed' => in_array($item->id, $characterIds),
-                // Add source if available
-                'source' => $item->source ?? null, 
+        $result = [];
+        foreach ($allItems as $allItem) {
+            $result[] = [
+                'id' => $allItem->id,
+                'name' => $allItem->name_fr,
+                'is_completed' => in_array($allItem->id, $characterIds),
+                'source' => $allItem->source ?? null,
             ];
-        })->values()->toArray();
+        }
+
+        return $result;
     }
 }

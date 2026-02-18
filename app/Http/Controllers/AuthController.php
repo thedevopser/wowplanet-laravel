@@ -12,17 +12,31 @@ use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
-    private string $clientId;
-    private string $clientSecret;
-    private string $redirectUri;
-    private string $region;
+    private readonly string $clientId;
+
+    private readonly string $clientSecret;
+
+    private readonly string $redirectUri;
+
+    private readonly string $region;
 
     public function __construct()
     {
-        $this->clientId = (string)config('services.blizzard.client_id');
-        $this->clientSecret = (string)config('services.blizzard.client_secret');
-        $this->redirectUri = (string)config('services.blizzard.redirect_uri');
-        $this->region = (string)config('services.blizzard.region', 'eu');
+        /** @var string $clientId */
+        $clientId = config('services.blizzard.client_id', '');
+        $this->clientId = $clientId;
+
+        /** @var string $clientSecret */
+        $clientSecret = config('services.blizzard.client_secret', '');
+        $this->clientSecret = $clientSecret;
+
+        /** @var string $redirectUri */
+        $redirectUri = config('services.blizzard.redirect_uri', '');
+        $this->redirectUri = $redirectUri;
+
+        /** @var string $region */
+        $region = config('services.blizzard.region', 'eu');
+        $this->region = $region;
     }
 
     public function redirect(): RedirectResponse
@@ -38,22 +52,25 @@ class AuthController extends Controller
             'state' => $state,
         ]);
 
-        return redirect("https://{$this->region}.battle.net/oauth/authorize?{$query}");
+        return redirect(sprintf('https://%s.battle.net/oauth/authorize?%s', $this->region, $query));
     }
 
     public function callback(Request $request): RedirectResponse
     {
-        $code = $request->get('code');
-        $state = $request->get('state');
-        $expectedState = Session::pull('blizzard_oauth_state');
+        /** @var string $code */
+        $code = $request->get('code', '');
+        /** @var string $state */
+        $state = $request->get('state', '');
+        /** @var string $expectedState */
+        $expectedState = Session::pull('blizzard_oauth_state', '');
 
-        if (!$code || !$state || $state !== $expectedState) {
+        if ($code === '' || $state === '' || $state !== $expectedState) {
             return redirect('/')->with('error', 'Authorization failed');
         }
 
         $response = Http::asForm()
             ->withBasicAuth($this->clientId, $this->clientSecret)
-            ->post("https://{$this->region}.battle.net/oauth/token", [
+            ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
             'grant_type' => 'authorization_code',
             'code' => $code,
             'redirect_uri' => $this->redirectUri,
@@ -63,6 +80,7 @@ class AuthController extends Controller
             return redirect('/')->with('error', 'Token exchange failed');
         }
 
+        /** @var array{access_token: string} $tokenData */
         $tokenData = $response->json();
         Session::put('blizzard_user_token', $tokenData['access_token']);
 

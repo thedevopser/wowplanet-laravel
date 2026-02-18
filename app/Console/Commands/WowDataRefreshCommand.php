@@ -15,10 +15,12 @@ use Illuminate\Console\Command;
 class WowDataRefreshCommand extends Command
 {
     protected $signature = 'app:wow-data-refresh {--type=all} {--force}';
+
     protected $description = 'Truncate and re-import WoW data from Blizzard API';
 
-    public function handle(BlizzardBatchImporter $importer, LuaAddonParser $addonParser): void
+    public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
+        /** @var string $type */
         $type = $this->option('type');
 
         if (!$this->option('force') && !$this->confirm('This will DELETE all existing data and re-import from scratch. Continue?')) {
@@ -26,39 +28,39 @@ class WowDataRefreshCommand extends Command
             return;
         }
 
-        $this->info("Starting WoW Data Refresh (type: {$type})");
+        $this->info(sprintf('Starting WoW Data Refresh (type: %s)', (string) $type));
         $this->newLine();
 
         if ($type === 'all' || $type === 'achievements') {
-            $achievementExpansionMap = $addonParser->getAchievementExpansionMap();
+            $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
             $this->info("Truncating wow_achievements...");
             WowAchievement::truncate();
-            $importer->importAchievements($achievementExpansionMap);
+            $blizzardBatchImporter->importAchievements($achievementExpansionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
             $this->info("Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...");
-            $areaExpansionMap = $addonParser->buildAreaExpansionMap();
-            $modernQuestOverrides = $addonParser->getQuestExpansionMap();
+            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
+            $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
             $this->info("Truncating wow_quests...");
             WowQuest::truncate();
-            $this->info("Importing Quests (DB2 areas: " . count($areaExpansionMap) . ", modern overrides: " . count($modernQuestOverrides) . ")...");
-            $importer->importQuests($areaExpansionMap, $modernQuestOverrides);
+            $this->info(sprintf('Importing Quests (DB2 areas: %d, modern overrides: %d)...', count($areaExpansionMap), count($modernQuestOverrides)));
+            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'mounts') {
             $this->info("Truncating wow_mounts...");
             WowMount::truncate();
-            $importer->importMounts();
+            $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
             $this->info("Truncating wow_pets...");
             WowPet::truncate();
-            $importer->importPets();
+            $blizzardBatchImporter->importPets();
             $this->newLine();
         }
 

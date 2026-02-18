@@ -7,16 +7,16 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('wow_quests', function (Blueprint $table) {
-            $table->integer('id')->primary(); // Blizzard Quest ID
-            $table->string('name_fr');
-            $table->tinyInteger('expansion_id'); // 0-11
-            $table->string('zone_name')->nullable();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
+        Schema::create('wow_quests', function (Blueprint $blueprint): void {
+            $blueprint->integer('id')->primary(); // Blizzard Quest ID
+            $blueprint->string('name_fr');
+            $blueprint->tinyInteger('expansion_id'); // 0-11
+            $blueprint->string('zone_name')->nullable();
+            $blueprint->boolean('is_active')->default(true);
+            $blueprint->timestamps();
 
-            $table->index(['expansion_id', 'zone_name']);
-            $table->index('is_active');
+            $blueprint->index(['expansion_id', 'zone_name']);
+            $blueprint->index('is_active');
         });
     }
 

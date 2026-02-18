@@ -1,0 +1,3 @@
+FROM jakzal/phpqa:php8.4
+
+RUN composer require --working-dir=/tools/.composer/vendor-bin/rector driftingly/rector-laravel

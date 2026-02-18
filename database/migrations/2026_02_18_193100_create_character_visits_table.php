@@ -11,19 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('character_visits', function (Blueprint $table) {
-            $table->id();
-            $table->string('realm_slug', 100);
-            $table->string('character_name', 100);
-            $table->string('display_name', 100)->nullable();
-            $table->string('display_realm', 100)->nullable();
-            $table->string('class_name', 50)->nullable();
-            $table->unsignedSmallInteger('level')->nullable();
-            $table->timestamp('last_visited_at');
-            $table->timestamps();
+        Schema::create('character_visits', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->string('realm_slug', 100);
+            $blueprint->string('character_name', 100);
+            $blueprint->string('display_name', 100)->nullable();
+            $blueprint->string('display_realm', 100)->nullable();
+            $blueprint->string('class_name', 50)->nullable();
+            $blueprint->unsignedSmallInteger('level')->nullable();
+            $blueprint->timestamp('last_visited_at');
+            $blueprint->timestamps();
 
-            $table->unique(['realm_slug', 'character_name']);
-            $table->index('last_visited_at');
+            $blueprint->unique(['realm_slug', 'character_name']);
+            $blueprint->index('last_visited_at');
         });
     }
 

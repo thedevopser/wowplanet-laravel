@@ -17,7 +17,6 @@ class Character
         public int $ilvl,
         public string $faction,
         public CharacterMedia $media,
-        )
-    {
+    ) {
     }
 }

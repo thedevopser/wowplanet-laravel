@@ -12,18 +12,26 @@ use Illuminate\Support\Facades\Log;
 class CharacterSeoService
 {
     public function __construct(
-        private BlizzardApiClient $apiClient,
-    ) {}
+        private readonly BlizzardApiClient $blizzardApiClient,
+    ) {
+    }
 
+    /**
+     * @return array<string, string|null>
+     */
     public function getHomeMeta(): array
     {
-        $appUrl = rtrim((string) config('app.url'), '/');
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+        $appUrl = rtrim($configUrl, '/');
 
         return [
             'title' => 'WowPlanet - Suivi de progression World of Warcraft',
-            'description' => 'Analysez votre personnage World of Warcraft : quêtes, hauts-faits, montures et mascottes. Comparez votre progression avec la base de données complète du jeu.',
+            'description' => 'Analysez votre personnage World of Warcraft : quêtes, hauts-faits, montures et mascottes.'
+                . ' Comparez votre progression avec la base de données complète du jeu.',
             'ogTitle' => 'WowPlanet - Suivi de progression World of Warcraft',
-            'ogDescription' => 'Suivez la progression de vos personnages WoW. Plus de 21 000 quêtes, 8 600 hauts-faits, 1 569 montures et 2 117 mascottes référencées.',
+            'ogDescription' => 'Suivez la progression de vos personnages WoW.'
+                . ' Plus de 21 000 quêtes, 8 600 hauts-faits, 1 569 montures et 2 117 mascottes référencées.',
             'ogImage' => $appUrl . '/images/og-default.png',
             'ogUrl' => $appUrl,
             'ogType' => 'website',
@@ -32,61 +40,117 @@ class CharacterSeoService
         ];
     }
 
+    /**
+     * @return array<string, string|null>
+     */
     public function getCharacterMeta(string $realm, string $name): array
     {
-        $appUrl = rtrim((string) config('app.url'), '/');
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+        $appUrl = rtrim($configUrl, '/');
         $realmSlug = strtolower($realm);
         $nameSlug = strtolower($name);
-        $cacheKey = "seo_character_{$realmSlug}_{$nameSlug}";
+        $cacheKey = sprintf('seo_character_%s_%s', $realmSlug, $nameSlug);
 
-        $charData = Cache::remember($cacheKey, 3600, function () use ($realmSlug, $nameSlug, $name, $realm) {
-            try {
-                $summary = $this->apiClient->get(
-                    "profile/wow/character/{$realmSlug}/{$nameSlug}"
-                );
+        /** @var array<string, string|int|bool> $charData */
+        $charData = Cache::remember(
+            $cacheKey,
+            3600,
+            function () use ($realmSlug, $nameSlug, $name, $realm): array {
+                try {
+                    $summary = $this->blizzardApiClient->get(
+                        sprintf('profile/wow/character/%s/%s', $realmSlug, $nameSlug),
+                    );
 
-                $media = $this->apiClient->get(
-                    "profile/wow/character/{$realmSlug}/{$nameSlug}/character-media"
-                );
+                    $media = $this->blizzardApiClient->get(
+                        sprintf(
+                            'profile/wow/character/%s/%s/character-media',
+                            $realmSlug,
+                            $nameSlug,
+                        ),
+                    );
 
-                $avatarUrl = $media['assets'][1]['value']
-                    ?? $media['assets'][0]['value']
-                    ?? '';
+                    /** @var list<array{key: string, value: string}> $mediaAssets */
+                    $mediaAssets = $media['assets'] ?? [];
+                    $avatarUrl = (string) ($mediaAssets[1]['value']
+                        ?? $mediaAssets[0]['value']
+                        ?? '');
 
-                return [
-                    'name' => $summary['name'] ?? ucfirst($name),
-                    'realm' => $summary['realm']['name'] ?? ucfirst($realm),
-                    'level' => $summary['level'] ?? 0,
-                    'race' => $summary['race']['name'] ?? '',
-                    'class' => $summary['character_class']['name'] ?? '',
-                    'faction' => $summary['faction']['name'] ?? '',
-                    'ilvl' => $summary['equipped_item_level'] ?? 0,
-                    'avatarUrl' => $avatarUrl,
-                    'found' => true,
-                ];
-            } catch (\Exception $e) {
-                Log::warning("SEO: Failed to fetch character {$realm}/{$name}: " . $e->getMessage());
+                    /** @var array{name?: string} $realmData */
+                    $realmData = $summary['realm'] ?? [];
+                    /** @var array{name?: string} $raceData */
+                    $raceData = $summary['race'] ?? [];
+                    /** @var array{name?: string} $classData */
+                    $classData = $summary['character_class'] ?? [];
+                    /** @var array{name?: string} $factionData */
+                    $factionData = $summary['faction'] ?? [];
 
-                return [
-                    'name' => ucfirst($name),
-                    'realm' => ucfirst($realm),
-                    'found' => false,
-                ];
-            }
-        });
+                    return [
+                        'name' => is_string($summary['name'] ?? null)
+                            ? $summary['name'] : ucfirst($name),
+                        'realm' => (string) ($realmData['name'] ?? ucfirst($realm)),
+                        'level' => is_int($summary['level'] ?? null)
+                            ? $summary['level'] : 0,
+                        'race' => (string) ($raceData['name'] ?? ''),
+                        'class' => (string) ($classData['name'] ?? ''),
+                        'faction' => (string) ($factionData['name'] ?? ''),
+                        'ilvl' => is_int($summary['equipped_item_level'] ?? null)
+                            ? $summary['equipped_item_level'] : 0,
+                        'avatarUrl' => $avatarUrl,
+                        'found' => true,
+                    ];
+                } catch (\Exception $exception) {
+                    Log::warning(
+                        sprintf('SEO: Failed to fetch character %s/%s: ', $realm, $name)
+                        . $exception->getMessage(),
+                    );
+
+                    return [
+                        'name' => ucfirst($name),
+                        'realm' => ucfirst($realm),
+                        'found' => false,
+                    ];
+                }
+            },
+        );
 
         $this->trackCharacterVisit($realmSlug, $nameSlug, $charData);
 
         $canonicalUrl = $appUrl . '/character/' . $realmSlug . '/' . $nameSlug;
 
-        if ($charData['found']) {
-            $title = "{$charData['name']} - {$charData['class']} {$charData['level']} | {$charData['realm']} | WowPlanet";
-            $description = "{$charData['name']}, {$charData['race']} {$charData['class']} niveau {$charData['level']} (ilvl {$charData['ilvl']}) sur {$charData['realm']} ({$charData['faction']}). Consultez sa progression : quêtes, hauts-faits, montures et mascottes.";
-            $ogImage = $charData['avatarUrl'] ?: ($appUrl . '/images/og-default.png');
-        } else {
-            $title = "{$charData['name']} - {$charData['realm']} | WowPlanet";
-            $description = "Profil du personnage {$charData['name']} sur {$charData['realm']}. Consultez sa progression World of Warcraft sur WowPlanet.";
-            $ogImage = $appUrl . '/images/og-default.png';
+        $title = sprintf(
+            '%s - %s | WowPlanet',
+            (string) $charData['name'],
+            (string) $charData['realm'],
+        );
+        $description = sprintf(
+            'Profil du personnage %s sur %s.'
+            . ' Consultez sa progression World of Warcraft sur WowPlanet.',
+            (string) $charData['name'],
+            (string) $charData['realm'],
+        );
+        $ogImage = $appUrl . '/images/og-default.png';
+
+        if (!empty($charData['found'])) {
+            $title = sprintf(
+                '%s - %s %s | %s | WowPlanet',
+                (string) $charData['name'],
+                (string) ($charData['class'] ?? ''),
+                (string) ($charData['level'] ?? ''),
+                (string) $charData['realm'],
+            );
+            $description = sprintf(
+                '%s, %s %s niveau %s (ilvl %s) sur %s (%s).'
+                . ' Consultez sa progression : quêtes, hauts-faits, montures et mascottes.',
+                (string) $charData['name'],
+                (string) ($charData['race'] ?? ''),
+                (string) ($charData['class'] ?? ''),
+                (string) ($charData['level'] ?? ''),
+                (string) ($charData['ilvl'] ?? ''),
+                (string) $charData['realm'],
+                (string) ($charData['faction'] ?? ''),
+            );
+            $ogImage = ((string) ($charData['avatarUrl'] ?? '')) ?: ($appUrl . '/images/og-default.png');
         }
 
         return [
@@ -98,15 +162,17 @@ class CharacterSeoService
             'ogUrl' => $canonicalUrl,
             'ogType' => 'profile',
             'canonicalUrl' => $canonicalUrl,
-            'jsonLd' => $charData['found']
-                ? $this->getCharacterJsonLd($charData, $canonicalUrl)
-                : null,
+            'jsonLd' => empty($charData['found'])
+                ? null
+                : $this->getCharacterJsonLd($charData, $canonicalUrl),
         ];
     }
 
     public function generateSitemap(): string
     {
-        $appUrl = rtrim((string) config('app.url'), '/');
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+        $appUrl = rtrim($configUrl, '/');
 
         $urls = [];
 
@@ -116,15 +182,20 @@ class CharacterSeoService
             'priority' => '1.0',
         ];
 
-        $recentVisits = CharacterVisit::where('last_visited_at', '>=', now()->subDays(30))
-            ->orderBy('last_visited_at', 'desc')
+        /** @var \Illuminate\Database\Eloquent\Collection<int, CharacterVisit> $recentVisits */
+        $recentVisits = CharacterVisit::query()
+            ->where('last_visited_at', '>=', now()->subDays(30))
+            ->latest('last_visited_at')
             ->limit(1000)
             ->get();
 
-        foreach ($recentVisits as $visit) {
+        foreach ($recentVisits as $recentVisit) {
+            /** @var \Carbon\Carbon $lastVisitedAt */
+            $lastVisitedAt = $recentVisit->last_visited_at;
             $urls[] = [
-                'loc' => $appUrl . '/character/' . $visit->realm_slug . '/' . $visit->character_name,
-                'lastmod' => $visit->last_visited_at->toW3cString(),
+                'loc' => $appUrl . '/character/'
+                    . $recentVisit->realm_slug . '/' . $recentVisit->character_name,
+                'lastmod' => $lastVisitedAt->toW3cString(),
                 'changefreq' => 'daily',
                 'priority' => '0.8',
             ];
@@ -135,22 +206,27 @@ class CharacterSeoService
 
         foreach ($urls as $url) {
             $xml .= "  <url>\n";
-            $xml .= "    <loc>" . htmlspecialchars($url['loc']) . "</loc>\n";
+            $xml .= '    <loc>' . htmlspecialchars($url['loc']) . "</loc>\n";
             if (isset($url['lastmod'])) {
                 $xml .= "    <lastmod>{$url['lastmod']}</lastmod>\n";
             }
+
             $xml .= "    <changefreq>{$url['changefreq']}</changefreq>\n";
             $xml .= "    <priority>{$url['priority']}</priority>\n";
             $xml .= "  </url>\n";
         }
 
-        $xml .= '</urlset>';
-
-        return $xml;
+        return $xml . '</urlset>';
     }
 
-    private function trackCharacterVisit(string $realmSlug, string $nameSlug, array $charData): void
-    {
+    /**
+     * @param array<string, string|int|bool> $charData
+     */
+    private function trackCharacterVisit(
+        string $realmSlug,
+        string $nameSlug,
+        array $charData,
+    ): void {
         try {
             CharacterVisit::updateOrCreate(
                 [
@@ -158,26 +234,30 @@ class CharacterSeoService
                     'character_name' => $nameSlug,
                 ],
                 [
-                    'display_name' => $charData['name'] ?? ucfirst($nameSlug),
-                    'display_realm' => $charData['realm'] ?? ucfirst($realmSlug),
-                    'class_name' => $charData['class'] ?? null,
-                    'level' => $charData['level'] ?? null,
+                    'display_name' => (string) ($charData['name'] ?? ucfirst($nameSlug)),
+                    'display_realm' => (string) ($charData['realm'] ?? ucfirst($realmSlug)),
+                    'class_name' => (string) ($charData['class'] ?? ''),
+                    'level' => (int) ($charData['level'] ?? 0),
                     'last_visited_at' => now(),
-                ]
+                ],
             );
-        } catch (\Exception $e) {
-            Log::debug("SEO: Failed to track visit for {$realmSlug}/{$nameSlug}: " . $e->getMessage());
+        } catch (\Exception $exception) {
+            Log::debug(
+                sprintf('SEO: Failed to track visit for %s/%s: ', $realmSlug, $nameSlug)
+                . $exception->getMessage(),
+            );
         }
     }
 
     private function getHomeJsonLd(string $appUrl): string
     {
-        return json_encode([
+        return (string) json_encode([
             '@context' => 'https://schema.org',
             '@type' => 'WebApplication',
             'name' => 'WowPlanet',
             'url' => $appUrl,
-            'description' => 'Suivez la progression de vos personnages World of Warcraft : quêtes, hauts-faits, montures et mascottes.',
+            'description' => 'Suivez la progression de vos personnages World of Warcraft'
+                . ' : quêtes, hauts-faits, montures et mascottes.',
             'applicationCategory' => 'GameApplication',
             'operatingSystem' => 'Web',
             'inLanguage' => 'fr',
@@ -194,18 +274,27 @@ class CharacterSeoService
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * @param array<string, string|int|bool> $charData
+     */
     private function getCharacterJsonLd(array $charData, string $url): string
     {
-        return json_encode([
+        return (string) json_encode([
             '@context' => 'https://schema.org',
             '@type' => 'ProfilePage',
-            'name' => "{$charData['name']} - WowPlanet",
+            'name' => ($charData['name']) . ' - WowPlanet',
             'url' => $url,
             'mainEntity' => [
                 '@type' => 'Person',
-                'name' => $charData['name'],
-                'description' => "{$charData['race']} {$charData['class']} niveau {$charData['level']} sur {$charData['realm']}",
-                'image' => $charData['avatarUrl'] ?: null,
+                'name' => (string) $charData['name'],
+                'description' => sprintf(
+                    '%s %s niveau %s sur %s',
+                    (string) ($charData['race'] ?? ''),
+                    (string) ($charData['class'] ?? ''),
+                    (string) ($charData['level'] ?? ''),
+                    (string) ($charData['realm'] ?? ''),
+                ),
+                'image' => ((string) ($charData['avatarUrl'] ?? '')) ?: null,
             ],
             'isPartOf' => [
                 '@type' => 'WebApplication',

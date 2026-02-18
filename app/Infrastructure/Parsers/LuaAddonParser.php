@@ -71,7 +71,7 @@ class LuaAddonParser
         'Cité perdue des Tol\'vir' => 3, 'Trône des marées' => 3,
         "La Fin des temps" => 3, "L'Heure du Crépuscule" => 3,
         "Puits d'éternité" => 3, 'Sombrevallon' => 3,
-        "La cime du Vortex" => 3, 'Citadelle d\'Obsidienne' => 3,
+        "La cime du Vortex" => 3, "Citadelle d'Obsidienne" => 3,
         'Terres de Feu' => 3, "Sommet d'Hyjal" => 3,
         "Les salles de Pierre" => 3, "Salles de l'Origine" => 3,
         'Monastère Écarlate' => 3,
@@ -203,14 +203,16 @@ class LuaAddonParser
     /**
      * Parse BTW addon Lua files to extract quest/achievement IDs with metadata.
      *
-     * @return array Format: ['quests' => [...], 'achievements' => [...]]
+     * @return array{quests: list<array{id: int, expansion_id: int, zone_name: string}>, achievements: list<array{id: int, expansion_id: int, category_name: string}>}
      */
     public function parseAllAddons(): array
     {
         $questsPath = storage_path('app/blizzard/mappings/processed/quests.json');
         $achievementsPath = storage_path('app/blizzard/mappings/processed/achievements.json');
 
+        /** @var array<int|string, array<string, mixed>> $quests */
         $quests = File::exists($questsPath) ? json_decode(File::get($questsPath), true) : [];
+        /** @var array<int|string, array<string, mixed>> $achievements */
         $achievements = File::exists($achievementsPath) ? json_decode(File::get($achievementsPath), true) : [];
 
         return [
@@ -221,8 +223,9 @@ class LuaAddonParser
 
     /**
      * Normalize quests data from BTW format.
-     * 
-     * @return array Format: [['id' => int, 'expansion_id' => int, 'zone_name' => string], ...]
+     *
+     * @param array<int|string, array<string, mixed>> $data
+     * @return list<array{id: int, expansion_id: int, zone_name: string}>
      */
     private function normalizeQuests(array $data): array
     {
@@ -233,11 +236,13 @@ class LuaAddonParser
                 continue;
             }
 
-            foreach ($expansionData['zones'] as $zoneName => $zoneInfo) {
+            /** @var array<string, array{ids: list<int>}> $zones */
+            $zones = $expansionData['zones'];
+            foreach ($zones as $zoneName => $zoneInfo) {
                 foreach ($zoneInfo['ids'] as $questId) {
                     $normalized[] = [
-                        'id' => $questId,
-                        'expansion_id' => (int)$expansionId,
+                        'id' => (int) $questId,
+                        'expansion_id' => (int) $expansionId,
                         'zone_name' => $zoneName,
                     ];
                 }
@@ -249,8 +254,9 @@ class LuaAddonParser
 
     /**
      * Normalize achievements data from BTW format.
-     * 
-     * @return array Format: [['id' => int, 'expansion_id' => int, 'category_name' => string], ...]
+     *
+     * @param array<int|string, array<string, mixed>> $data
+     * @return list<array{id: int, expansion_id: int, category_name: string}>
      */
     private function normalizeAchievements(array $data): array
     {
@@ -261,11 +267,13 @@ class LuaAddonParser
                 continue;
             }
 
-            foreach ($expansionData['categories'] as $categoryName => $categoryInfo) {
+            /** @var array<string, array{ids: list<int>}> $categories */
+            $categories = $expansionData['categories'];
+            foreach ($categories as $categoryName => $categoryInfo) {
                 foreach ($categoryInfo['ids'] as $achievementId) {
                     $normalized[] = [
-                        'id' => $achievementId,
-                        'expansion_id' => (int)$expansionId,
+                        'id' => (int) $achievementId,
+                        'expansion_id' => (int) $expansionId,
                         'category_name' => $categoryName,
                     ];
                 }
@@ -289,13 +297,12 @@ class LuaAddonParser
         // Source 1: processed quests.json
         $questsPath = storage_path('app/blizzard/mappings/processed/quests.json');
         if (File::exists($questsPath)) {
+            /** @var array<int|string, array{zones?: array<string, mixed>}> $data */
             $data = json_decode(File::get($questsPath), true);
             foreach ($data as $expansionId => $expansionData) {
                 $zones = $expansionData['zones'] ?? [];
-                if (is_array($zones) && !array_is_list($zones)) {
-                    foreach (array_keys($zones) as $zoneName) {
-                        $map[mb_strtolower(self::normalizeApostrophes((string)$zoneName))] = (int)$expansionId;
-                    }
+                foreach (array_keys($zones) as $zoneName) {
+                    $map[mb_strtolower(self::normalizeApostrophes((string) $zoneName))] = (int) $expansionId;
                 }
             }
         }
@@ -353,8 +360,8 @@ class LuaAddonParser
 
         foreach ($expansionDirs as $dirName => $expansionId) {
             $indexPaths = [
-                "{$btwDir}/{$dirName}/Database/Index.frFR.lua",
-                "{$btwDir}/{$dirName}/Index.frFR.lua",
+                sprintf('%s/%s/Database/Index.frFR.lua', $btwDir, $dirName),
+                sprintf('%s/%s/Index.frFR.lua', $btwDir, $dirName),
             ];
 
             foreach ($indexPaths as $indexPath) {
@@ -372,7 +379,7 @@ class LuaAddonParser
                     $matches
                 );
 
-                foreach ($matches[1] ?? [] as $zoneName) {
+                foreach ($matches[1] as $zoneName) {
                     $map[$zoneName] = $expansionId;
                 }
             }
@@ -412,6 +419,7 @@ class LuaAddonParser
             if (!isset($contentTuningMap[$contentTuningId])) {
                 continue;
             }
+
             $expansion = $contentTuningMap[$contentTuningId];
             if ($expansion >= 10) {
                 $map[$questId] = $expansion;
@@ -441,7 +449,7 @@ class LuaAddonParser
         $mapTable = $this->parseMapCsv();
 
         $result = [];
-        foreach ($areaTable as $areaId => $area) {
+        foreach (array_keys($areaTable) as $areaId) {
             // Check override first
             if (isset(self::AREA_EXPANSION_OVERRIDES[$areaId])) {
                 $result[$areaId] = self::AREA_EXPANSION_OVERRIDES[$areaId];
@@ -456,6 +464,10 @@ class LuaAddonParser
 
     /**
      * Resolve a single area's expansion from DB2 data.
+     *
+     * @param array<int, array{continent_id: int, parent_id: int, ct_id: int}> $areaTable
+     * @param array<int, int> $mapTable
+     * @param array<int, int> $contentTuningMap
      */
     private function resolveAreaExpansion(int $areaId, array $areaTable, array $mapTable, array $contentTuningMap): int
     {
@@ -476,7 +488,7 @@ class LuaAddonParser
 
         // Classic continent (MapExp = 0) → check ContentTuning
         if ($mapExp === 0) {
-            return ($ctExp > 0) ? $ctExp : 0;
+            return max($ctExp, 0);
         }
 
         // Map not found → walk parent chain
@@ -549,19 +561,29 @@ class LuaAddonParser
 
         $map = [];
         $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
         $headers = fgetcsv($handle, 0, ',', '"', '');
-        $idIdx = array_search('ID', $headers);
-        $contIdx = array_search('ContinentID', $headers);
-        $parentIdx = array_search('ParentAreaID', $headers);
-        $ctIdx = array_search('ContentTuningID', $headers);
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $contIdx = (int) array_search('ContinentID', $headers, true);
+        $parentIdx = (int) array_search('ParentAreaID', $headers, true);
+        $ctIdx = (int) array_search('ContentTuningID', $headers, true);
 
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $map[(int)$row[$idIdx]] = [
-                'continent_id' => (int)$row[$contIdx],
-                'parent_id' => (int)$row[$parentIdx],
-                'ct_id' => (int)$row[$ctIdx],
+            $map[(int) $row[$idIdx]] = [
+                'continent_id' => (int) $row[$contIdx],
+                'parent_id' => (int) $row[$parentIdx],
+                'ct_id' => (int) $row[$ctIdx],
             ];
         }
+
         fclose($handle);
 
         return $map;
@@ -581,13 +603,23 @@ class LuaAddonParser
 
         $map = [];
         $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
         $headers = fgetcsv($handle, 0, ',', '"', '');
-        $idIdx = array_search('ID', $headers);
-        $expIdx = array_search('ExpansionID', $headers);
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $expIdx = (int) array_search('ExpansionID', $headers, true);
 
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $map[(int)$row[$idIdx]] = (int)$row[$expIdx];
+            $map[(int) $row[$idIdx]] = (int) $row[$expIdx];
         }
+
         fclose($handle);
 
         return $map;
@@ -607,13 +639,23 @@ class LuaAddonParser
 
         $map = [];
         $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
         $headers = fgetcsv($handle, 0, ',', '"', '');
-        $idIdx = array_search('ID', $headers);
-        $expIdx = array_search('ExpansionID', $headers);
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $expIdx = (int) array_search('ExpansionID', $headers, true);
 
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $map[(int)$row[$idIdx]] = (int)$row[$expIdx];
+            $map[(int) $row[$idIdx]] = (int) $row[$expIdx];
         }
+
         fclose($handle);
 
         return $map;
@@ -644,8 +686,8 @@ class LuaAddonParser
 
         $map = [];
 
-        foreach ($expansionDirs as $dirName) {
-            foreach (["{$btwDir}/{$dirName}/Database/Quests.lua", "{$btwDir}/{$dirName}/Quests.lua"] as $path) {
+        foreach ($expansionDirs as $expansionDir) {
+            foreach ([sprintf('%s/%s/Database/Quests.lua', $btwDir, $expansionDir), sprintf('%s/%s/Quests.lua', $btwDir, $expansionDir)] as $path) {
                 if (!File::exists($path)) {
                     continue;
                 }
@@ -690,17 +732,27 @@ class LuaAddonParser
 
         $map = [];
         $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
         $headers = fgetcsv($handle, 0, ',', '"', '');
-        $idIdx = array_search('ID', $headers);
-        $ctIdx = array_search('ContentTuningID', $headers);
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $ctIdx = (int) array_search('ContentTuningID', $headers, true);
 
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $questId = (int)$row[$idIdx];
-            $ctId = (int)$row[$ctIdx];
+            $questId = (int) $row[$idIdx];
+            $ctId = (int) $row[$ctIdx];
             if ($ctId > 0) {
                 $map[$questId] = $ctId;
             }
         }
+
         fclose($handle);
 
         return $map;
@@ -719,13 +771,14 @@ class LuaAddonParser
             return [];
         }
 
+        /** @var array<int|string, array{total_ids: list<int>}> $data */
         $data = json_decode(File::get($achievementsPath), true);
         $map = [];
 
         foreach ($data as $expansionId => $expansionData) {
-            $totalIds = $expansionData['total_ids'] ?? [];
-            foreach ($totalIds as $achievementId) {
-                $map[(int)$achievementId] = (int)$expansionId;
+            $totalIds = $expansionData['total_ids'];
+            foreach ($totalIds as $totalId) {
+                $map[(int) $totalId] = (int) $expansionId;
             }
         }
 
@@ -734,19 +787,23 @@ class LuaAddonParser
 
     /**
      * Get all unique quest IDs across all expansions.
+     *
+     * @return list<int>
      */
     public function getAllQuestIds(): array
     {
         $data = $this->parseAllAddons();
-        return array_unique(array_column($data['quests'], 'id'));
+        return array_values(array_unique(array_column($data['quests'], 'id')));
     }
 
     /**
      * Get all unique achievement IDs across all expansions.
+     *
+     * @return list<int>
      */
     public function getAllAchievementIds(): array
     {
         $data = $this->parseAllAddons();
-        return array_unique(array_column($data['achievements'], 'id'));
+        return array_values(array_unique(array_column($data['achievements'], 'id')));
     }
 }

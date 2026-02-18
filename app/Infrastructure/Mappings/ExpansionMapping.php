@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Mappings;
 
-use App\Domain\ValueObjects\ExpansionId;
-
 interface ExpansionMapping
 {
     /**
@@ -30,16 +28,22 @@ interface ExpansionMapping
 
     /**
      * Get all IDs (Master List) for a specific expansion and type.
+     *
+     * @return list<int>
      */
     public function getMasterList(int $expansionId, string $type): array;
 
     /**
      * Get quests grouped by zone for an expansion.
+     *
+     * @return array{total_ids: list<int>, zones?: array<string, mixed>}
      */
     public function getQuestsByExpansion(int $expansionId): array;
 
     /**
      * Get achievements grouped by category for an expansion.
+     *
+     * @return array{total_ids: list<int>, categories?: array<string, mixed>}
      */
     public function getAchievementsByExpansion(int $expansionId): array;
 }

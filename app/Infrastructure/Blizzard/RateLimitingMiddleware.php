@@ -13,22 +13,22 @@ class RateLimitingMiddleware
 {
     public function __invoke(callable $handler): callable
     {
-        return function (RequestInterface $request, array $options) use ($handler) {
-            return RateLimiter::attempt(
+        return function (RequestInterface $request, array $options) use ($handler): PromiseInterface {
+            /** @var PromiseInterface $result */
+            $result = RateLimiter::attempt(
                 'blizzard-api',
                 100, // Max requests
-                function () use ($handler, $request, $options) {
-                /** @var PromiseInterface $promise */
-                $promise = $handler($request, $options);
-                return $promise->then(
-                    function (ResponseInterface $response) {
-                    return $response;
-                }
-                );
-            }
-                ,
+                function () use ($handler, $request, $options): PromiseInterface {
+                    /** @var PromiseInterface $promise */
+                    $promise = $handler($request, $options);
+                    return $promise->then(
+                        fn(ResponseInterface $response): ResponseInterface => $response
+                    );
+                },
                 1 // Per second
             );
+
+            return $result;
         };
     }
 }

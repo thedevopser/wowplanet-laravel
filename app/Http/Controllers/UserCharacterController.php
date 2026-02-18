@@ -10,22 +10,23 @@ use Illuminate\Http\JsonResponse;
 class UserCharacterController extends Controller
 {
     public function __construct(
-        private UserCharacterService $service,
-    ) {}
+        private readonly UserCharacterService $userCharacterService,
+    ) {
+    }
 
     public function index(): JsonResponse
     {
-        if (!$this->service->isAuthenticated()) {
+        if (!$this->userCharacterService->isAuthenticated()) {
             return response()->json(['error' => 'Not authenticated'], 401);
         }
 
         try {
-            $characters = $this->service->getUserCharacters();
+            $characters = $this->userCharacterService->getUserCharacters();
             return response()->json($characters);
-        } catch (\Exception $e) {
+        } catch (\Exception $exception) {
             return response()->json([
                 'error' => 'Failed to fetch characters',
-                'message' => $e->getMessage(),
+                'message' => $exception->getMessage(),
             ], 500);
         }
     }
@@ -33,22 +34,22 @@ class UserCharacterController extends Controller
     public function authStatus(): JsonResponse
     {
         return response()->json([
-            'authenticated' => $this->service->isAuthenticated(),
+            'authenticated' => $this->userCharacterService->isAuthenticated(),
         ]);
     }
 
     public function classIcons(): JsonResponse
     {
         try {
-            return response()->json($this->service->getClassIcons());
-        } catch (\Exception $e) {
+            return response()->json($this->userCharacterService->getClassIcons());
+        } catch (\Exception) {
             return response()->json([], 500);
         }
     }
 
     public function logout(): JsonResponse
     {
-        $this->service->logout();
+        $this->userCharacterService->logout();
 
         return response()->json(['success' => true]);
     }

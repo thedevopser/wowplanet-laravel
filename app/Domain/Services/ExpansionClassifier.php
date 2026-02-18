@@ -10,21 +10,20 @@ use App\Infrastructure\Mappings\ExpansionMapping;
 class ExpansionClassifier
 {
     public function __construct(
-        private ExpansionMapping $mapping,
-        )
-    {
+        private readonly ExpansionMapping $expansionMapping,
+    ) {
     }
 
     public function classifyZone(int $zoneId): ExpansionId
     {
-        $expansionValue = $this->mapping->getZoneMapping()[$zoneId] ?? ExpansionId::CLASSIC;
+        $expansionValue = $this->expansionMapping->getZoneMapping()[$zoneId] ?? ExpansionId::CLASSIC;
         return new ExpansionId($expansionValue);
     }
 
     public function classifyQuest(int $questId, ?int $zoneId = null): ExpansionId
     {
-        if (isset($this->mapping->getQuestMapping()[$questId])) {
-            return new ExpansionId($this->mapping->getQuestMapping()[$questId]);
+        if (isset($this->expansionMapping->getQuestMapping()[$questId])) {
+            return new ExpansionId($this->expansionMapping->getQuestMapping()[$questId]);
         }
 
         if ($zoneId !== null) {
@@ -36,8 +35,8 @@ class ExpansionClassifier
 
     public function classifyAchievement(int $achievementId): ExpansionId
     {
-        if (isset($this->mapping->getAchievementMapping()[$achievementId])) {
-            return new ExpansionId($this->mapping->getAchievementMapping()[$achievementId]);
+        if (isset($this->expansionMapping->getAchievementMapping()[$achievementId])) {
+            return new ExpansionId($this->expansionMapping->getAchievementMapping()[$achievementId]);
         }
 
         return new ExpansionId(ExpansionId::CLASSIC);
@@ -45,7 +44,7 @@ class ExpansionClassifier
 
     public function classifyAchievementCategory(int $categoryId): ExpansionId
     {
-        $expansionValue = $this->mapping->getAchievementCategoryMapping()[$categoryId] ?? ExpansionId::CLASSIC;
+        $expansionValue = $this->expansionMapping->getAchievementCategoryMapping()[$categoryId] ?? ExpansionId::CLASSIC;
         return new ExpansionId($expansionValue);
     }
 }

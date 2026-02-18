@@ -9,6 +9,8 @@ use App\Domain\ValueObjects\ExpansionId;
 interface CollectionItem
 {
     public function getExpansionId(): ExpansionId;
+
     public function getName(): string;
+
     public function getId(): int;
 }

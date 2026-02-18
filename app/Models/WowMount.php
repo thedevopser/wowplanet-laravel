@@ -4,12 +4,31 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property string $name_fr
+ * @property string|null $source
+ * @property bool $is_active
+ *
+ * @method static \Illuminate\Database\Eloquent\Builder<static> query()
+ * @method static int count(string $columns = '*')
+ * @method static int truncate()
+ * @method static static updateOrCreate(array<string, mixed> $attributes, array<string, mixed> $values = [])
+ * @method static static create(array<string, mixed> $attributes = [])
+ * @method static \Illuminate\Database\Eloquent\Collection<int, static> all(array<mixed>|string $columns = ['*'])
+ */
 class WowMount extends Model
 {
+    /** @use HasFactory<\Database\Factories\WowMountFactory> */
+    use HasFactory;
+
     protected $table = 'wow_mounts';
+
     protected $primaryKey = 'id';
+
     public $incrementing = false;
 
     protected $fillable = [
@@ -19,7 +38,10 @@ class WowMount extends Model
         'is_active',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
 }

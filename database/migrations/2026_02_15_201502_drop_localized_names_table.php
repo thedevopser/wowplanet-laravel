@@ -16,14 +16,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::create('localized_names', function (Blueprint $table) {
-            $table->id();
-            $table->string('type');
-            $table->unsignedInteger('blizzard_id');
-            $table->string('locale', 10)->default('fr_FR');
-            $table->string('name');
-            $table->timestamps();
-            $table->unique(['type', 'blizzard_id', 'locale']);
+        Schema::create('localized_names', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->string('type');
+            $blueprint->unsignedInteger('blizzard_id');
+            $blueprint->string('locale', 10)->default('fr_FR');
+            $blueprint->string('name');
+            $blueprint->timestamps();
+            $blueprint->unique(['type', 'blizzard_id', 'locale']);
         });
     }
 };

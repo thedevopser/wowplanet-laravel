@@ -15,40 +15,42 @@ use Illuminate\Console\Command;
 class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all}';
+
     protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets)';
 
-    public function handle(BlizzardBatchImporter $importer, LuaAddonParser $addonParser): void
+    public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
+        /** @var string $type */
         $type = $this->option('type');
 
-        $this->info("Starting WoW Data Import (type: {$type})");
+        $this->info(sprintf('Starting WoW Data Import (type: %s)', $type));
         $this->newLine();
 
         if ($type === 'all' || $type === 'achievements') {
-            $achievementExpansionMap = $addonParser->getAchievementExpansionMap();
-            $this->info("Importing Achievements (category tree + addon expansion mapping, " . count($achievementExpansionMap) . " mapped)...");
-            $importer->importAchievements($achievementExpansionMap);
+            $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
+            $this->info(sprintf('Importing Achievements (category tree + addon expansion mapping, %d mapped)...', count($achievementExpansionMap)));
+            $blizzardBatchImporter->importAchievements($achievementExpansionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
             $this->info("Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...");
-            $areaExpansionMap = $addonParser->buildAreaExpansionMap();
-            $modernQuestOverrides = $addonParser->getQuestExpansionMap();
-            $this->info("Importing Quests (DB2 areas: " . count($areaExpansionMap) . ", modern overrides: " . count($modernQuestOverrides) . ")...");
-            $importer->importQuests($areaExpansionMap, $modernQuestOverrides);
+            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
+            $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
+            $this->info(sprintf('Importing Quests (DB2 areas: %d, modern overrides: %d)...', count($areaExpansionMap), count($modernQuestOverrides)));
+            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'mounts') {
             $this->info("Importing Mounts...");
-            $importer->importMounts();
+            $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
             $this->info("Importing Pets...");
-            $importer->importPets();
+            $blizzardBatchImporter->importPets();
             $this->newLine();
         }
 
