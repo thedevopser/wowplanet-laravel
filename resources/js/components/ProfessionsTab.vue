@@ -137,63 +137,60 @@
                         </div>
                     </div>
 
-                    <SearchFilter
-                        v-model:search="search"
-                        v-model:hideCompleted="hideCompleted"
-                        placeholder="Rechercher une recette..."
-                        hideLabel="Masquer apprises"
-                    />
+                    <template v-if="sortedCategories.length">
+                        <SearchFilter
+                            v-model:search="search"
+                            v-model:hideCompleted="hideCompleted"
+                            placeholder="Rechercher une recette..."
+                            hideLabel="Masquer apprises"
+                        />
 
-                    <!-- Category Cards Grid -->
-                    <section v-if="filteredCategories.length">
-                        <div class="flex justify-between items-center mb-4 sm:mb-6">
-                            <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
-                                Cat&eacute;gories de recettes
-                                <div class="flex-1 h-px bg-slate-700"></div>
-                            </h4>
-                            <div v-if="totalPages > 1" class="flex items-center gap-2 ml-4">
-                                <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
-                                    <span class="text-xs text-slate-300">&larr;</span>
-                                </button>
-                                <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
-                                <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
-                                    <span class="text-xs text-slate-300">&rarr;</span>
-                                </button>
+                        <!-- Category Cards Grid -->
+                        <section v-if="filteredCategories.length">
+                            <div class="flex justify-between items-center mb-4 sm:mb-6">
+                                <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
+                                    Cat&eacute;gories de recettes
+                                    <div class="flex-1 h-px bg-slate-700"></div>
+                                </h4>
+                                <div v-if="totalPages > 1" class="flex items-center gap-2 ml-4">
+                                    <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
+                                        <span class="text-xs text-slate-300">&larr;</span>
+                                    </button>
+                                    <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
+                                    <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
+                                        <span class="text-xs text-slate-300">&rarr;</span>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
-                            <div
-                                v-for="cat in paginatedCategories"
-                                :key="cat.name"
-                                @click="toggleCategory(cat)"
-                                class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
-                            >
-                                <div class="flex justify-between items-start mb-3">
-                                    <span class="text-sm md:text-base font-bold text-slate-300 group-hover:text-emerald-400 transition-colors">{{ cat.name }}</span>
-                                    <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ cat.completed }}/{{ cat.total }}</span>
-                                </div>
-                                <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-emerald-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
-                                </div>
-                                <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
-                                    <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex justify-between items-center text-[10px] sm:text-xs py-1">
-                                        <a :href="wowheadLink(item)" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-emerald-400 font-medium' : 'text-slate-500', 'hover:underline']">{{ item.name }}</a>
-                                        <span v-if="item.is_completed" class="text-green-500 font-bold">&check;</span>
-                                        <span v-else class="text-slate-800">&cir;</span>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+                                <div
+                                    v-for="cat in paginatedCategories"
+                                    :key="cat.name"
+                                    @click="toggleCategory(cat)"
+                                    class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                                >
+                                    <div class="flex justify-between items-start mb-3">
+                                        <span class="text-sm md:text-base font-bold text-slate-300 group-hover:text-emerald-400 transition-colors">{{ cat.name }}</span>
+                                        <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ cat.completed }}/{{ cat.total }}</span>
+                                    </div>
+                                    <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                        <div class="h-full bg-emerald-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
+                                    </div>
+                                    <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
+                                        <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex justify-between items-center text-[10px] sm:text-xs py-1">
+                                            <a :href="wowheadLink(item)" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-emerald-400 font-medium' : 'text-slate-500', 'hover:underline']">{{ item.name }}</a>
+                                            <span v-if="item.is_completed" class="text-green-500 font-bold">&check;</span>
+                                            <span v-else class="text-slate-800">&cir;</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </section>
+
+                        <div v-else-if="search || hideCompleted" class="text-center py-8 text-slate-500 text-sm">
+                            Aucun r&eacute;sultat trouv&eacute;.
                         </div>
-                    </section>
-
-                    <div v-else-if="search || hideCompleted" class="text-center py-8 text-slate-500 text-sm">
-                        Aucun r&eacute;sultat trouv&eacute;.
-                    </div>
-
-                    <!-- No recipes for this expansion -->
-                    <div v-else-if="currentExpansionData.total === 0" class="card-glass rounded-2xl border p-6 text-center">
-                        <p class="text-slate-500 text-sm">Aucune recette pour cette extension.</p>
-                    </div>
+                    </template>
                 </template>
             </template>
         </template>
