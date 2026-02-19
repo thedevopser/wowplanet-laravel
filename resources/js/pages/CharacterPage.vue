@@ -1,5 +1,5 @@
 <template>
-    <LoadingSpinner v-if="store.loading" hint="Quêtes, hauts-faits, montures, mascottes..." />
+    <LoadingSpinner v-if="store.loading" hint="Quêtes, hauts-faits, métiers, montures, mascottes..." />
     <div v-else-if="store.character" class="space-y-8 animate-in fade-in duration-500">
         <CharacterCard :character="store.character" />
 
@@ -24,6 +24,7 @@
 
             <QuestsTab v-if="activeTab === 'quests'" />
             <AchievementsTab v-if="activeTab === 'achievements'" />
+            <ProfessionsTab v-if="activeTab === 'professions'" />
             <MountsTab v-if="activeTab === 'mounts'" :character="store.character" />
             <PetsTab v-if="activeTab === 'pets'" :character="store.character" />
         </div>
@@ -40,6 +41,7 @@ import QuestsTab from '../components/QuestsTab.vue';
 import AchievementsTab from '../components/AchievementsTab.vue';
 import MountsTab from '../components/MountsTab.vue';
 import PetsTab from '../components/PetsTab.vue';
+import ProfessionsTab from '../components/ProfessionsTab.vue';
 
 const route = useRoute();
 const store = useCharacterStore();
@@ -48,6 +50,7 @@ const activeTab = ref('quests');
 const contentTabs = computed(() => [
     { id: 'quests', label: 'Quêtes', count: undefined },
     { id: 'achievements', label: 'Hauts-faits', count: undefined },
+    { id: 'professions', label: 'Métiers', count: store.character?.professions?.length || undefined },
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },
 ]);

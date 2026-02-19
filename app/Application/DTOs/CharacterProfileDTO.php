@@ -10,6 +10,7 @@ readonly class CharacterProfileDTO
      * @param array<int, array<string, mixed>> $collections
      * @param array<int, array<string, mixed>> $mounts
      * @param array<int, array<string, mixed>> $pets
+     * @param list<array<string, mixed>> $professions
      */
     public function __construct(
         public string $name,
@@ -27,6 +28,7 @@ readonly class CharacterProfileDTO
         public int $petsCount,
         public array $mounts = [],
         public array $pets = [],
+        public array $professions = [],
     ) {
     }
 }

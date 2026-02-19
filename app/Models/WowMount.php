@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $id
  * @property string $name_fr
  * @property string|null $source
+ * @property int|null $source_spell_id
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -35,6 +36,7 @@ class WowMount extends Model
         'id',
         'name_fr',
         'source',
+        'source_spell_id',
         'is_active',
     ];
 

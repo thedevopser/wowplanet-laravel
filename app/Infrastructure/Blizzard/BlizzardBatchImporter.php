@@ -7,7 +7,9 @@ namespace App\Infrastructure\Blizzard;
 use App\Models\WowAchievement;
 use App\Models\WowMount;
 use App\Models\WowPet;
+use App\Models\WowProfession;
 use App\Models\WowQuest;
+use App\Models\WowRecipe;
 use Illuminate\Support\Facades\Log;
 
 class BlizzardBatchImporter
@@ -211,7 +213,7 @@ class BlizzardBatchImporter
     }
 
     /**
-     * Import Mounts from Blizzard Index.
+     * Import Mounts from Blizzard Index, enriched with SourceSpellID from DB2.
      */
     public function importMounts(): void
     {
@@ -226,18 +228,36 @@ class BlizzardBatchImporter
         $mounts = $response['mounts'] ?? [];
         $this->info("Found " . count($mounts) . " mounts.");
 
+        $spellMap = $this->loadMountSpellMap();
+        $this->info("  DB2 mount spell map: " . count($spellMap) . " entries.");
+
+        $skipped = 0;
         foreach ($mounts as $mount) {
+            $mountName = $mount['name'];
+            if ($mountName === '') {
+                $skipped++;
+                continue;
+            }
+
             WowMount::updateOrCreate(
                 ['id' => $mount['id']],
-                ['name_fr' => $mount['name'], 'is_active' => true]
+                [
+                    'name_fr' => $mountName,
+                    'source_spell_id' => $spellMap[$mount['id']] ?? null,
+                    'is_active' => true,
+                ]
             );
+        }
+
+        if ($skipped > 0) {
+            $this->info(sprintf('  Skipped %d mounts with empty names.', $skipped));
         }
 
         $this->info("Mount import complete.");
     }
 
     /**
-     * Import Pets from Blizzard Index.
+     * Import Pets from Blizzard Index, enriched with CreatureID from DB2.
      */
     public function importPets(): void
     {
@@ -252,11 +272,29 @@ class BlizzardBatchImporter
         $pets = $response['pets'] ?? [];
         $this->info("Found " . count($pets) . " pets.");
 
+        $creatureMap = $this->loadPetCreatureMap();
+        $this->info("  DB2 pet creature map: " . count($creatureMap) . " entries.");
+
+        $skipped = 0;
         foreach ($pets as $pet) {
+            $petName = $pet['name'];
+            if ($petName === '') {
+                $skipped++;
+                continue;
+            }
+
             WowPet::updateOrCreate(
                 ['id' => $pet['id']],
-                ['name_fr' => $pet['name'], 'is_active' => true]
+                [
+                    'name_fr' => $petName,
+                    'creature_id' => $creatureMap[$pet['id']] ?? null,
+                    'is_active' => true,
+                ]
             );
+        }
+
+        if ($skipped > 0) {
+            $this->info(sprintf('  Skipped %d pets with empty names.', $skipped));
         }
 
         $this->info("Pet import complete.");
@@ -396,6 +434,132 @@ class BlizzardBatchImporter
         return null;
     }
 
+    /**
+     * Import ALL professions and their recipes from Blizzard Game Data API.
+     *
+     * Traversal: profession/index → profession/{id} → skill-tier/{id} → categories → recipes
+     * Expansion ID is resolved from the skill tier name using matchExpansion().
+     */
+    public function importProfessions(): void
+    {
+        $this->info('Fetching profession index...');
+
+        $index = $this->fetchWithRetry('data/wow/profession/index');
+        if (!$index) {
+            $this->info('ERROR: Could not fetch profession index.');
+
+            return;
+        }
+
+        $secondaryIds = [185, 356, 794]; // Cooking, Fishing, Archaeology
+
+        /** @var list<array{id: int, name: string}> $professions */
+        $professions = $index['professions'] ?? [];
+        $this->info('Found ' . count($professions) . ' professions.');
+
+        $recipeSpellMap = $this->loadRecipeSpellMap();
+        $this->info('  DB2 recipe spell map: ' . count($recipeSpellMap) . ' entries.');
+
+        $totalRecipes = 0;
+
+        foreach ($professions as $profession) {
+            $professionId = $profession['id'];
+            $professionName = $profession['name'];
+            $type = in_array($professionId, $secondaryIds, true) ? 'secondary' : 'primary';
+
+            \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
+
+            $detail = $this->fetchWithRetry('data/wow/profession/' . $professionId);
+            if (!$detail) {
+                continue;
+            }
+
+            WowProfession::updateOrCreate(
+                ['id' => $professionId],
+                [
+                    'name_fr' => $professionName,
+                    'type' => $type,
+                    'is_active' => true,
+                ]
+            );
+
+            /** @var list<array{id: int, name: string}> $skillTiers */
+            $skillTiers = $detail['skill_tiers'] ?? [];
+            $this->info(sprintf('  %s (%s): %d skill tiers', $professionName, $type, count($skillTiers)));
+
+            foreach ($skillTiers as $skillTier) {
+                $tierRecipes = $this->importSkillTierRecipes(
+                    $professionId,
+                    $skillTier['id'],
+                    $skillTier['name'],
+                    $recipeSpellMap,
+                );
+                $totalRecipes += $tierRecipes;
+            }
+        }
+
+        $this->info(sprintf('Profession import complete: %d professions, %d recipes.', count($professions), $totalRecipes));
+    }
+
+    /**
+     * Import all recipes from a single skill tier.
+     *
+     * @param array<int, int> $recipeSpellMap
+     * @return int Number of recipes imported
+     */
+    private function importSkillTierRecipes(
+        int $professionId,
+        int $skillTierId,
+        string $skillTierName,
+        array $recipeSpellMap,
+    ): int {
+        \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
+
+        $tierDetail = $this->fetchWithRetry(
+            sprintf('data/wow/profession/%d/skill-tier/%d', $professionId, $skillTierId)
+        );
+
+        if (!$tierDetail) {
+            return 0;
+        }
+
+        $expansionId = $this->matchExpansion($skillTierName) ?? 0;
+        $count = 0;
+
+        /** @var list<array{name: string, recipes?: list<array{id: int, name: string}>}> $categories */
+        $categories = $tierDetail['categories'] ?? [];
+
+        foreach ($categories as $category) {
+            $categoryName = $category['name'];
+            /** @var list<array{id: int, name: string}> $recipes */
+            $recipes = $category['recipes'] ?? [];
+
+            foreach ($recipes as $recipe) {
+                $recipeName = $recipe['name'];
+                if ($recipeName === '') {
+                    continue;
+                }
+
+                WowRecipe::updateOrCreate(
+                    ['id' => $recipe['id']],
+                    [
+                        'name_fr' => $recipeName,
+                        'profession_id' => $professionId,
+                        'expansion_id' => $expansionId,
+                        'category_name' => $categoryName,
+                        'wowhead_spell_id' => $recipeSpellMap[$recipe['id']] ?? null,
+                        'is_active' => true,
+                    ]
+                );
+                $count++;
+            }
+        }
+
+        $this->info(sprintf('    %s → expansion %d: %d recipes', $skillTierName, $expansionId, $count));
+
+        return $count;
+    }
+
     // ===================== PRIVATE =====================
 
     /**
@@ -448,6 +612,114 @@ class BlizzardBatchImporter
     }
 
     /**
+     * Load mount ID → SourceSpellID mapping from Mount.db2 CSV.
+     *
+     * @return array<int, int>
+     */
+    private function loadMountSpellMap(): array
+    {
+        $path = storage_path('app/blizzard/mount.csv');
+        if (!file_exists($path)) {
+            $this->info('  WARNING: mount.csv not found at ' . $path);
+            return [];
+        }
+
+        $map = [];
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        // Skip header
+        fgetcsv($handle);
+
+        // Columns: Name_lang(0), SourceText_lang(1), Description_lang(2), ID(3),
+        // MountTypeID(4), Flags(5), SourceTypeEnum(6), SourceSpellID(7), ...
+        while (($row = fgetcsv($handle)) !== false) {
+            $mountId = (int) ($row[3] ?? 0);
+            $spellId = (int) ($row[7] ?? 0);
+            if ($mountId > 0 && $spellId > 0) {
+                $map[$mountId] = $spellId;
+            }
+        }
+
+        fclose($handle);
+        return $map;
+    }
+
+    /**
+     * Load pet species ID → CreatureID mapping from BattlePetSpecies.db2 CSV.
+     *
+     * @return array<int, int>
+     */
+    private function loadPetCreatureMap(): array
+    {
+        $path = storage_path('app/blizzard/battle_pet_species.csv');
+        if (!file_exists($path)) {
+            $this->info('  WARNING: battle_pet_species.csv not found at ' . $path);
+            return [];
+        }
+
+        $map = [];
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        // Skip header
+        fgetcsv($handle);
+
+        // Columns: Description_lang(0), SourceText_lang(1), ID(2), CreatureID(3),
+        // SummonSpellID(4), IconFileDataID(5), ...
+        while (($row = fgetcsv($handle)) !== false) {
+            $speciesId = (int) ($row[2] ?? 0);
+            $creatureId = (int) ($row[3] ?? 0);
+            if ($speciesId > 0 && $creatureId > 0) {
+                $map[$speciesId] = $creatureId;
+            }
+        }
+
+        fclose($handle);
+        return $map;
+    }
+
+    /**
+     * Load recipe ID → Spell ID mapping from SkillLineAbility.db2 CSV.
+     *
+     * @return array<int, int>
+     */
+    private function loadRecipeSpellMap(): array
+    {
+        $path = storage_path('app/blizzard/skill_line_ability.csv');
+        if (!file_exists($path)) {
+            $this->info('  WARNING: skill_line_ability.csv not found at ' . $path);
+            return [];
+        }
+
+        $map = [];
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        // Skip header
+        fgetcsv($handle);
+
+        // Columns: RaceMask(0), AbilityVerb_lang(1), AbilityAllVerb_lang(2), ID(3),
+        // SkillLine(4), Spell(5), ...
+        while (($row = fgetcsv($handle)) !== false) {
+            $recipeId = (int) ($row[3] ?? 0);
+            $spellId = (int) ($row[5] ?? 0);
+            if ($recipeId > 0 && $spellId > 0) {
+                $map[$recipeId] = $spellId;
+            }
+        }
+
+        fclose($handle);
+        return $map;
+    }
+
+    /**
      * Match a French category/zone name to an expansion ID.
      * Most specific keywords first to avoid partial matches.
      */
@@ -461,6 +733,9 @@ class BlizzardBatchImporter
             'Burning Crusade' => 1,
             'Lich King' => 2,
             'War Within' => 10,
+            'Kul Tir' => 7,
+            'Zandalari' => 7,
+            'Khaz Algar' => 10,
 
             // Single-word identifiers
             'Kalimdor' => 0,

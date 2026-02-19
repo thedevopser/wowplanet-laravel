@@ -28,19 +28,29 @@ const props = defineProps({
     expansions: { type: Array, required: true },
     activeExpansion: { type: Number, required: true },
     collections: { type: Object, required: true },
-    collectionType: { type: String, required: true, validator: v => ['quests', 'achievements'].includes(v) },
-    activeColor: { type: String, default: 'blue', validator: v => ['blue', 'amber'].includes(v) },
+    collectionType: { type: String, required: true, validator: v => ['quests', 'achievements', 'recipes'].includes(v) },
+    activeColor: { type: String, default: 'blue', validator: v => ['blue', 'amber', 'emerald'].includes(v) },
 });
 
 defineEmits(['update:activeExpansion']);
 
-const activeClasses = props.activeColor === 'blue'
-    ? 'bg-blue-600 border-blue-400 text-white shadow-xl shadow-blue-500/20'
-    : 'bg-amber-600 border-amber-400 text-white shadow-xl shadow-amber-500/20';
+const colorMap = {
+    blue: {
+        active: 'bg-blue-600 border-blue-400 text-white shadow-xl shadow-blue-500/20',
+        badge: 'bg-blue-700/50 border-white/20',
+    },
+    amber: {
+        active: 'bg-amber-600 border-amber-400 text-white shadow-xl shadow-amber-500/20',
+        badge: 'bg-amber-700/50 border-white/20',
+    },
+    emerald: {
+        active: 'bg-emerald-600 border-emerald-400 text-white shadow-xl shadow-emerald-500/20',
+        badge: 'bg-emerald-700/50 border-white/20',
+    },
+};
 
-const activeBadgeClasses = props.activeColor === 'blue'
-    ? 'bg-blue-700/50 border-white/20'
-    : 'bg-amber-700/50 border-white/20';
+const activeClasses = colorMap[props.activeColor].active;
+const activeBadgeClasses = colorMap[props.activeColor].badge;
 
 const progressWidth = (expId) => {
     const col = props.collections[expId];

@@ -102,6 +102,14 @@ class CharacterProfileServiceTest extends TestCase
                 'pets' => [['species' => ['id' => 300]]],
             ]);
 
+        /** @var \Mockery\Expectation $professionsExp */
+        $professionsExp = $mock->shouldReceive('get');
+        $professionsExp->with('profile/wow/character/hyjal/thrall/professions')
+            ->andReturn([
+                'primaries' => [],
+                'secondaries' => [],
+            ]);
+
         $characterProfileService = resolve(CharacterProfileService::class);
         $characterProfileDTO = $characterProfileService->getProfile('Hyjal', 'Thrall');
 
@@ -112,6 +120,7 @@ class CharacterProfileServiceTest extends TestCase
         $this->assertSame(1, $characterProfileDTO->mountsCount);
         $this->assertSame(1, $characterProfileDTO->petsCount);
         $this->assertSame('https://render.com/class-icon.jpg', $characterProfileDTO->classIconUrl);
+        $this->assertSame([], $characterProfileDTO->professions);
     }
 
     #[Test]
@@ -166,6 +175,10 @@ class CharacterProfileServiceTest extends TestCase
 
             if (str_contains($endpoint, 'playable-class')) {
                 return ['assets' => []];
+            }
+
+            if (str_contains($endpoint, '/professions')) {
+                return ['primaries' => [], 'secondaries' => []];
             }
 
             return [
@@ -248,6 +261,10 @@ class CharacterProfileServiceTest extends TestCase
 
             if (str_contains($endpoint, 'playable-class')) {
                 return ['assets' => []];
+            }
+
+            if (str_contains($endpoint, '/professions')) {
+                return ['primaries' => [], 'secondaries' => []];
             }
 
             return [

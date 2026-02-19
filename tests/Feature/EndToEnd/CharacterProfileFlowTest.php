@@ -78,6 +78,10 @@ class CharacterProfileFlowTest extends TestCase
                 return ['assets' => [['key' => 'icon', 'value' => 'https://render.com/icon.jpg']]];
             }
 
+            if (str_contains($endpoint, '/professions')) {
+                return ['primaries' => [], 'secondaries' => []];
+            }
+
             return [
                 'name' => 'Thrall',
                 'realm' => ['name' => 'Hyjal'],

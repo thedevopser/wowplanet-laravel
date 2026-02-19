@@ -6,12 +6,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property int $id
  * @property string $name_fr
- * @property string|null $source
- * @property int|null $creature_id
+ * @property int $profession_id
+ * @property int $expansion_id
+ * @property string|null $category_name
+ * @property int|null $wowhead_spell_id
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -19,14 +22,13 @@ use Illuminate\Database\Eloquent\Model;
  * @method static int truncate()
  * @method static static updateOrCreate(array<string, mixed> $attributes, array<string, mixed> $values = [])
  * @method static static create(array<string, mixed> $attributes = [])
- * @method static \Illuminate\Database\Eloquent\Collection<int, static> all(array<mixed>|string $columns = ['*'])
  */
-class WowPet extends Model
+class WowRecipe extends Model
 {
-    /** @use HasFactory<\Database\Factories\WowPetFactory> */
+    /** @use HasFactory<\Database\Factories\WowRecipeFactory> */
     use HasFactory;
 
-    protected $table = 'wow_pets';
+    protected $table = 'wow_recipes';
 
     protected $primaryKey = 'id';
 
@@ -35,15 +37,30 @@ class WowPet extends Model
     protected $fillable = [
         'id',
         'name_fr',
-        'source',
-        'creature_id',
+        'profession_id',
+        'expansion_id',
+        'category_name',
+        'wowhead_spell_id',
         'is_active',
     ];
 
+    /**
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
+            'profession_id' => 'integer',
+            'expansion_id' => 'integer',
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * @return BelongsTo<WowProfession, $this>
+     */
+    public function profession(): BelongsTo
+    {
+        return $this->belongsTo(WowProfession::class, 'profession_id');
     }
 }

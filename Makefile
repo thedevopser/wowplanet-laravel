@@ -61,15 +61,12 @@ quality: lint static refactor test test-js ## Run all quality checks
 
 HARBOR_REGISTRY = harbor.wowplanet.fr
 IMAGE_NAME = wowplanet/app
-IMAGE_TAG = $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
 
 build-prod: ## Build production Docker image
 	docker build --target prod \
-	             -t $(HARBOR_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG) \
 	             -t $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest .
 
 push: ## Push production image to Harbor
-	docker push $(HARBOR_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 	docker push $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest
 
 deploy: build-prod push ## Build + push to Harbor

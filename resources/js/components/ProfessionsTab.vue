@@ -1,0 +1,198 @@
+<template>
+    <div class="space-y-6">
+        <!-- Empty state -->
+        <div v-if="!professions.length" class="card-glass rounded-2xl sm:rounded-3xl border p-8 text-center">
+            <p class="text-slate-500 text-sm">Ce personnage n'a aucun m&eacute;tier.</p>
+        </div>
+
+        <template v-else>
+            <!-- Profession Selector -->
+            <div class="flex flex-wrap gap-2 sm:gap-3">
+                <button
+                    v-for="prof in professions"
+                    :key="prof.profession_id"
+                    @click="selectProfession(prof.profession_id)"
+                    :class="[
+                        'px-4 py-2 rounded-xl text-sm font-bold transition-all border',
+                        selectedProfessionId === prof.profession_id
+                            ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg shadow-emerald-500/20'
+                            : 'bg-slate-800/80 border-white/5 text-slate-400 hover:text-white hover:bg-slate-700 hover:border-white/10'
+                    ]"
+                >
+                    {{ prof.profession_name }}
+                    <span v-if="prof.type === 'secondary'" class="ml-1 text-[10px] font-mono opacity-60">(sec.)</span>
+                </button>
+            </div>
+
+            <!-- Expansion Selector -->
+            <ExpansionSelector
+                v-if="selectedProfession"
+                :expansions="store.expansions"
+                :activeExpansion="activeExpansion"
+                :collections="professionCollections"
+                collectionType="recipes"
+                activeColor="emerald"
+                @update:activeExpansion="activeExpansion = $event"
+            />
+
+            <!-- Progress Summary -->
+            <div v-if="currentExpansionData" class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 blur-3xl -mr-16 -mt-16"></div>
+                <div class="relative z-10">
+                    <div class="flex justify-between items-end mb-4 sm:mb-6">
+                        <div>
+                            <h3 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
+                                <div class="w-2 h-6 sm:h-8 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50"></div>
+                                {{ selectedProfession.profession_name }}
+                            </h3>
+                            <p class="text-slate-500 text-xs sm:text-sm md:text-base mt-1">Recettes apprises par extension</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
+                                {{ Math.round(currentExpansionData.completed / (currentExpansionData.total || 1) * 100) }}%
+                            </div>
+                            <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">
+                                {{ currentExpansionData.completed }} / {{ currentExpansionData.total }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-3 bg-slate-800 rounded-full overflow-hidden border border-white/5">
+                        <div class="h-full bg-linear-to-r from-emerald-700 via-emerald-500 to-emerald-400 transition-all duration-1000 relative shadow-[0_0_15px_rgba(16,185,129,0.3)]" :style="{ width: progressPercent + '%' }">
+                            <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category Cards Grid -->
+            <section v-if="currentExpansionData?.categories?.length">
+                <div class="flex justify-between items-center mb-4 sm:mb-6">
+                    <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
+                        Cat&eacute;gories de recettes
+                        <div class="flex-1 h-px bg-slate-700"></div>
+                    </h4>
+                    <div v-if="totalPages > 1" class="flex items-center gap-2 ml-4">
+                        <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
+                            <span class="text-xs text-slate-300">&larr;</span>
+                        </button>
+                        <span class="text-[10px] font-mono text-slate-500">{{ page }} / {{ totalPages }}</span>
+                        <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
+                            <span class="text-xs text-slate-300">&rarr;</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+                    <div
+                        v-for="cat in paginatedCategories"
+                        :key="cat.name"
+                        @click="toggleCategory(cat)"
+                        class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                    >
+                        <div class="flex justify-between items-start mb-3">
+                            <span class="text-sm md:text-base font-bold text-slate-300 group-hover:text-emerald-400 transition-colors">{{ cat.name }}</span>
+                            <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ cat.completed }}/{{ cat.total }}</span>
+                        </div>
+                        <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
+                        </div>
+                        <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
+                            <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex justify-between items-center text-[10px] sm:text-xs py-1">
+                                <a :href="wowheadLink(item)" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-emerald-400 font-medium' : 'text-slate-500', 'hover:underline']">{{ item.name }}</a>
+                                <span v-if="item.is_completed" class="text-green-500 font-bold">&check;</span>
+                                <span v-else class="text-slate-800">&cir;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- No recipes for this expansion -->
+            <div v-else-if="selectedProfession && currentExpansionData?.total === 0" class="card-glass rounded-2xl border p-6 text-center">
+                <p class="text-slate-500 text-sm">Aucune recette pour cette extension.</p>
+            </div>
+        </template>
+    </div>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue';
+import { useCharacterStore } from '../stores/character';
+import ExpansionSelector from './ExpansionSelector.vue';
+
+const store = useCharacterStore();
+
+const selectedProfessionId = ref(null);
+const activeExpansion = ref(10);
+const expandedCategory = ref(null);
+const page = ref(1);
+const itemsPerPage = 8;
+
+const professions = computed(() => store.character?.professions ?? []);
+
+// Auto-select first profession
+watch(professions, (profs) => {
+    if (profs.length && !selectedProfessionId.value) {
+        selectedProfessionId.value = profs[0].profession_id;
+    }
+}, { immediate: true });
+
+const selectProfession = (id) => {
+    selectedProfessionId.value = id;
+    page.value = 1;
+    expandedCategory.value = null;
+};
+
+const selectedProfession = computed(() =>
+    professions.value.find(p => p.profession_id === selectedProfessionId.value) || null
+);
+
+// Transform profession expansion data into ExpansionSelector format
+const professionCollections = computed(() => {
+    if (!selectedProfession.value) return {};
+    const result = {};
+    const expansions = selectedProfession.value.expansions;
+    for (const [expId, data] of Object.entries(expansions)) {
+        result[expId] = { recipes: { total: data.total, completed: data.completed } };
+    }
+    return result;
+});
+
+const currentExpansionData = computed(() => {
+    if (!selectedProfession.value) return null;
+    return selectedProfession.value.expansions?.[activeExpansion.value] || null;
+});
+
+const progressPercent = computed(() => {
+    if (!currentExpansionData.value) return 0;
+    const { completed, total } = currentExpansionData.value;
+    return total > 0 ? completed / total * 100 : 0;
+});
+
+const sortedCategories = computed(() => {
+    if (!currentExpansionData.value) return [];
+    const categories = currentExpansionData.value.categories || [];
+    return [...categories].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+});
+
+const paginatedCategories = computed(() => {
+    const start = (page.value - 1) * itemsPerPage;
+    return sortedCategories.value.slice(start, start + itemsPerPage);
+});
+
+const totalPages = computed(() => Math.ceil(sortedCategories.value.length / itemsPerPage));
+
+const toggleCategory = (cat) => {
+    expandedCategory.value = expandedCategory.value === cat.name ? null : cat.name;
+};
+
+const sortedItems = (items) => [...items].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+
+const wowheadLink = (item) => item.wowhead_spell_id
+    ? `https://www.wowhead.com/fr/spell=${item.wowhead_spell_id}`
+    : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(item.name)}`;
+
+watch(activeExpansion, () => {
+    page.value = 1;
+    expandedCategory.value = null;
+});
+</script>

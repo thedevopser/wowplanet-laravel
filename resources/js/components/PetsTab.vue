@@ -33,7 +33,7 @@
             </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <a v-for="pet in paginatedPets" :key="pet.id" :href="`https://www.wowhead.com/fr/pet=${pet.id}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+            <a v-for="pet in paginatedPets" :key="pet.id" :href="pet.wowhead_id ? `https://www.wowhead.com/fr/npc=${pet.wowhead_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(pet.name)}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
                 <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-blue-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/5">
                     P
                 </div>

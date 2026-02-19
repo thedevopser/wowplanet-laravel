@@ -6,12 +6,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
  * @property string $name_fr
- * @property string|null $source
- * @property int|null $creature_id
+ * @property string $type
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -19,14 +19,15 @@ use Illuminate\Database\Eloquent\Model;
  * @method static int truncate()
  * @method static static updateOrCreate(array<string, mixed> $attributes, array<string, mixed> $values = [])
  * @method static static create(array<string, mixed> $attributes = [])
+ * @method static static|null find(mixed $id)
  * @method static \Illuminate\Database\Eloquent\Collection<int, static> all(array<mixed>|string $columns = ['*'])
  */
-class WowPet extends Model
+class WowProfession extends Model
 {
-    /** @use HasFactory<\Database\Factories\WowPetFactory> */
+    /** @use HasFactory<\Database\Factories\WowProfessionFactory> */
     use HasFactory;
 
-    protected $table = 'wow_pets';
+    protected $table = 'wow_professions';
 
     protected $primaryKey = 'id';
 
@@ -35,15 +36,25 @@ class WowPet extends Model
     protected $fillable = [
         'id',
         'name_fr',
-        'source',
-        'creature_id',
+        'type',
         'is_active',
     ];
 
+    /**
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * @return HasMany<WowRecipe, $this>
+     */
+    public function recipes(): HasMany
+    {
+        return $this->hasMany(WowRecipe::class, 'profession_id');
     }
 }

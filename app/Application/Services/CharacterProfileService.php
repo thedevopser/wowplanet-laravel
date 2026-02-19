@@ -9,11 +9,35 @@ use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\WowAchievement;
 use App\Models\WowMount;
 use App\Models\WowPet;
+use App\Models\WowProfession;
 use App\Models\WowQuest;
+use App\Models\WowRecipe;
 use Illuminate\Support\Collection;
 
 class CharacterProfileService
 {
+    /**
+     * Fallback French names for professions (Profile API returns English regardless of locale).
+     *
+     * @var array<int, string>
+     */
+    private const PROFESSION_NAMES_FR = [
+        164 => 'Forge',
+        165 => 'Travail du cuir',
+        171 => 'Alchimie',
+        182 => 'Herboristerie',
+        185 => 'Cuisine',
+        186 => 'Minage',
+        197 => 'Couture',
+        202 => 'Ingénierie',
+        333 => 'Enchantement',
+        356 => 'Pêche',
+        393 => 'Dépeçage',
+        755 => 'Joaillerie',
+        773 => 'Calligraphie',
+        794 => 'Archéologie',
+    ];
+
     public function __construct(
         private readonly BlizzardApiClient $blizzardApiClient,
     ) {
@@ -54,6 +78,9 @@ class CharacterProfileService
         $petsResponse = $this->blizzardApiClient->get(
             sprintf('profile/wow/character/%s/%s/collections/pets', $realm, $name),
         );
+        $professionsResponse = $this->blizzardApiClient->get(
+            sprintf('profile/wow/character/%s/%s/professions', $realm, $name),
+        );
 
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
@@ -89,6 +116,7 @@ class CharacterProfileService
 
         $mounts = $this->processCollection(WowMount::all(), $characterMountIds);
         $pets = $this->processCollection(WowPet::all(), $characterPetIds);
+        $professions = $this->aggregateProfessionProgress($professionsResponse);
 
         $classIconUrl = '';
         /** @var list<array{key: string, value: string}> $classAssets */
@@ -129,6 +157,7 @@ class CharacterProfileService
             petsCount: count($characterPetIds),
             mounts: $mounts,
             pets: $pets,
+            professions: $professions,
         );
     }
 
@@ -249,20 +278,125 @@ class CharacterProfileService
     /**
      * @param Collection<int, WowMount|WowPet> $allItems
      * @param list<int> $characterIds
-     * @return list<array{id: int, name: string, is_completed: bool, source: string|null}>
+     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, wowhead_id: int|null}>
      */
     private function processCollection(Collection $allItems, array $characterIds): array
     {
         $result = [];
         foreach ($allItems as $allItem) {
+            $wowheadId = $allItem instanceof WowMount
+                ? $allItem->source_spell_id
+                : $allItem->creature_id;
+
             $result[] = [
                 'id' => $allItem->id,
                 'name' => $allItem->name_fr,
                 'is_completed' => in_array($allItem->id, $characterIds),
                 'source' => $allItem->source ?? null,
+                'wowhead_id' => $wowheadId,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Aggregate profession progress: compare character's known recipes with all recipes in DB.
+     *
+     * @param array<string, mixed> $professionsResponse
+     * @return list<array<string, mixed>>
+     */
+    private function aggregateProfessionProgress(array $professionsResponse): array
+    {
+        $results = [];
+
+        /** @var list<array{profession: array{id: int, name: string}, tiers?: list<array{tier: array{id: int, name: string}, known_recipes?: list<array{id: int, name: string}>}>}> $primaries */
+        $primaries = $professionsResponse['primaries'] ?? [];
+        /** @var list<array{profession: array{id: int, name: string}, tiers?: list<array{tier: array{id: int, name: string}, known_recipes?: list<array{id: int, name: string}>}>}> $secondaries */
+        $secondaries = $professionsResponse['secondaries'] ?? [];
+
+        $allCharProfessions = array_merge($primaries, $secondaries);
+
+        foreach ($allCharProfessions as $allCharProfession) {
+            $professionId = $allCharProfession['profession']['id'];
+
+            // Collect all known recipe IDs for this profession
+            $knownRecipeIds = [];
+            foreach ($allCharProfession['tiers'] ?? [] as $tier) {
+                foreach ($tier['known_recipes'] ?? [] as $recipe) {
+                    $knownRecipeIds[] = $recipe['id'];
+                }
+            }
+
+            // Get all recipes for this profession from DB
+            /** @var Collection<int, WowRecipe> $allRecipes */
+            $allRecipes = WowRecipe::query()
+                ->where('profession_id', $professionId)
+                ->where('is_active', true)
+                ->get();
+
+            $recipesByExpansion = $allRecipes->groupBy('expansion_id');
+            $expansionProgress = [];
+
+            for ($exp = 0; $exp <= 11; $exp++) {
+                /** @var Collection<int, WowRecipe> $expansionRecipes */
+                $expansionRecipes = $recipesByExpansion->get($exp, new Collection());
+                /** @var Collection<string, Collection<int, WowRecipe>> $recipesByCategory */
+                $recipesByCategory = $expansionRecipes->groupBy('category_name');
+
+                $categoryProgress = [];
+                foreach ($recipesByCategory as $catName => $catRecipes) {
+                    if (empty($catName)) {
+                        continue;
+                    }
+
+                    $items = [];
+                    $completed = 0;
+                    foreach ($catRecipes as $catRecipe) {
+                        $isKnown = in_array($catRecipe->id, $knownRecipeIds);
+                        $items[] = [
+                            'id' => $catRecipe->id,
+                            'name' => $catRecipe->name_fr,
+                            'is_completed' => $isKnown,
+                            'wowhead_spell_id' => $catRecipe->wowhead_spell_id,
+                        ];
+                        if ($isKnown) {
+                            $completed++;
+                        }
+                    }
+
+                    $categoryProgress[] = [
+                        'name' => $catName,
+                        'total' => count($items),
+                        'completed' => $completed,
+                        'items' => $items,
+                    ];
+                }
+
+                $total = $expansionRecipes->count();
+                $completedCount = $expansionRecipes->whereIn('id', $knownRecipeIds)->count();
+
+                $expansionProgress[$exp] = [
+                    'total' => $total,
+                    'completed' => $completedCount,
+                    'categories' => $categoryProgress,
+                ];
+            }
+
+            $profession = WowProfession::find($professionId);
+
+            $results[] = [
+                'profession_id' => $professionId,
+                'profession_name' => $profession !== null
+                    ? $profession->name_fr
+                    : (self::PROFESSION_NAMES_FR[$professionId] ?? $allCharProfession['profession']['name']),
+                'type' => $profession !== null
+                    ? $profession->type
+                    : (in_array($professionId, [185, 356, 794], true) ? 'secondary' : 'primary'),
+                'expansions' => $expansionProgress,
+            ];
+        }
+
+        return $results;
     }
 }

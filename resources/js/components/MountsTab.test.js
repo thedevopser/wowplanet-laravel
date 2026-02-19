@@ -5,9 +5,9 @@ import MountsTab from './MountsTab.vue';
 const character = {
     mountsCount: 3,
     mounts: [
-        { id: 1, name: 'Loup de guerre', is_completed: true },
-        { id: 2, name: 'Destrier noir', is_completed: false },
-        { id: 3, name: 'Aigle de guerre', is_completed: true },
+        { id: 1, name: 'Loup de guerre', is_completed: true, wowhead_id: 1001 },
+        { id: 2, name: 'Destrier noir', is_completed: false, wowhead_id: 1002 },
+        { id: 3, name: 'Aigle de guerre', is_completed: true, wowhead_id: 1003 },
     ],
 };
 
@@ -54,7 +54,7 @@ describe('MountsTab', () => {
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         expect(links.length).toBe(3);
-        expect(links[0].attributes('href')).toContain('/mount=');
+        expect(links[0].attributes('href')).toContain('/spell=');
     });
 
     it('handles empty mounts array', () => {

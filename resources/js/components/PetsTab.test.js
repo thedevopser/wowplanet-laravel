@@ -5,9 +5,9 @@ import PetsTab from './PetsTab.vue';
 const character = {
     petsCount: 3,
     pets: [
-        { id: 1, name: 'Tigre spectral', is_completed: true },
-        { id: 2, name: 'Bébé murloc', is_completed: false },
-        { id: 3, name: 'Arcaniste', is_completed: true },
+        { id: 1, name: 'Tigre spectral', is_completed: true, wowhead_id: 2001 },
+        { id: 2, name: 'Bébé murloc', is_completed: false, wowhead_id: 2002 },
+        { id: 3, name: 'Arcaniste', is_completed: true, wowhead_id: 2003 },
     ],
 };
 
@@ -54,7 +54,7 @@ describe('PetsTab', () => {
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         expect(links.length).toBe(3);
-        expect(links[0].attributes('href')).toContain('/pet=');
+        expect(links[0].attributes('href')).toContain('/npc=');
     });
 
     it('handles empty pets array', () => {

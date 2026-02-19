@@ -9,14 +9,16 @@ use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
 use App\Models\WowMount;
 use App\Models\WowPet;
+use App\Models\WowProfession;
 use App\Models\WowQuest;
+use App\Models\WowRecipe;
 use Illuminate\Console\Command;
 
 class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all}';
 
-    protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets)';
+    protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets, professions)';
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
@@ -64,6 +66,12 @@ class WowDataImportCommand extends Command
             $this->newLine();
         }
 
+        if ($type === 'all' || $type === 'professions') {
+            $this->info("Importing Professions and Recipes...");
+            $blizzardBatchImporter->importProfessions();
+            $this->newLine();
+        }
+
         $this->info("Import Complete!");
         $this->displayStats();
     }
@@ -78,6 +86,8 @@ class WowDataImportCommand extends Command
                 ['Achievements', WowAchievement::count()],
                 ['Mounts', WowMount::count()],
                 ['Pets', WowPet::count()],
+                ['Professions', WowProfession::count()],
+                ['Recipes', WowRecipe::count()],
             ]
         );
     }
