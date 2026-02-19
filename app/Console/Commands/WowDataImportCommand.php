@@ -72,6 +72,18 @@ class WowDataImportCommand extends Command
             $this->newLine();
         }
 
+        if ($type === 'icons' || $type === 'mount-icons') {
+            $this->info("Fetching Mount Icons...");
+            $blizzardBatchImporter->importMountIcons();
+            $this->newLine();
+        }
+
+        if ($type === 'icons' || $type === 'pet-icons') {
+            $this->info("Fetching Pet Icons...");
+            $blizzardBatchImporter->importPetIcons();
+            $this->newLine();
+        }
+
         $this->info("Import Complete!");
         $this->displayStats();
     }

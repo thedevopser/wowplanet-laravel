@@ -38,8 +38,15 @@
                 </div>
             </div>
 
+            <SearchFilter
+                v-model:search="search"
+                v-model:hideCompleted="hideCompleted"
+                placeholder="Rechercher une quête..."
+                hideLabel="Masquer complétées"
+            />
+
             <!-- Zones Drill-down -->
-            <section v-if="currentCollection.quests.zones?.length">
+            <section v-if="filteredZones.length">
                 <div class="flex justify-between items-center mb-4 sm:mb-6">
                     <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
                         Décomposition par zone
@@ -49,7 +56,7 @@
                         <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                             <span class="text-xs text-slate-300">&larr;</span>
                         </button>
-                        <span class="text-[10px] font-mono text-slate-500">{{ page }} / {{ totalPages }}</span>
+                        <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
                         <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                             <span class="text-xs text-slate-300">&rarr;</span>
                         </button>
@@ -79,6 +86,9 @@
                     </div>
                 </div>
             </section>
+            <div v-else-if="search || hideCompleted" class="text-center py-8 text-slate-500 text-sm">
+                Aucun résultat trouvé.
+            </div>
         </div>
     </div>
 </template>
@@ -87,6 +97,7 @@
 import { ref, computed, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import ExpansionSelector from './ExpansionSelector.vue';
+import SearchFilter from './SearchFilter.vue';
 
 const store = useCharacterStore();
 
@@ -94,6 +105,8 @@ const activeExpansion = ref(10);
 const expandedZone = ref(null);
 const page = ref(1);
 const itemsPerPage = 8;
+const search = ref('');
+const hideCompleted = ref(false);
 
 const currentCollection = computed(() => store.character?.collections?.[activeExpansion.value] || null);
 
@@ -109,12 +122,28 @@ const sortedZones = computed(() => {
     return [...zones].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 });
 
-const paginatedZones = computed(() => {
-    const start = (page.value - 1) * itemsPerPage;
-    return sortedZones.value.slice(start, start + itemsPerPage);
+const filteredZones = computed(() => {
+    if (!search.value && !hideCompleted.value) return sortedZones.value;
+
+    const q = search.value.toLowerCase();
+    return sortedZones.value.map(zone => {
+        let items = zone.items;
+        if (search.value) {
+            items = items.filter(i => i.name.toLowerCase().includes(q));
+        }
+        if (hideCompleted.value) {
+            items = items.filter(i => !i.is_completed);
+        }
+        return { ...zone, items, total: items.length, completed: items.filter(i => i.is_completed).length };
+    }).filter(zone => zone.items.length > 0);
 });
 
-const totalPages = computed(() => Math.ceil(sortedZones.value.length / itemsPerPage));
+const paginatedZones = computed(() => {
+    const start = (page.value - 1) * itemsPerPage;
+    return filteredZones.value.slice(start, start + itemsPerPage);
+});
+
+const totalPages = computed(() => Math.ceil(filteredZones.value.length / itemsPerPage));
 
 const toggleZone = (zone) => {
     expandedZone.value = expandedZone.value === zone.name ? null : zone.name;
@@ -123,6 +152,11 @@ const toggleZone = (zone) => {
 const sortedItems = (items) => [...items].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
 watch(activeExpansion, () => {
+    page.value = 1;
+    expandedZone.value = null;
+});
+
+watch([search, hideCompleted], () => {
     page.value = 1;
     expandedZone.value = null;
 });

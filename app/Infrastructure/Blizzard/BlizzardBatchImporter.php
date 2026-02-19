@@ -300,6 +300,109 @@ class BlizzardBatchImporter
         $this->info("Pet import complete.");
     }
 
+    private const ICON_REQUEST_DELAY_MS = 300;
+
+    /**
+     * Fetch and store icon URLs for all mounts without an icon_url.
+     *
+     * Strategy: GET /data/wow/mount/{mountId} to get creature_displays[0].id,
+     * then GET /data/wow/media/creature-display/{displayId} to get the image URL.
+     */
+    public function importMountIcons(): void
+    {
+        $this->info('Fetching mount icons...');
+
+        /** @var \Illuminate\Database\Eloquent\Collection<int, WowMount> $mounts */
+        $mounts = WowMount::query()
+            ->whereNull('icon_url')
+            ->get();
+
+        $this->info(sprintf('  %d mounts need icons.', $mounts->count()));
+        $count = 0;
+        $skipped = 0;
+
+        foreach ($mounts as $mount) {
+            \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
+
+            // Step 1: Get mount detail to find creature display ID
+            $detail = $this->fetchWithRetry('data/wow/mount/' . $mount->id);
+            if (!$detail) {
+                $skipped++;
+                continue;
+            }
+
+            /** @var list<array{id: int}> $displays */
+            $displays = $detail['creature_displays'] ?? [];
+            $displayId = $displays[0]['id'] ?? null;
+            if ($displayId === null) {
+                $skipped++;
+                continue;
+            }
+
+            // Step 2: Get creature display media
+            \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
+            $media = $this->fetchWithRetry('data/wow/media/creature-display/' . $displayId);
+            if (!$media) {
+                $skipped++;
+                continue;
+            }
+
+            /** @var list<array{key: string, value: string}> $assets */
+            $assets = $media['assets'] ?? [];
+            $iconUrl = $assets[0]['value'] ?? null;
+            if ($iconUrl) {
+                $mount->update(['icon_url' => $iconUrl]);
+                $count++;
+            }
+
+            if ($count % 100 === 0 && $count > 0) {
+                $this->info(sprintf('  Icons fetched: %d / skipped: %d...', $count, $skipped));
+            }
+        }
+
+        $this->info(sprintf('Mount icon import complete: %d icons, %d skipped.', $count, $skipped));
+    }
+
+    /**
+     * Fetch and store icon URLs for all pets that don't have an icon_url.
+     * Uses: GET /data/wow/media/pet/{petSpeciesId} with namespace static-{region}
+     */
+    public function importPetIcons(): void
+    {
+        $this->info('Fetching pet icons...');
+
+        /** @var \Illuminate\Database\Eloquent\Collection<int, WowPet> $pets */
+        $pets = WowPet::query()
+            ->whereNull('icon_url')
+            ->get();
+
+        $this->info(sprintf('  %d pets need icons.', $pets->count()));
+        $count = 0;
+
+        foreach ($pets as $pet) {
+            \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
+
+            $media = $this->fetchWithRetry('data/wow/media/pet/' . $pet->id);
+            if (!$media) {
+                continue;
+            }
+
+            /** @var list<array{key: string, value: string}> $assets */
+            $assets = $media['assets'] ?? [];
+            $iconUrl = $assets[0]['value'] ?? null;
+            if ($iconUrl) {
+                $pet->update(['icon_url' => $iconUrl]);
+                $count++;
+            }
+
+            if ($count % 100 === 0 && $count > 0) {
+                $this->info(sprintf('  Icons fetched: %d...', $count));
+            }
+        }
+
+        $this->info(sprintf('Pet icon import complete: %d icons.', $count));
+    }
+
     /**
      * Tag mirror quest pairs (same name+zone, no faction) by checking API reputation rewards.
      *

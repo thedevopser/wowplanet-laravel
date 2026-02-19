@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $name_fr
  * @property string|null $source
  * @property int|null $creature_id
+ * @property string|null $icon_url
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -37,6 +38,7 @@ class WowPet extends Model
         'name_fr',
         'source',
         'creature_id',
+        'icon_url',
         'is_active',
     ];
 

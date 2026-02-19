@@ -26,6 +26,7 @@ readonly class CharacterProfileDTO
         public array $collections,
         public int $mountsCount,
         public int $petsCount,
+        public int $achievementPoints = 0,
         public array $mounts = [],
         public array $pets = [],
         public array $professions = [],

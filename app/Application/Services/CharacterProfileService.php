@@ -89,6 +89,9 @@ class CharacterProfileService
         /** @var list<array{id: int}> $achievementsList */
         $achievementsList = $achievementsResponse['achievements'] ?? [];
         $completedAchievementIds = array_column($achievementsList, 'id');
+        /** @var int|null $rawPoints */
+        $rawPoints = $achievementsResponse['total_points'] ?? null;
+        $achievementPoints = is_int($rawPoints) ? $rawPoints : 0;
 
         /** @var list<array{mount: array{id: int}}> $mountsList */
         $mountsList = $mountsResponse['mounts'] ?? [];
@@ -155,6 +158,7 @@ class CharacterProfileService
             collections: $collections,
             mountsCount: count($characterMountIds),
             petsCount: count($characterPetIds),
+            achievementPoints: $achievementPoints,
             mounts: $mounts,
             pets: $pets,
             professions: $professions,
@@ -294,6 +298,7 @@ class CharacterProfileService
                 'is_completed' => in_array($allItem->id, $characterIds),
                 'source' => $allItem->source ?? null,
                 'wowhead_id' => $wowheadId,
+                'icon_url' => $allItem->icon_url ?? null,
             ];
         }
 

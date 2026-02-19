@@ -17,6 +17,13 @@
             </div>
         </div>
 
+        <SearchFilter
+            v-model:search="search"
+            v-model:hideCompleted="hideCompleted"
+            placeholder="Rechercher une mascotte..."
+            hideLabel="Masquer obtenues"
+        />
+
         <div class="flex justify-between items-center">
             <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
                 Détail des Mascottes
@@ -26,15 +33,20 @@
                 <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                     <span class="text-xs text-slate-300">&larr;</span>
                 </button>
-                <span class="text-[10px] font-mono text-slate-500">{{ page }} / {{ totalPages }}</span>
+                <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
                 <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                     <span class="text-xs text-slate-300">&rarr;</span>
                 </button>
             </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+        <div v-if="filteredPets.length === 0" class="text-center py-8 text-slate-500 text-sm">
+            Aucun résultat trouvé.
+        </div>
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <a v-for="pet in paginatedPets" :key="pet.id" :href="pet.wowhead_id ? `https://www.wowhead.com/fr/npc=${pet.wowhead_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(pet.name)}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
-                <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-blue-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/5">
+                <img v-if="pet.icon_url" :src="pet.icon_url" :alt="pet.name" class="w-10 h-10 rounded-lg border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/5 object-cover" loading="lazy" />
+                <div v-else class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-blue-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-blue-500/5">
                     P
                 </div>
                 <div class="flex-1 min-w-0">
@@ -50,7 +62,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import SearchFilter from './SearchFilter.vue';
 
 const props = defineProps({
     character: { type: Object, required: true },
@@ -58,16 +71,32 @@ const props = defineProps({
 
 const page = ref(1);
 const itemsPerPage = 24;
+const search = ref('');
+const hideCompleted = ref(false);
 
 const sortedPets = computed(() => {
     const pets = props.character.pets || [];
     return [...pets].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 });
 
-const paginatedPets = computed(() => {
-    const start = (page.value - 1) * itemsPerPage;
-    return sortedPets.value.slice(start, start + itemsPerPage);
+const filteredPets = computed(() => {
+    let result = sortedPets.value;
+    if (search.value) {
+        const q = search.value.toLowerCase();
+        result = result.filter(p => p.name.toLowerCase().includes(q));
+    }
+    if (hideCompleted.value) {
+        result = result.filter(p => !p.is_completed);
+    }
+    return result;
 });
 
-const totalPages = computed(() => Math.ceil(sortedPets.value.length / itemsPerPage));
+const paginatedPets = computed(() => {
+    const start = (page.value - 1) * itemsPerPage;
+    return filteredPets.value.slice(start, start + itemsPerPage);
+});
+
+const totalPages = computed(() => Math.ceil(filteredPets.value.length / itemsPerPage));
+
+watch([search, hideCompleted], () => { page.value = 1; });
 </script>

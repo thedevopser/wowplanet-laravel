@@ -38,8 +38,15 @@
                 </div>
             </div>
 
+            <SearchFilter
+                v-model:search="search"
+                v-model:hideCompleted="hideCompleted"
+                placeholder="Rechercher un haut-fait..."
+                hideLabel="Masquer complétés"
+            />
+
             <!-- Categories Drill-down -->
-            <section v-if="currentCollection.achievements.categories?.length">
+            <section v-if="filteredCategories.length">
                 <div class="flex justify-between items-center mb-4 sm:mb-6">
                     <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
                         Catégories de hauts-faits
@@ -49,7 +56,7 @@
                         <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                             <span class="text-xs text-slate-300">&larr;</span>
                         </button>
-                        <span class="text-[10px] font-mono text-slate-500">{{ page }} / {{ totalPages }}</span>
+                        <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
                         <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
                             <span class="text-xs text-slate-300">&rarr;</span>
                         </button>
@@ -79,6 +86,9 @@
                     </div>
                 </div>
             </section>
+            <div v-else-if="search || hideCompleted" class="text-center py-8 text-slate-500 text-sm">
+                Aucun résultat trouvé.
+            </div>
         </div>
     </div>
 </template>
@@ -87,6 +97,7 @@
 import { ref, computed, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import ExpansionSelector from './ExpansionSelector.vue';
+import SearchFilter from './SearchFilter.vue';
 
 const store = useCharacterStore();
 
@@ -94,6 +105,8 @@ const activeExpansion = ref(10);
 const expandedCategory = ref(null);
 const page = ref(1);
 const itemsPerPage = 8;
+const search = ref('');
+const hideCompleted = ref(false);
 
 const currentCollection = computed(() => store.character?.collections?.[activeExpansion.value] || null);
 
@@ -109,12 +122,28 @@ const sortedCategories = computed(() => {
     return [...categories].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 });
 
-const paginatedCategories = computed(() => {
-    const start = (page.value - 1) * itemsPerPage;
-    return sortedCategories.value.slice(start, start + itemsPerPage);
+const filteredCategories = computed(() => {
+    if (!search.value && !hideCompleted.value) return sortedCategories.value;
+
+    const q = search.value.toLowerCase();
+    return sortedCategories.value.map(cat => {
+        let items = cat.items;
+        if (search.value) {
+            items = items.filter(i => i.name.toLowerCase().includes(q));
+        }
+        if (hideCompleted.value) {
+            items = items.filter(i => !i.is_completed);
+        }
+        return { ...cat, items, total: items.length, completed: items.filter(i => i.is_completed).length };
+    }).filter(cat => cat.items.length > 0);
 });
 
-const totalPages = computed(() => Math.ceil(sortedCategories.value.length / itemsPerPage));
+const paginatedCategories = computed(() => {
+    const start = (page.value - 1) * itemsPerPage;
+    return filteredCategories.value.slice(start, start + itemsPerPage);
+});
+
+const totalPages = computed(() => Math.ceil(filteredCategories.value.length / itemsPerPage));
 
 const toggleCategory = (cat) => {
     expandedCategory.value = expandedCategory.value === cat.name ? null : cat.name;
@@ -123,6 +152,11 @@ const toggleCategory = (cat) => {
 const sortedItems = (items) => [...items].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
 watch(activeExpansion, () => {
+    page.value = 1;
+    expandedCategory.value = null;
+});
+
+watch([search, hideCompleted], () => {
     page.value = 1;
     expandedCategory.value = null;
 });
