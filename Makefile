@@ -62,6 +62,14 @@ quality: lint static refactor test test-js ## Run all quality checks
 HARBOR_REGISTRY = harbor.wowplanet.fr
 IMAGE_NAME = wowplanet/app
 
+# Portainer auto-redeploy (set these in .env.deploy or environment)
+PORTAINER_URL ?= https://portainer.wowplanet.fr
+PORTAINER_API_KEY ?=
+PORTAINER_STACK_ID ?=
+PORTAINER_ENDPOINT_ID ?= 1
+
+-include .env.deploy
+
 build-prod: ## Build production Docker image
 	docker build --target prod \
 	             -t $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest .
@@ -69,7 +77,24 @@ build-prod: ## Build production Docker image
 push: ## Push production image to Harbor
 	docker push $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest
 
-deploy: build-prod push ## Build + push to Harbor
+redeploy: ## Trigger Portainer stack redeploy (pull new image)
+	@if [ -z "$(PORTAINER_API_KEY)" ]; then echo "ERROR: PORTAINER_API_KEY not set. Create .env.deploy or export it."; exit 1; fi
+	@if [ -z "$(PORTAINER_STACK_ID)" ]; then echo "ERROR: PORTAINER_STACK_ID not set."; exit 1; fi
+	@echo "==> Fetching current stack config from Portainer..."
+	@STACK_FILE=$$(curl -sf -H "X-API-Key: $(PORTAINER_API_KEY)" \
+		"$(PORTAINER_URL)/api/stacks/$(PORTAINER_STACK_ID)/file" | jq -r '.StackFileContent') && \
+	ENV=$$(curl -sf -H "X-API-Key: $(PORTAINER_API_KEY)" \
+		"$(PORTAINER_URL)/api/stacks/$(PORTAINER_STACK_ID)" | jq '.Env') && \
+	echo "==> Redeploying stack with image pull..." && \
+	curl -sf -X PUT \
+		"$(PORTAINER_URL)/api/stacks/$(PORTAINER_STACK_ID)?endpointId=$(PORTAINER_ENDPOINT_ID)" \
+		-H "X-API-Key: $(PORTAINER_API_KEY)" \
+		-H "Content-Type: application/json" \
+		-d "{\"stackFileContent\": $$(echo "$$STACK_FILE" | jq -Rs .), \"env\": $$ENV, \"pullImage\": true, \"prune\": true}" > /dev/null && \
+	echo "==> Stack redeployed successfully!" || \
+	(echo "ERROR: Redeploy failed. Check Portainer URL/credentials."; exit 1)
+
+deploy: build-prod push redeploy ## Build, push, and redeploy via Portainer
 
 prod-up: ## Start production stack
 	docker compose -f docker-compose.prod.yml up -d
