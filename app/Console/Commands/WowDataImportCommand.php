@@ -67,8 +67,13 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'all' || $type === 'professions') {
-            $this->info("Importing Professions and Recipes...");
-            $blizzardBatchImporter->importProfessions();
+            $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
+            $this->info(sprintf(
+                'Importing Professions and Recipes (faction-specific: %d)...',
+                count($recipeFactionMap),
+            ));
+            $blizzardBatchImporter->importProfessions($recipeFactionMap);
+            $blizzardBatchImporter->tagMirrorRecipeFactions();
             $this->newLine();
         }
 

@@ -810,6 +810,56 @@ class LuaAddonParser
     }
 
     /**
+     * Parse SkillLineAbility CSV for recipe_id → faction from RaceMask bitmask.
+     *
+     * Same bitmask values as FiltRaces in quest_v2_cli_task.csv:
+     * - '6130900294268439629'  → Alliance races only
+     * - '-6184943489809468494' → Horde races only
+     *
+     * @return array<int, string> [recipe_id => 'Alliance'|'Horde']
+     */
+    public function getRecipeFactionMap(): array
+    {
+        $csvPath = storage_path('app/blizzard/skill_line_ability.csv');
+        if (!File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $raceMaskIdx = (int) array_search('RaceMask', $headers, true);
+
+        $allianceBitmask = '6130900294268439629';
+        $hordeBitmask = '-6184943489809468494';
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $recipeId = (int) $row[$idIdx];
+            $raceMask = trim((string) $row[$raceMaskIdx]);
+
+            if ($raceMask === $allianceBitmask) {
+                $map[$recipeId] = 'Alliance';
+            } elseif ($raceMask === $hordeBitmask) {
+                $map[$recipeId] = 'Horde';
+            }
+        }
+
+        fclose($handle);
+
+        return $map;
+    }
+
+    /**
      * Build area_id → faction map from AreaTable FactionGroupMask.
      *
      * FactionGroupMask values:

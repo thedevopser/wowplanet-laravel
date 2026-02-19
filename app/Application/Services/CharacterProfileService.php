@@ -6,6 +6,7 @@ namespace App\Application\Services;
 
 use App\Application\DTOs\CharacterProfileDTO;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\ExpansionTierMatcher;
 use App\Models\WowAchievement;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -119,7 +120,7 @@ class CharacterProfileService
 
         $mounts = $this->processCollection(WowMount::all(), $characterMountIds);
         $pets = $this->processCollection(WowPet::all(), $characterPetIds);
-        $professions = $this->aggregateProfessionProgress($professionsResponse);
+        $professions = $this->aggregateProfessionProgress($professionsResponse, $characterFaction);
 
         $classIconUrl = '';
         /** @var list<array{key: string, value: string}> $classAssets */
@@ -138,6 +139,8 @@ class CharacterProfileService
         $realmData = $summary['realm'] ?? [];
         /** @var array{name?: string} $raceData */
         $raceData = $summary['race'] ?? [];
+        /** @var array{name?: string} $guildData */
+        $guildData = $summary['guild'] ?? [];
 
         $summaryName = is_string($summary['name'] ?? null) ? $summary['name'] : '';
         $summaryLevel = is_int($summary['level'] ?? null) ? $summary['level'] : 0;
@@ -159,6 +162,7 @@ class CharacterProfileService
             mountsCount: count($characterMountIds),
             petsCount: count($characterPetIds),
             achievementPoints: $achievementPoints,
+            guild: (string) ($guildData['name'] ?? ''),
             mounts: $mounts,
             pets: $pets,
             professions: $professions,
@@ -311,13 +315,13 @@ class CharacterProfileService
      * @param array<string, mixed> $professionsResponse
      * @return list<array<string, mixed>>
      */
-    private function aggregateProfessionProgress(array $professionsResponse): array
+    private function aggregateProfessionProgress(array $professionsResponse, string $characterFaction): array
     {
         $results = [];
 
-        /** @var list<array{profession: array{id: int, name: string}, tiers?: list<array{tier: array{id: int, name: string}, known_recipes?: list<array{id: int, name: string}>}>}> $primaries */
+        /** @var list<array{profession: array{id: int, name: string}, skill_points?: int, max_skill_points?: int, tiers?: list<array{tier: array{id: int, name: string}, skill_points?: int, max_skill_points?: int, known_recipes?: list<array{id: int, name: string}>}>}> $primaries */
         $primaries = $professionsResponse['primaries'] ?? [];
-        /** @var list<array{profession: array{id: int, name: string}, tiers?: list<array{tier: array{id: int, name: string}, known_recipes?: list<array{id: int, name: string}>}>}> $secondaries */
+        /** @var list<array{profession: array{id: int, name: string}, skill_points?: int, max_skill_points?: int, tiers?: list<array{tier: array{id: int, name: string}, skill_points?: int, max_skill_points?: int, known_recipes?: list<array{id: int, name: string}>}>}> $secondaries */
         $secondaries = $professionsResponse['secondaries'] ?? [];
 
         $allCharProfessions = array_merge($primaries, $secondaries);
@@ -325,20 +329,38 @@ class CharacterProfileService
         foreach ($allCharProfessions as $allCharProfession) {
             $professionId = $allCharProfession['profession']['id'];
 
-            // Collect all known recipe IDs for this profession
+            // Collect all known recipe IDs and skill points per expansion
             $knownRecipeIds = [];
+            /** @var array<int, array{skill_points: int, max_skill_points: int}> $skillPointsByExpansion */
+            $skillPointsByExpansion = [];
+
             foreach ($allCharProfession['tiers'] ?? [] as $tier) {
                 foreach ($tier['known_recipes'] ?? [] as $recipe) {
                     $knownRecipeIds[] = $recipe['id'];
                 }
+
+                // Map tier name to expansion ID for skill points
+                $tierName = $tier['tier']['name'];
+                $tierExpansionId = ExpansionTierMatcher::match($tierName) ?? 0;
+                $skillPointsByExpansion[$tierExpansionId] = [
+                    'skill_points' => $tier['skill_points'] ?? 0,
+                    'max_skill_points' => $tier['max_skill_points'] ?? 0,
+                ];
             }
 
-            // Get all recipes for this profession from DB
+            // Get all recipes for this profession from DB, filtered by faction
             /** @var Collection<int, WowRecipe> $allRecipes */
             $allRecipes = WowRecipe::query()
                 ->where('profession_id', $professionId)
                 ->where('is_active', true)
+                ->where(fn (\Illuminate\Contracts\Database\Query\Builder $builder) => $builder->whereNull('faction')->orWhere('faction', $characterFaction))
                 ->get();
+
+            $profession = WowProfession::find($professionId);
+
+            // DB-stored max skill levels per expansion (from game data API import)
+            /** @var array<int, int> $dbMaxSkillLevels */
+            $dbMaxSkillLevels = $profession->max_skill_levels ?? [];
 
             $recipesByExpansion = $allRecipes->groupBy('expansion_id');
             $expansionProgress = [];
@@ -370,6 +392,10 @@ class CharacterProfileService
                         }
                     }
 
+                    // Deduplicate ranked recipes (e.g., BfA gathering: 3 ranks with same name)
+                    $items = $this->deduplicateRankedRecipes($items);
+                    $completed = count(array_filter($items, fn (array $item) => $item['is_completed']));
+
                     $categoryProgress[] = [
                         'name' => $catName,
                         'total' => count($items),
@@ -378,17 +404,30 @@ class CharacterProfileService
                     ];
                 }
 
-                $total = $expansionRecipes->count();
-                $completedCount = $expansionRecipes->whereIn('id', $knownRecipeIds)->count();
+                $total = array_sum(array_column($categoryProgress, 'total'));
+                $completedCount = array_sum(array_column($categoryProgress, 'completed'));
+
+                // Determine if the character has learned this tier
+                $hasTier = array_key_exists($exp, $skillPointsByExpansion);
+                // Tier exists in game data for this profession?
+                $tierExistsInGame = array_key_exists($exp, $dbMaxSkillLevels);
 
                 $expansionProgress[$exp] = [
                     'total' => $total,
                     'completed' => $completedCount,
                     'categories' => $categoryProgress,
+                    'has_tier' => $hasTier,
+                    'tier_exists' => $tierExistsInGame,
+                    'skill_points' => $skillPointsByExpansion[$exp]['skill_points'] ?? 0,
+                    'max_skill_points' => $hasTier
+                        ? ($skillPointsByExpansion[$exp]['max_skill_points'] ?? 0)
+                        : ($dbMaxSkillLevels[$exp] ?? 0),
                 ];
             }
 
-            $profession = WowProfession::find($professionId);
+            // Top-level skill points (used by Archaeology which has no tiers)
+            $globalSkillPoints = $allCharProfession['skill_points'] ?? 0;
+            $globalMaxSkillPoints = $allCharProfession['max_skill_points'] ?? 0;
 
             $results[] = [
                 'profession_id' => $professionId,
@@ -398,10 +437,56 @@ class CharacterProfileService
                 'type' => $profession !== null
                     ? $profession->type
                     : (in_array($professionId, [185, 356, 794], true) ? 'secondary' : 'primary'),
+                'is_archaeology' => $professionId === 794,
+                'global_skill_points' => $globalSkillPoints,
+                'global_max_skill_points' => $globalMaxSkillPoints,
                 'expansions' => $expansionProgress,
             ];
         }
 
         return $results;
+    }
+
+    /**
+     * Deduplicate ranked recipes (e.g., BfA gathering professions have Rank 1/2/3 with the same name).
+     * For each group of same-named recipes, keep only the highest rank learned,
+     * or the highest rank if none are learned.
+     *
+     * @param list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}> $items
+     * @return list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}>
+     */
+    private function deduplicateRankedRecipes(array $items): array
+    {
+        /** @var array<string, list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}>> $groups */
+        $groups = [];
+        foreach ($items as $item) {
+            $groups[$item['name']][] = $item;
+        }
+
+        $result = [];
+        foreach ($groups as $group) {
+            if (count($group) === 1) {
+                $result[] = $group[0];
+
+                continue;
+            }
+
+            // Sort by ID descending (highest rank = highest ID)
+            usort($group, fn (array $a, array $b): int => $b['id'] <=> $a['id']);
+
+            // Pick the highest completed rank, or the highest rank if none completed
+            $picked = $group[0]; // default: highest rank (not completed)
+            foreach ($group as $entry) {
+                if ($entry['is_completed']) {
+                    $picked = $entry;
+
+                    break; // highest completed rank (already sorted desc)
+                }
+            }
+
+            $result[] = $picked;
+        }
+
+        return $result;
     }
 }

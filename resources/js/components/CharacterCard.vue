@@ -8,6 +8,7 @@
             <div class="flex-1 mb-2">
                 <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight mb-2" :style="{ color: classColor }">
                     {{ character.name }}
+                    <span v-if="character.guild" class="text-lg sm:text-xl lg:text-2xl font-bold text-slate-500">&lt;{{ character.guild }}&gt;</span>
                 </h2>
                 <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-sm sm:text-base text-slate-400 font-medium">
                     <span>Niv {{ character.level }}</span>

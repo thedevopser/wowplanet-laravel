@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $name_fr
  * @property string $type
+ * @property array<int, int>|null $max_skill_levels
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -37,6 +38,7 @@ class WowProfession extends Model
         'id',
         'name_fr',
         'type',
+        'max_skill_levels',
         'is_active',
     ];
 
@@ -46,6 +48,7 @@ class WowProfession extends Model
     protected function casts(): array
     {
         return [
+            'max_skill_levels' => 'array',
             'is_active' => 'boolean',
         ];
     }

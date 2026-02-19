@@ -538,12 +538,59 @@ class BlizzardBatchImporter
     }
 
     /**
+     * Tag mirror recipe pairs where one already has a faction (from DB2) but its duplicate does not.
+     * Pairs are identified by same name_fr + profession_id + expansion_id with exactly 2 entries.
+     */
+    public function tagMirrorRecipeFactions(): void
+    {
+        $this->info('Tagging mirror recipe pairs...');
+
+        /** @var \Illuminate\Support\Collection<int, WowRecipe> $allRecipes */
+        $allRecipes = WowRecipe::query()
+            ->where('is_active', true)
+            ->get(['id', 'name_fr', 'profession_id', 'expansion_id', 'faction']);
+
+        /** @var array<string, list<array{id: int, faction: string|null}>> $groups */
+        $groups = [];
+        foreach ($allRecipes as $allRecipe) {
+            $key = $allRecipe->name_fr . '|||' . $allRecipe->profession_id . '|||' . $allRecipe->expansion_id;
+            $groups[$key][] = ['id' => $allRecipe->id, 'faction' => $allRecipe->faction];
+        }
+
+        $tagged = 0;
+        foreach ($groups as $group) {
+            if (count($group) !== 2) {
+                continue;
+            }
+
+            $a = $group[0];
+            $b = $group[1];
+
+            // If one has a faction and the other doesn't, assign opposite
+            if ($a['faction'] !== null && $b['faction'] === null) {
+                $opposite = $a['faction'] === 'Alliance' ? 'Horde' : 'Alliance';
+                WowRecipe::query()->where('id', $b['id'])->update(['faction' => $opposite]);
+                $tagged++;
+            } elseif ($b['faction'] !== null && $a['faction'] === null) {
+                $opposite = $b['faction'] === 'Alliance' ? 'Horde' : 'Alliance';
+                WowRecipe::query()->where('id', $a['id'])->update(['faction' => $opposite]);
+                $tagged++;
+            }
+        }
+
+        $this->info(sprintf('Mirror recipe tagging complete: %d tagged.', $tagged));
+    }
+
+    /**
      * Import ALL professions and their recipes from Blizzard Game Data API.
      *
      * Traversal: profession/index → profession/{id} → skill-tier/{id} → categories → recipes
-     * Expansion ID is resolved from the skill tier name using matchExpansion().
+     * Expansion ID is resolved from the skill tier name using ExpansionTierMatcher::match().
      */
-    public function importProfessions(): void
+    /**
+     * @param array<int, string> $recipeFactionMap [recipe_id => 'Alliance'|'Horde'] from DB2 RaceMask
+     */
+    public function importProfessions(array $recipeFactionMap = []): void
     {
         $this->info('Fetching profession index...');
 
@@ -562,6 +609,7 @@ class BlizzardBatchImporter
 
         $recipeSpellMap = $this->loadRecipeSpellMap();
         $this->info('  DB2 recipe spell map: ' . count($recipeSpellMap) . ' entries.');
+        $this->info('  DB2 recipe faction map: ' . count($recipeFactionMap) . ' entries.');
 
         $totalRecipes = 0;
 
@@ -577,28 +625,37 @@ class BlizzardBatchImporter
                 continue;
             }
 
+            /** @var list<array{id: int, name: string}> $skillTiers */
+            $skillTiers = $detail['skill_tiers'] ?? [];
+            $this->info(sprintf('  %s (%s): %d skill tiers', $professionName, $type, count($skillTiers)));
+
+            /** @var array<int, int> $maxSkillLevels */
+            $maxSkillLevels = [];
+
+            foreach ($skillTiers as $skillTier) {
+                $tierResult = $this->importSkillTierRecipes(
+                    $professionId,
+                    $skillTier['id'],
+                    $skillTier['name'],
+                    $recipeSpellMap,
+                    $recipeFactionMap,
+                );
+                $totalRecipes += $tierResult['count'];
+
+                if ($tierResult['max_skill_level'] > 0) {
+                    $maxSkillLevels[$tierResult['expansion_id']] = $tierResult['max_skill_level'];
+                }
+            }
+
             WowProfession::updateOrCreate(
                 ['id' => $professionId],
                 [
                     'name_fr' => $professionName,
                     'type' => $type,
+                    'max_skill_levels' => $maxSkillLevels,
                     'is_active' => true,
                 ]
             );
-
-            /** @var list<array{id: int, name: string}> $skillTiers */
-            $skillTiers = $detail['skill_tiers'] ?? [];
-            $this->info(sprintf('  %s (%s): %d skill tiers', $professionName, $type, count($skillTiers)));
-
-            foreach ($skillTiers as $skillTier) {
-                $tierRecipes = $this->importSkillTierRecipes(
-                    $professionId,
-                    $skillTier['id'],
-                    $skillTier['name'],
-                    $recipeSpellMap,
-                );
-                $totalRecipes += $tierRecipes;
-            }
         }
 
         $this->info(sprintf('Profession import complete: %d professions, %d recipes.', count($professions), $totalRecipes));
@@ -608,14 +665,16 @@ class BlizzardBatchImporter
      * Import all recipes from a single skill tier.
      *
      * @param array<int, int> $recipeSpellMap
-     * @return int Number of recipes imported
+     * @param array<int, string> $recipeFactionMap
+     * @return array{count: int, expansion_id: int, max_skill_level: int}
      */
     private function importSkillTierRecipes(
         int $professionId,
         int $skillTierId,
         string $skillTierName,
         array $recipeSpellMap,
-    ): int {
+        array $recipeFactionMap = [],
+    ): array {
         \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
         $tierDetail = $this->fetchWithRetry(
@@ -623,10 +682,13 @@ class BlizzardBatchImporter
         );
 
         if (!$tierDetail) {
-            return 0;
+            return ['count' => 0, 'expansion_id' => 0, 'max_skill_level' => 0];
         }
 
-        $expansionId = $this->matchExpansion($skillTierName) ?? 0;
+        $expansionId = ExpansionTierMatcher::match($skillTierName) ?? 0;
+        /** @var int $rawMaxSkill */
+        $rawMaxSkill = $tierDetail['maximum_skill_level'] ?? 0;
+        $maxSkillLevel = (int) $rawMaxSkill;
         $count = 0;
 
         /** @var list<array{name: string, recipes?: list<array{id: int, name: string}>}> $categories */
@@ -650,6 +712,7 @@ class BlizzardBatchImporter
                         'profession_id' => $professionId,
                         'expansion_id' => $expansionId,
                         'category_name' => $categoryName,
+                        'faction' => $recipeFactionMap[$recipe['id']] ?? null,
                         'wowhead_spell_id' => $recipeSpellMap[$recipe['id']] ?? null,
                         'is_active' => true,
                     ]
@@ -658,9 +721,9 @@ class BlizzardBatchImporter
             }
         }
 
-        $this->info(sprintf('    %s → expansion %d: %d recipes', $skillTierName, $expansionId, $count));
+        $this->info(sprintf('    %s → expansion %d: %d recipes (max skill: %d)', $skillTierName, $expansionId, $count, $maxSkillLevel));
 
-        return $count;
+        return ['count' => $count, 'expansion_id' => $expansionId, 'max_skill_level' => $maxSkillLevel];
     }
 
     // ===================== PRIVATE =====================
@@ -684,7 +747,7 @@ class BlizzardBatchImporter
         // Try to determine expansion from this category's name
         /** @var string $categoryName */
         $categoryName = $category['name'] ?? '';
-        $matched = $this->matchExpansion($categoryName);
+        $matched = ExpansionTierMatcher::match($categoryName);
         if ($matched !== null) {
             $currentExpansionId = $matched;
         }
@@ -822,52 +885,6 @@ class BlizzardBatchImporter
         return $map;
     }
 
-    /**
-     * Match a French category/zone name to an expansion ID.
-     * Most specific keywords first to avoid partial matches.
-     */
-    private function matchExpansion(string $name): ?int
-    {
-        $keywords = [
-            // Multi-word (most specific first)
-            "Royaumes de l'Est" => 0,
-            'Battle for Azeroth' => 7,
-            'Mists of Pandaria' => 4,
-            'Burning Crusade' => 1,
-            'Lich King' => 2,
-            'War Within' => 10,
-            'Kul Tir' => 7,
-            'Zandalari' => 7,
-            'Khaz Algar' => 10,
-
-            // Single-word identifiers
-            'Kalimdor' => 0,
-            'Classique' => 0,
-            'Classic' => 0,
-            'Outreterre' => 1,
-            'Norfendre' => 2,
-            'Northrend' => 2,
-            'Cataclysm' => 3,
-            'Cataclysme' => 3,
-            'Pandarie' => 4,
-            'Draenor' => 5,
-            'Warlords' => 5,
-            'Legion' => 6,
-            'Légion' => 6,
-            'Ombreterre' => 8,
-            'Shadowlands' => 8,
-            'Dragonflight' => 9,
-            'Midnight' => 11,
-        ];
-
-        foreach ($keywords as $keyword => $expansionId) {
-            if (mb_stripos($name, $keyword) !== false) {
-                return $expansionId;
-            }
-        }
-
-        return null;
-    }
 
     /**
      * @return array<string, mixed>|null
