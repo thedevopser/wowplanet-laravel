@@ -224,7 +224,7 @@ class BlizzardBatchImporter
             return;
         }
 
-        /** @var list<array{id: int, name: string}> $mounts */
+        /** @var list<array{id: int, name: string|null}> $mounts */
         $mounts = $response['mounts'] ?? [];
         $this->info("Found " . count($mounts) . " mounts.");
 
@@ -233,7 +233,7 @@ class BlizzardBatchImporter
 
         $skipped = 0;
         foreach ($mounts as $mount) {
-            $mountName = $mount['name'];
+            $mountName = $mount['name'] ?? '';
             if ($mountName === '') {
                 $skipped++;
                 continue;
@@ -268,7 +268,7 @@ class BlizzardBatchImporter
             return;
         }
 
-        /** @var list<array{id: int, name: string}> $pets */
+        /** @var list<array{id: int, name: string|null}> $pets */
         $pets = $response['pets'] ?? [];
         $this->info("Found " . count($pets) . " pets.");
 
@@ -277,7 +277,7 @@ class BlizzardBatchImporter
 
         $skipped = 0;
         foreach ($pets as $pet) {
-            $petName = $pet['name'];
+            $petName = $pet['name'] ?? '';
             if ($petName === '') {
                 $skipped++;
                 continue;
@@ -531,11 +531,11 @@ class BlizzardBatchImporter
 
         foreach ($categories as $category) {
             $categoryName = $category['name'];
-            /** @var list<array{id: int, name: string}> $recipes */
+            /** @var list<array{id: int, name: string|null}> $recipes */
             $recipes = $category['recipes'] ?? [];
 
             foreach ($recipes as $recipe) {
-                $recipeName = $recipe['name'];
+                $recipeName = $recipe['name'] ?? '';
                 if ($recipeName === '') {
                     continue;
                 }
