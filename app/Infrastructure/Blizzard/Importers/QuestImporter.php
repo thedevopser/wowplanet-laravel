@@ -8,6 +8,7 @@ use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Models\WowQuest;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Sleep;
 
 class QuestImporter
 {
@@ -132,6 +133,10 @@ class QuestImporter
         return $quests;
     }
 
+    private const BATCH_SIZE = 50;
+
+    private const BATCH_PAUSE_S = 3;
+
     /**
      * @param  array<int, string>  $reputationFactionMap
      */
@@ -147,74 +152,89 @@ class QuestImporter
             return;
         }
 
+        $questDetails = $this->fetchQuestDetailsInBatches($pairs);
+        $this->resolvePairsFromCache($pairs, $questDetails, $reputationFactionMap);
+    }
+
+    /**
+     * @param  list<array{id_a: int, id_b: int, name: string, zone: string}>  $pairs
+     * @return array<int, array<string, mixed>|null>
+     */
+    private function fetchQuestDetailsInBatches(array $pairs): array
+    {
+        $questIds = [];
+        foreach ($pairs as $pair) {
+            $questIds[$pair['id_a']] = true;
+            $questIds[$pair['id_b']] = true;
+        }
+
+        $questIds = array_keys($questIds);
+
+        $this->info(sprintf('  Fetching %d unique quest details in batches of %d...', count($questIds), self::BATCH_SIZE));
+
+        $details = [];
+        $batches = array_chunk($questIds, self::BATCH_SIZE);
+
+        foreach ($batches as $batchIndex => $batch) {
+            if ($batchIndex > 0) {
+                $this->info(sprintf('  Batch pause (%ds)...', self::BATCH_PAUSE_S));
+                Sleep::sleep(self::BATCH_PAUSE_S);
+            }
+
+            foreach ($batch as $questId) {
+                $this->delayRequest();
+                $details[$questId] = $this->fetchWithRetry('data/wow/quest/'.$questId);
+            }
+
+            $this->info(sprintf('  Batch %d/%d complete (%d quests fetched).', $batchIndex + 1, count($batches), count($batch)));
+        }
+
+        return $details;
+    }
+
+    /**
+     * @param  list<array{id_a: int, id_b: int, name: string, zone: string}>  $pairs
+     * @param  array<int, array<string, mixed>|null>  $questDetails
+     * @param  array<int, string>  $reputationFactionMap
+     */
+    private function resolvePairsFromCache(array $pairs, array $questDetails, array $reputationFactionMap): void
+    {
         $tagged = 0;
         $skipped = 0;
         $errors = 0;
 
-        foreach ($pairs as $i => $pair) {
-            $result = $this->resolvePairFactions($pair, $reputationFactionMap);
+        foreach ($pairs as $pair) {
+            $detailA = $questDetails[$pair['id_a']] ?? null;
+            $detailB = $questDetails[$pair['id_b']] ?? null;
 
-            if ($result === null) {
+            $factionFromA = ($detailA !== null) ? $this->detectFactionFromReputations($detailA, $reputationFactionMap) : null;
+            $factionFromB = ($detailB !== null) ? $this->detectFactionFromReputations($detailB, $reputationFactionMap) : null;
+
+            if ($factionFromA !== null) {
+                $factionA = $factionFromA;
+                $factionB = $factionFromA === 'Alliance' ? 'Horde' : 'Alliance';
+            } elseif ($factionFromB !== null) {
+                $factionB = $factionFromB;
+                $factionA = $factionFromB === 'Alliance' ? 'Horde' : 'Alliance';
+            } elseif ($detailA === null && $detailB === null) {
                 $errors++;
                 $this->info(sprintf('  [ERR] %s (IDs: %d, %d) — API error.', $pair['name'], $pair['id_a'], $pair['id_b']));
 
                 continue;
-            }
-
-            if ($result === false) {
+            } else {
                 $skipped++;
                 $this->info(sprintf('  [SKIP] %s (IDs: %d, %d) — no faction reputation.', $pair['name'], $pair['id_a'], $pair['id_b']));
 
                 continue;
             }
 
-            $this->info(sprintf('  [TAG] %s → %d=%s, %d=%s', $pair['name'], $pair['id_a'], $result['faction_a'], $pair['id_b'], $result['faction_b']));
-            WowQuest::query()->where('id', $pair['id_a'])->update(['faction' => $result['faction_a']]);
-            WowQuest::query()->where('id', $pair['id_b'])->update(['faction' => $result['faction_b']]);
+            $this->info(sprintf('  [TAG] %s → %d=%s, %d=%s', $pair['name'], $pair['id_a'], $factionA, $pair['id_b'], $factionB));
+            WowQuest::query()->where('id', $pair['id_a'])->update(['faction' => $factionA]);
+            WowQuest::query()->where('id', $pair['id_b'])->update(['faction' => $factionB]);
             $tagged++;
-
-            if (($i + 1) % 20 === 0) {
-                $this->info(sprintf('  Progress: %d/%d pairs.', $i + 1, count($pairs)));
-            }
         }
 
         $this->info(sprintf('Mirror tagging complete: %d tagged, %d skipped, %d errors.', $tagged, $skipped, $errors));
-    }
-
-    /**
-     * @param  array{id_a: int, id_b: int, name: string, zone: string}  $pair
-     * @param  array<int, string>  $reputationFactionMap
-     * @return array{faction_a: string, faction_b: string}|false|null null=API error, false=no faction
-     */
-    private function resolvePairFactions(array $pair, array $reputationFactionMap): array|false|null
-    {
-        $this->delayRequest();
-        $detailA = $this->fetchWithRetry('data/wow/quest/'.$pair['id_a']);
-        $factionFromA = ($detailA !== null) ? $this->detectFactionFromReputations($detailA, $reputationFactionMap) : null;
-
-        if ($factionFromA !== null) {
-            return [
-                'faction_a' => $factionFromA,
-                'faction_b' => $factionFromA === 'Alliance' ? 'Horde' : 'Alliance',
-            ];
-        }
-
-        $this->delayRequest();
-        $detailB = $this->fetchWithRetry('data/wow/quest/'.$pair['id_b']);
-        $factionFromB = ($detailB !== null) ? $this->detectFactionFromReputations($detailB, $reputationFactionMap) : null;
-
-        if ($factionFromB !== null) {
-            return [
-                'faction_a' => $factionFromB === 'Alliance' ? 'Horde' : 'Alliance',
-                'faction_b' => $factionFromB,
-            ];
-        }
-
-        if ($detailA === null && $detailB === null) {
-            return null;
-        }
-
-        return false;
     }
 
     /**

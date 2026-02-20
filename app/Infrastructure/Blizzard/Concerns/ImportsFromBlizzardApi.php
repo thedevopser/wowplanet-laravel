@@ -43,19 +43,26 @@ trait ImportsFromBlizzardApi
                 'namespace' => 'static-'.$region,
             ]);
         } catch (\Exception $exception) {
-            if ($attempt <= self::MAX_RETRIES && str_contains($exception->getMessage(), '429')) {
+            $message = $exception->getMessage();
+
+            if (str_contains($message, '404')) {
+                return null;
+            }
+
+            $isRetryable = str_contains($message, '429')
+                || str_contains($message, '500')
+                || str_contains($message, 'timed out')
+                || str_contains($message, 'cURL error');
+
+            if ($attempt <= self::MAX_RETRIES && $isRetryable) {
                 $delay = self::RATE_LIMIT_WAIT_S * $attempt;
-                $this->info(sprintf('Rate limit hit, waiting %ds (attempt %d/%d)...', $delay, $attempt, self::MAX_RETRIES));
+                $this->info(sprintf('Retryable error, waiting %ds (attempt %d/%d)...', $delay, $attempt, self::MAX_RETRIES));
                 Sleep::sleep($delay);
 
                 return $this->fetchWithRetry($endpoint, $attempt + 1);
             }
 
-            if (str_contains($exception->getMessage(), '404')) {
-                return null;
-            }
-
-            Log::warning(sprintf('API error [%s]: ', $endpoint).$exception->getMessage());
+            Log::warning(sprintf('API error [%s]: ', $endpoint).$message);
 
             return null;
         }
