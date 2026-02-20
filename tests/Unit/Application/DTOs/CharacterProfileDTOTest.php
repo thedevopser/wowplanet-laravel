@@ -11,7 +11,7 @@ use PHPUnit\Framework\TestCase;
 class CharacterProfileDTOTest extends TestCase
 {
     #[Test]
-    public function itCreatesWithAllFields(): void
+    public function it_creates_with_all_fields(): void
     {
         $characterProfileDTO = new CharacterProfileDTO(
             name: 'Thrall',
@@ -34,6 +34,8 @@ class CharacterProfileDTOTest extends TestCase
             petsCount: 80,
             mounts: [['id' => 1, 'name' => 'Loup noir', 'is_completed' => true]],
             pets: [['id' => 1, 'name' => 'Dragonnet', 'is_completed' => false]],
+            decorCount: 50,
+            decor: [['id' => 500, 'name' => 'Foyer orné', 'is_completed' => true, 'item_id' => 245000, 'icon_url' => 'https://example.com/icon.jpg']],
         );
 
         $this->assertSame('Thrall', $characterProfileDTO->name);
@@ -48,10 +50,12 @@ class CharacterProfileDTOTest extends TestCase
         $this->assertSame(80, $characterProfileDTO->petsCount);
         $this->assertCount(1, $characterProfileDTO->mounts);
         $this->assertCount(1, $characterProfileDTO->pets);
+        $this->assertSame(50, $characterProfileDTO->decorCount);
+        $this->assertCount(1, $characterProfileDTO->decor);
     }
 
     #[Test]
-    public function itIsReadonly(): void
+    public function it_is_readonly(): void
     {
         $characterProfileDTO = new CharacterProfileDTO(
             name: 'Test',
@@ -74,7 +78,7 @@ class CharacterProfileDTOTest extends TestCase
     }
 
     #[Test]
-    public function itDefaultsMountsAndPetsToEmptyArrays(): void
+    public function it_defaults_mounts_and_pets_to_empty_arrays(): void
     {
         $characterProfileDTO = new CharacterProfileDTO(
             name: 'Test',
@@ -94,5 +98,7 @@ class CharacterProfileDTOTest extends TestCase
 
         $this->assertSame([], $characterProfileDTO->mounts);
         $this->assertSame([], $characterProfileDTO->pets);
+        $this->assertSame(0, $characterProfileDTO->decorCount);
+        $this->assertSame([], $characterProfileDTO->decor);
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Blizzard;
 
 use App\Models\WowAchievement;
+use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowProfession;
@@ -401,6 +402,114 @@ class BlizzardBatchImporter
         }
 
         $this->info(sprintf('Pet icon import complete: %d icons.', $count));
+    }
+
+    public function importDecor(): void
+    {
+        $this->info('Fetching Decor Index...');
+        $response = $this->fetchWithRetry('data/wow/decor/index');
+        if (!$response) {
+            $this->info('ERROR: Could not fetch decor index.');
+
+            return;
+        }
+
+        /** @var list<array{id: int, name: string|null}> $decors */
+        $decors = $response['decor_items'] ?? [];
+        $this->info('Found ' . count($decors) . ' decor items.');
+
+        $skipped = 0;
+        $count = 0;
+        foreach ($decors as $decor) {
+            $decorName = $decor['name'] ?? '';
+            if ($decorName === '') {
+                $skipped++;
+
+                continue;
+            }
+
+            WowDecor::updateOrCreate(
+                ['id' => $decor['id']],
+                [
+                    'name_fr' => $decorName,
+                    'is_active' => true,
+                ]
+            );
+            $count++;
+        }
+
+        if ($skipped > 0) {
+            $this->info(sprintf('  Skipped %d decor items with empty names.', $skipped));
+        }
+
+        $this->info(sprintf('Decor import complete: %d items.', $count));
+    }
+
+    /**
+     * Fetch and store icon URLs and item_id for all decor items without an icon_url.
+     *
+     * Strategy: GET /data/wow/decor/{decorId} to get items.id (Blizzard item ID),
+     * then GET /data/wow/media/item/{itemId} to get the icon URL.
+     */
+    public function importDecorIcons(): void
+    {
+        $this->info('Fetching decor icons...');
+
+        /** @var \Illuminate\Database\Eloquent\Collection<int, WowDecor> $decors */
+        $decors = WowDecor::query()
+            ->whereNull('icon_url')
+            ->get();
+
+        $this->info(sprintf('  %d decor items need icons.', $decors->count()));
+        $count = 0;
+        $skipped = 0;
+
+        foreach ($decors as $decor) {
+            \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
+
+            // Step 1: Get decor detail to find item ID
+            $detail = $this->fetchWithRetry('data/wow/decor/' . $decor->id);
+            if (!$detail) {
+                $skipped++;
+
+                continue;
+            }
+
+            /** @var array{id?: int} $items */
+            $items = $detail['items'] ?? [];
+            $itemId = $items['id'] ?? null;
+            if ($itemId === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            // Store item_id for Wowhead links
+            $decor->update(['item_id' => $itemId]);
+
+            // Step 2: Get item media
+            \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
+            $media = $this->fetchWithRetry('data/wow/media/item/' . $itemId);
+            if (!$media) {
+                $skipped++;
+
+                continue;
+            }
+
+            /** @var list<array{key: string, value: string}> $assets */
+            $assets = $media['assets'] ?? [];
+            $iconUrl = $assets[0]['value'] ?? null;
+            if ($iconUrl) {
+                $decor->update(['icon_url' => $iconUrl]);
+                $count++;
+            }
+
+            if ($count % 100 === 0 && $count > 0) {
+                $this->info(sprintf('  Icons fetched: %d / skipped: %d...', $count, $skipped));
+            }
+        }
+
+        $this->info(sprintf('Decor icon import complete: %d icons, %d skipped.', $count, $skipped));
     }
 
     /**

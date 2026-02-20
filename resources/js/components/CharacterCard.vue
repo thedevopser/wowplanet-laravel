@@ -31,6 +31,10 @@
                     <div class="text-lg sm:text-xl font-black text-blue-400">{{ character.petsCount }}</div>
                 </div>
                 <div class="bg-slate-800/50 backdrop-blur px-3 sm:px-4 py-2 rounded-xl border border-white/5 text-center">
+                    <div class="text-[10px] sm:text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Décorations</div>
+                    <div class="text-lg sm:text-xl font-black text-violet-400">{{ character.decorCount }}</div>
+                </div>
+                <div class="bg-slate-800/50 backdrop-blur px-3 sm:px-4 py-2 rounded-xl border border-white/5 text-center">
                     <div class="text-[10px] sm:text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Hauts-faits</div>
                     <div class="text-lg sm:text-xl font-black text-amber-400">{{ character.achievementPoints }}</div>
                 </div>

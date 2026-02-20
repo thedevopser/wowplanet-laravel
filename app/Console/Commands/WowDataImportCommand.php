@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
+use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowProfession;
@@ -18,7 +19,7 @@ class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all}';
 
-    protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets, professions)';
+    protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets, professions, decor)';
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
@@ -89,6 +90,18 @@ class WowDataImportCommand extends Command
             $this->newLine();
         }
 
+        if ($type === 'all' || $type === 'decor') {
+            $this->info("Importing Decor...");
+            $blizzardBatchImporter->importDecor();
+            $this->newLine();
+        }
+
+        if ($type === 'icons' || $type === 'decor-icons') {
+            $this->info("Fetching Decor Icons...");
+            $blizzardBatchImporter->importDecorIcons();
+            $this->newLine();
+        }
+
         $this->info("Import Complete!");
         $this->displayStats();
     }
@@ -105,6 +118,7 @@ class WowDataImportCommand extends Command
                 ['Pets', WowPet::count()],
                 ['Professions', WowProfession::count()],
                 ['Recipes', WowRecipe::count()],
+                ['Decor', WowDecor::count()],
             ]
         );
     }

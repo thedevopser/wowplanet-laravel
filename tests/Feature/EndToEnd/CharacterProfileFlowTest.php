@@ -6,6 +6,7 @@ namespace Tests\Feature\EndToEnd;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\WowAchievement;
+use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowQuest;
@@ -18,7 +19,7 @@ class CharacterProfileFlowTest extends TestCase
     use RefreshDatabase;
 
     #[Test]
-    public function fullCharacterProfileFlow(): void
+    public function full_character_profile_flow(): void
     {
         WowQuest::factory()->create([
             'id' => 100,
@@ -43,6 +44,8 @@ class CharacterProfileFlowTest extends TestCase
         WowMount::factory()->create(['id' => 300, 'name_fr' => 'Loup noir']);
         WowMount::factory()->create(['id' => 301, 'name_fr' => 'Destrier']);
         WowPet::factory()->create(['id' => 400, 'name_fr' => 'Dragonnet']);
+        WowDecor::factory()->create(['id' => 500, 'name_fr' => 'Foyer orné']);
+        WowDecor::factory()->create(['id' => 501, 'name_fr' => 'Tapis elfique']);
 
         $mock = $this->mock(BlizzardApiClient::class);
 
@@ -63,6 +66,10 @@ class CharacterProfileFlowTest extends TestCase
 
             if (str_contains($endpoint, 'collections/pets')) {
                 return ['pets' => [['species' => ['id' => 400]]]];
+            }
+
+            if (str_contains($endpoint, 'collections/decor')) {
+                return ['decor_collected' => [['decor' => ['id' => 500]]]];
             }
 
             if (str_contains($endpoint, 'character-media')) {
@@ -106,6 +113,11 @@ class CharacterProfileFlowTest extends TestCase
         $this->assertSame(7, $data['classId']);
         $this->assertSame(1, $data['mountsCount']);
         $this->assertSame(1, $data['petsCount']);
+        $this->assertSame(1, $data['decorCount']);
+
+        /** @var list<array<string, mixed>> $decor */
+        $decor = $data['decor'];
+        $this->assertCount(2, $decor);
 
         /** @var array<int, array{quests: array{total: int, completed: int}, achievements: array{total: int, completed: int}}> $collections */
         $collections = $data['collections'];
@@ -117,7 +129,7 @@ class CharacterProfileFlowTest extends TestCase
     }
 
     #[Test]
-    public function characterNotFoundReturns404(): void
+    public function character_not_found_returns404(): void
     {
         $mock = $this->mock(BlizzardApiClient::class);
         /** @var \Mockery\Expectation $exp */

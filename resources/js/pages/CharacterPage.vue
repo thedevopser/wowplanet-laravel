@@ -27,6 +27,7 @@
             <ProfessionsTab v-if="activeTab === 'professions'" />
             <MountsTab v-if="activeTab === 'mounts'" :character="store.character" />
             <PetsTab v-if="activeTab === 'pets'" :character="store.character" />
+            <DecorTab v-if="activeTab === 'decor'" :character="store.character" />
         </div>
     </div>
 </template>
@@ -42,6 +43,7 @@ import AchievementsTab from '../components/AchievementsTab.vue';
 import MountsTab from '../components/MountsTab.vue';
 import PetsTab from '../components/PetsTab.vue';
 import ProfessionsTab from '../components/ProfessionsTab.vue';
+import DecorTab from '../components/DecorTab.vue';
 
 const route = useRoute();
 const store = useCharacterStore();
@@ -53,6 +55,7 @@ const contentTabs = computed(() => [
     { id: 'professions', label: 'Métiers', count: store.character?.professions?.length || undefined },
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },
+    { id: 'decor', label: 'Décorations', count: store.character?.decorCount },
 ]);
 
 const loadCharacter = () => {

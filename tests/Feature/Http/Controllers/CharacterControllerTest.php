@@ -15,7 +15,7 @@ class CharacterControllerTest extends TestCase
     use RefreshDatabase;
 
     #[Test]
-    public function showReturnsCharacterProfile(): void
+    public function show_returns_character_profile(): void
     {
         $characterProfileDTO = new CharacterProfileDTO(
             name: 'Thrall',
@@ -46,11 +46,12 @@ class CharacterControllerTest extends TestCase
                 'realm' => 'Hyjal',
                 'level' => 80,
                 'classId' => 7,
+                'decorCount' => 0,
             ]);
     }
 
     #[Test]
-    public function showReturns404WhenCharacterNotFound(): void
+    public function show_returns404_when_character_not_found(): void
     {
         $mock = $this->mock(CharacterProfileService::class);
         /** @var \Mockery\Expectation $exp */

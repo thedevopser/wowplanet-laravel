@@ -8,6 +8,7 @@ use App\Application\DTOs\CharacterProfileDTO;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\ExpansionTierMatcher;
 use App\Models\WowAchievement;
+use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowProfession;
@@ -83,6 +84,15 @@ class CharacterProfileService
             sprintf('profile/wow/character/%s/%s/professions', $realm, $name),
         );
 
+        $decorResponse = [];
+        try {
+            $decorResponse = $this->blizzardApiClient->get(
+                sprintf('profile/wow/character/%s/%s/collections/decor', $realm, $name),
+            );
+        } catch (\Exception) {
+            // Character may not have housing unlocked — gracefully ignore
+        }
+
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
         $completedQuestIds = array_column($questsList, 'id');
@@ -108,6 +118,13 @@ class CharacterProfileService
             $petsList,
         );
 
+        /** @var list<array{decor: array{id: int}}> $decorList */
+        $decorList = $decorResponse['decor_collected'] ?? [];
+        $characterDecorIds = array_map(
+            fn(array $d): int => $d['decor']['id'],
+            $decorList,
+        );
+
         /** @var array{name?: string} $factionData */
         $factionData = $summary['faction'] ?? [];
         $characterFaction = (string) ($factionData['name'] ?? '');
@@ -120,6 +137,7 @@ class CharacterProfileService
 
         $mounts = $this->processCollection(WowMount::all(), $characterMountIds);
         $pets = $this->processCollection(WowPet::all(), $characterPetIds);
+        $decor = $this->processDecorCollection(WowDecor::all(), $characterDecorIds);
         $professions = $this->aggregateProfessionProgress($professionsResponse, $characterFaction);
 
         $classIconUrl = '';
@@ -166,6 +184,8 @@ class CharacterProfileService
             mounts: $mounts,
             pets: $pets,
             professions: $professions,
+            decorCount: count($characterDecorIds),
+            decor: $decor,
         );
     }
 
@@ -303,6 +323,27 @@ class CharacterProfileService
                 'source' => $allItem->source ?? null,
                 'wowhead_id' => $wowheadId,
                 'icon_url' => $allItem->icon_url ?? null,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param Collection<int, WowDecor> $allItems
+     * @param list<int> $characterIds
+     * @return list<array{id: int, name: string, is_completed: bool, item_id: int|null, icon_url: string|null}>
+     */
+    private function processDecorCollection(Collection $allItems, array $characterIds): array
+    {
+        $result = [];
+        foreach ($allItems as $allItem) {
+            $result[] = [
+                'id' => $allItem->id,
+                'name' => $allItem->name_fr,
+                'is_completed' => in_array($allItem->id, $characterIds),
+                'item_id' => $allItem->item_id,
+                'icon_url' => $allItem->icon_url,
             ];
         }
 
