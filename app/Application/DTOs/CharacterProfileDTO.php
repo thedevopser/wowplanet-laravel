@@ -7,11 +7,11 @@ namespace App\Application\DTOs;
 readonly class CharacterProfileDTO
 {
     /**
-     * @param array<int, array<string, mixed>> $collections
-     * @param array<int, array<string, mixed>> $mounts
-     * @param array<int, array<string, mixed>> $pets
-     * @param list<array<string, mixed>> $professions
-     * @param list<array<string, mixed>> $decor
+     * @param  array<int, array<string, mixed>>  $collections
+     * @param  array<int, array<string, mixed>>  $mounts
+     * @param  array<int, array<string, mixed>>  $pets
+     * @param  list<array<string, mixed>>  $professions
+     * @param  list<array<string, mixed>>  $decor
      */
     public function __construct(
         public string $name,
@@ -34,6 +34,5 @@ readonly class CharacterProfileDTO
         public array $professions = [],
         public int $decorCount = 0,
         public array $decor = [],
-    ) {
-    }
+    ) {}
 }

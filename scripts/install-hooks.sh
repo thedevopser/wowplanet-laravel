@@ -12,20 +12,20 @@ echo "  Pre-commit quality checks"
 echo "========================================"
 echo ""
 
-echo "[1/5] Lint (phpcbf)..."
+echo "[1/5] Lint (Pint)..."
 make lint
 if [ $? -ne 0 ]; then
-    echo "FAILED: Lint errors found."
+    echo "FAILED: Pint errors found."
     exit 1
 fi
 
-# Re-stage any files auto-fixed by phpcbf
+# Re-stage any files auto-fixed by Pint
 git add -u
 
-echo "[2/5] Static analysis (PHPStan)..."
+echo "[2/5] Static analysis (Larastan)..."
 make static
 if [ $? -ne 0 ]; then
-    echo "FAILED: PHPStan errors found."
+    echo "FAILED: Larastan errors found."
     exit 1
 fi
 
@@ -43,10 +43,10 @@ if [ -n "$CHANGED" ]; then
     git add -u
 fi
 
-echo "[4/5] PHP tests..."
+echo "[4/5] PHP tests (Pest)..."
 make test
 if [ $? -ne 0 ]; then
-    echo "FAILED: PHP tests failed."
+    echo "FAILED: Pest tests failed."
     exit 1
 fi
 

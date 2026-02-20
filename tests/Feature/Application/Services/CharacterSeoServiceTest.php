@@ -2,135 +2,115 @@
 
 declare(strict_types=1);
 
-namespace Tests\Feature\Application\Services;
-
 use App\Application\Services\CharacterSeoService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\CharacterVisit;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
-use PHPUnit\Framework\Attributes\Test;
-use Tests\TestCase;
 
-class CharacterSeoServiceTest extends TestCase
-{
-    use RefreshDatabase;
+test('get home meta returns correct structure', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
-    #[Test]
-    public function getHomeMetaReturnsCorrectStructure(): void
-    {
-        $this->mock(BlizzardApiClient::class);
+    $characterSeoService = resolve(CharacterSeoService::class);
+    $meta = $characterSeoService->getHomeMeta();
 
-        $characterSeoService = resolve(CharacterSeoService::class);
-        $meta = $characterSeoService->getHomeMeta();
+    expect($meta)->toHaveKey('title')
+        ->toHaveKey('description')
+        ->toHaveKey('ogTitle')
+        ->toHaveKey('ogImage')
+        ->toHaveKey('canonicalUrl')
+        ->toHaveKey('jsonLd')
+        ->and((string) $meta['title'])->toContain('WowPlanet');
+});
 
-        $this->assertArrayHasKey('title', $meta);
-        $this->assertArrayHasKey('description', $meta);
-        $this->assertArrayHasKey('ogTitle', $meta);
-        $this->assertArrayHasKey('ogImage', $meta);
-        $this->assertArrayHasKey('canonicalUrl', $meta);
-        $this->assertArrayHasKey('jsonLd', $meta);
-        $this->assertStringContainsString('WowPlanet', (string) $meta['title']);
-    }
+test('get character meta returns cached data', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    #[Test]
-    public function getCharacterMetaReturnsCachedData(): void
-    {
-        $mock = $this->mock(BlizzardApiClient::class);
+    /** @var \Mockery\Expectation $exp */
+    $exp = $mock->shouldReceive('get');
+    $exp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'level' => 80,
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['name' => 'Chaman'],
+        'faction' => ['name' => 'Horde'],
+        'equipped_item_level' => 620,
+        'assets' => [['key' => 'avatar', 'value' => 'https://example.com/avatar.jpg']],
+    ]);
 
-        /** @var \Mockery\Expectation $exp */
-        $exp = $mock->shouldReceive('get');
-        $exp->andReturn([
-            'name' => 'Thrall',
-            'realm' => ['name' => 'Hyjal'],
-            'level' => 80,
-            'race' => ['name' => 'Orc'],
-            'character_class' => ['name' => 'Chaman'],
-            'faction' => ['name' => 'Horde'],
-            'equipped_item_level' => 620,
-            'assets' => [['key' => 'avatar', 'value' => 'https://example.com/avatar.jpg']],
-        ]);
+    $characterSeoService = resolve(CharacterSeoService::class);
 
-        $characterSeoService = resolve(CharacterSeoService::class);
+    Cache::flush();
+    $meta = $characterSeoService->getCharacterMeta('hyjal', 'thrall');
 
-        Cache::flush();
-        $meta = $characterSeoService->getCharacterMeta('hyjal', 'thrall');
+    expect((string) $meta['title'])->toContain('Thrall')
+        ->and($meta['ogType'])->toBe('profile')
+        ->and($meta['jsonLd'])->not->toBeNull();
+});
 
-        $this->assertStringContainsString('Thrall', (string) $meta['title']);
-        $this->assertSame('profile', $meta['ogType']);
-        $this->assertNotNull($meta['jsonLd']);
-    }
+test('get character meta handles api error', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    #[Test]
-    public function getCharacterMetaHandlesApiError(): void
-    {
-        $mock = $this->mock(BlizzardApiClient::class);
+    /** @var \Mockery\Expectation $exp */
+    $exp = $mock->shouldReceive('get');
+    $exp->andThrow(new Exception('API Error'));
 
-        /** @var \Mockery\Expectation $exp */
-        $exp = $mock->shouldReceive('get');
-        $exp->andThrow(new \Exception('API Error'));
+    $characterSeoService = resolve(CharacterSeoService::class);
 
-        $characterSeoService = resolve(CharacterSeoService::class);
+    Cache::flush();
+    $meta = $characterSeoService->getCharacterMeta('hyjal', 'unknown');
 
-        Cache::flush();
-        $meta = $characterSeoService->getCharacterMeta('hyjal', 'unknown');
+    expect((string) $meta['title'])->toContain('Unknown')
+        ->and($meta['jsonLd'])->toBeNull();
+});
 
-        $this->assertStringContainsString('Unknown', (string) $meta['title']);
-        $this->assertNull($meta['jsonLd']);
-    }
+test('generate sitemap returns valid xml', function (): void {
+    CharacterVisit::factory()->create([
+        'realm_slug' => 'hyjal',
+        'character_name' => 'thrall',
+        'last_visited_at' => now()->subDay(),
+    ]);
 
-    #[Test]
-    public function generateSitemapReturnsValidXml(): void
-    {
-        CharacterVisit::factory()->create([
-            'realm_slug' => 'hyjal',
-            'character_name' => 'thrall',
-            'last_visited_at' => now()->subDay(),
-        ]);
+    CharacterVisit::factory()->create([
+        'realm_slug' => 'dalaran',
+        'character_name' => 'jaina',
+        'last_visited_at' => now()->subDays(2),
+    ]);
 
-        CharacterVisit::factory()->create([
-            'realm_slug' => 'dalaran',
-            'character_name' => 'jaina',
-            'last_visited_at' => now()->subDays(2),
-        ]);
+    $this->mock(BlizzardApiClient::class);
 
-        $this->mock(BlizzardApiClient::class);
+    $characterSeoService = resolve(CharacterSeoService::class);
+    $xml = $characterSeoService->generateSitemap();
 
-        $characterSeoService = resolve(CharacterSeoService::class);
-        $xml = $characterSeoService->generateSitemap();
+    expect($xml)->toStartWith('<?xml')
+        ->toContain('<urlset')
+        ->toContain('/character/hyjal/thrall')
+        ->toContain('/character/dalaran/jaina');
+});
 
-        $this->assertStringStartsWith('<?xml', $xml);
-        $this->assertStringContainsString('<urlset', $xml);
-        $this->assertStringContainsString('/character/hyjal/thrall', $xml);
-        $this->assertStringContainsString('/character/dalaran/jaina', $xml);
-    }
+test('get character meta tracks visit', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    #[Test]
-    public function getCharacterMetaTracksVisit(): void
-    {
-        $mock = $this->mock(BlizzardApiClient::class);
+    /** @var \Mockery\Expectation $exp */
+    $exp = $mock->shouldReceive('get');
+    $exp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'level' => 80,
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['name' => 'Chaman'],
+        'faction' => ['name' => 'Horde'],
+        'equipped_item_level' => 620,
+        'assets' => [],
+    ]);
 
-        /** @var \Mockery\Expectation $exp */
-        $exp = $mock->shouldReceive('get');
-        $exp->andReturn([
-            'name' => 'Thrall',
-            'realm' => ['name' => 'Hyjal'],
-            'level' => 80,
-            'race' => ['name' => 'Orc'],
-            'character_class' => ['name' => 'Chaman'],
-            'faction' => ['name' => 'Horde'],
-            'equipped_item_level' => 620,
-            'assets' => [],
-        ]);
+    $characterSeoService = resolve(CharacterSeoService::class);
 
-        $characterSeoService = resolve(CharacterSeoService::class);
+    Cache::flush();
+    $characterSeoService->getCharacterMeta('hyjal', 'thrall');
 
-        Cache::flush();
-        $characterSeoService->getCharacterMeta('hyjal', 'thrall');
-
-        $this->assertDatabaseHas('character_visits', [
-            'realm_slug' => 'hyjal',
-            'character_name' => 'thrall',
-        ]);
-    }
-}
+    $this->assertDatabaseHas('character_visits', [
+        'realm_slug' => 'hyjal',
+        'character_name' => 'thrall',
+    ]);
+});

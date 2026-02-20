@@ -13,8 +13,7 @@ class SeoController extends Controller
 {
     public function __construct(
         private readonly CharacterSeoService $characterSeoService,
-    ) {
-    }
+    ) {}
 
     public function spa(): View
     {

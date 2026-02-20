@@ -35,7 +35,7 @@ readonly class ExpansionId
     public function __construct(public int $value)
     {
         if ($this->value < self::CLASSIC || $this->value > self::MIDNIGHT) {
-            throw new InvalidArgumentException("Invalid Expansion ID: " . $this->value);
+            throw new InvalidArgumentException('Invalid Expansion ID: '.$this->value);
         }
     }
 

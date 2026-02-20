@@ -21,35 +21,34 @@ class BlizzardBatchImporter
 
     private const MAX_RETRIES = 3;
 
-    public function __construct(private readonly BlizzardApiClient $blizzardApiClient)
-    {
-    }
+    public function __construct(private readonly BlizzardApiClient $blizzardApiClient) {}
 
     /**
      * Import ALL achievements by traversing the Blizzard category tree.
      * Expansion is determined from addon total_ids mapping.
      *
-     * @param array<int, int> $addonExpansionMap [achievement_id => expansion_id] from addon data
+     * @param  array<int, int>  $addonExpansionMap  [achievement_id => expansion_id] from addon data
      */
     public function importAchievements(array $addonExpansionMap = []): void
     {
-        $this->info("Fetching achievement category tree...");
+        $this->info('Fetching achievement category tree...');
 
         $index = $this->fetchWithRetry('data/wow/achievement-category/index');
-        if (!$index) {
-            $this->info("ERROR: Could not fetch achievement category index.");
+        if (! $index) {
+            $this->info('ERROR: Could not fetch achievement category index.');
+
             return;
         }
 
         /** @var list<array{id: int, name: string}> $rootCategories */
         $rootCategories = $index['root_categories'] ?? [];
-        $this->info("Found " . count($rootCategories) . " root categories.");
-        $this->info("Addon expansion map: " . count($addonExpansionMap) . " achievement IDs.");
+        $this->info('Found '.count($rootCategories).' root categories.');
+        $this->info('Addon expansion map: '.count($addonExpansionMap).' achievement IDs.');
 
         $achievements = [];
 
         foreach ($rootCategories as $rootCategory) {
-            $this->info('  Traversing: ' . $rootCategory['name']);
+            $this->info('  Traversing: '.$rootCategory['name']);
             $this->traverseAchievementCategory(
                 $rootCategory['id'],
                 $rootCategory['name'],
@@ -58,7 +57,7 @@ class BlizzardBatchImporter
             );
         }
 
-        $this->info("Saving " . count($achievements) . " achievements to database...");
+        $this->info('Saving '.count($achievements).' achievements to database...');
         $mapped = 0;
         $unmapped = 0;
         $count = 0;
@@ -69,15 +68,12 @@ class BlizzardBatchImporter
             $mapped += isset($addonExpansionMap[$achievement['id']]) ? 1 : 0;
             $unmapped += isset($addonExpansionMap[$achievement['id']]) ? 0 : 1;
 
-            WowAchievement::updateOrCreate(
-                ['id' => $achievement['id']],
-                [
-                    'name_fr' => $achievement['name_fr'],
-                    'expansion_id' => $expansionId,
-                    'category_name' => $achievement['category_name'],
-                    'is_active' => true,
-                ]
-            );
+            WowAchievement::query()->updateOrCreate(['id' => $achievement['id']], [
+                'name_fr' => $achievement['name_fr'],
+                'expansion_id' => $expansionId,
+                'category_name' => $achievement['category_name'],
+                'is_active' => true,
+            ]);
             $count++;
             if ($count % 500 === 0) {
                 $this->info(sprintf('  Saved %d...', $count));
@@ -95,10 +91,10 @@ class BlizzardBatchImporter
      * 2. Per-quest override for modern zones (expansion >= 10): if ContentTuning
      *    says a different modern expansion, use it (handles TWW/Midnight splits)
      *
-     * @param array<int, int> $areaExpansionMap [area_id => expansion_id] from DB2 data
-     * @param array<int, int> $modernQuestOverrides [quest_id => expansion_id] only for expansion >= 10
-     * @param array<int, string> $questFactionMap [quest_id => 'Alliance'|'Horde'] from FiltRaces
-     * @param array<int, string> $zoneFactionMap [area_id => 'Alliance'|'Horde'] from FactionGroupMask
+     * @param  array<int, int>  $areaExpansionMap  [area_id => expansion_id] from DB2 data
+     * @param  array<int, int>  $modernQuestOverrides  [quest_id => expansion_id] only for expansion >= 10
+     * @param  array<int, string>  $questFactionMap  [quest_id => 'Alliance'|'Horde'] from FiltRaces
+     * @param  array<int, string>  $zoneFactionMap  [area_id => 'Alliance'|'Horde'] from FactionGroupMask
      */
     public function importQuests(
         array $areaExpansionMap,
@@ -106,15 +102,16 @@ class BlizzardBatchImporter
         array $questFactionMap = [],
         array $zoneFactionMap = [],
     ): void {
-        $this->info("Fetching quest area index...");
-        $this->info("  DB2 area→expansion entries: " . count($areaExpansionMap));
-        $this->info("  Modern per-quest overrides: " . count($modernQuestOverrides) . " entries (ContentTuning ≥ 10)");
-        $this->info("  Quest faction map: " . count($questFactionMap) . " faction-specific quests");
-        $this->info("  Zone faction map: " . count($zoneFactionMap) . " faction-specific zones");
+        $this->info('Fetching quest area index...');
+        $this->info('  DB2 area→expansion entries: '.count($areaExpansionMap));
+        $this->info('  Modern per-quest overrides: '.count($modernQuestOverrides).' entries (ContentTuning ≥ 10)');
+        $this->info('  Quest faction map: '.count($questFactionMap).' faction-specific quests');
+        $this->info('  Zone faction map: '.count($zoneFactionMap).' faction-specific zones');
 
         $index = $this->fetchWithRetry('data/wow/quest/area/index');
-        if (!$index) {
-            $this->info("ERROR: Could not fetch quest area index.");
+        if (! $index) {
+            $this->info('ERROR: Could not fetch quest area index.');
+
             return;
         }
 
@@ -132,8 +129,8 @@ class BlizzardBatchImporter
             \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
             $areaId = $area['id'];
-            $areaDetail = $this->fetchWithRetry('data/wow/quest/area/' . $areaId);
-            if (!$areaDetail) {
+            $areaDetail = $this->fetchWithRetry('data/wow/quest/area/'.$areaId);
+            if (! $areaDetail) {
                 continue;
             }
 
@@ -179,32 +176,29 @@ class BlizzardBatchImporter
                     $overrideCount++;
                 }
 
-                if (!$isOverridden) {
+                if (! $isOverridden) {
                     $db2Count++;
                 }
 
-                WowQuest::updateOrCreate(
-                    ['id' => $questId],
-                    [
-                        'name_fr' => $questName,
-                        'expansion_id' => $expansionId,
-                        'zone_name' => $areaName,
-                        'faction' => $questFactionMap[$questId] ?? $zoneFactionMap[$areaId] ?? null,
-                        'is_active' => true,
-                    ]
-                );
+                WowQuest::query()->updateOrCreate(['id' => $questId], [
+                    'name_fr' => $questName,
+                    'expansion_id' => $expansionId,
+                    'zone_name' => $areaName,
+                    'faction' => $questFactionMap[$questId] ?? $zoneFactionMap[$areaId] ?? null,
+                    'is_active' => true,
+                ]);
                 $totalImported++;
             }
 
             if (($i + 1) % 50 === 0 || ($i + 1) === $totalAreas) {
-                $this->info("  Areas: " . ($i + 1) . sprintf('/%d | Quests: %d', $totalAreas, $totalImported));
+                $this->info('  Areas: '.($i + 1).sprintf('/%d | Quests: %d', $totalAreas, $totalImported));
             }
         }
 
         $this->info(sprintf('  Mapping: %d DB2-based | %d modern quest overrides (ContentTuning)', $db2Count, $overrideCount));
 
         if ($unmappedAreas !== []) {
-            $this->info("  WARNING: Areas not in DB2 AreaTable (defaulted to Classic): " . count($unmappedAreas));
+            $this->info('  WARNING: Areas not in DB2 AreaTable (defaulted to Classic): '.count($unmappedAreas));
             foreach ($unmappedAreas as $zone => $count) {
                 $this->info(sprintf('    - %s (%d quests)', $zone, $count));
             }
@@ -218,43 +212,42 @@ class BlizzardBatchImporter
      */
     public function importMounts(): void
     {
-        $this->info("Fetching Mount Index...");
+        $this->info('Fetching Mount Index...');
         $response = $this->fetchWithRetry('data/wow/mount/index');
-        if (!$response) {
-            $this->info("ERROR: Could not fetch mount index.");
+        if (! $response) {
+            $this->info('ERROR: Could not fetch mount index.');
+
             return;
         }
 
         /** @var list<array{id: int, name: string|null}> $mounts */
         $mounts = $response['mounts'] ?? [];
-        $this->info("Found " . count($mounts) . " mounts.");
+        $this->info('Found '.count($mounts).' mounts.');
 
         $spellMap = $this->loadMountSpellMap();
-        $this->info("  DB2 mount spell map: " . count($spellMap) . " entries.");
+        $this->info('  DB2 mount spell map: '.count($spellMap).' entries.');
 
         $skipped = 0;
         foreach ($mounts as $mount) {
             $mountName = $mount['name'] ?? '';
             if ($mountName === '') {
                 $skipped++;
+
                 continue;
             }
 
-            WowMount::updateOrCreate(
-                ['id' => $mount['id']],
-                [
-                    'name_fr' => $mountName,
-                    'source_spell_id' => $spellMap[$mount['id']] ?? null,
-                    'is_active' => true,
-                ]
-            );
+            WowMount::query()->updateOrCreate(['id' => $mount['id']], [
+                'name_fr' => $mountName,
+                'source_spell_id' => $spellMap[$mount['id']] ?? null,
+                'is_active' => true,
+            ]);
         }
 
         if ($skipped > 0) {
             $this->info(sprintf('  Skipped %d mounts with empty names.', $skipped));
         }
 
-        $this->info("Mount import complete.");
+        $this->info('Mount import complete.');
     }
 
     /**
@@ -262,43 +255,42 @@ class BlizzardBatchImporter
      */
     public function importPets(): void
     {
-        $this->info("Fetching Pet Index...");
+        $this->info('Fetching Pet Index...');
         $response = $this->fetchWithRetry('data/wow/pet/index');
-        if (!$response) {
-            $this->info("ERROR: Could not fetch pet index.");
+        if (! $response) {
+            $this->info('ERROR: Could not fetch pet index.');
+
             return;
         }
 
         /** @var list<array{id: int, name: string|null}> $pets */
         $pets = $response['pets'] ?? [];
-        $this->info("Found " . count($pets) . " pets.");
+        $this->info('Found '.count($pets).' pets.');
 
         $creatureMap = $this->loadPetCreatureMap();
-        $this->info("  DB2 pet creature map: " . count($creatureMap) . " entries.");
+        $this->info('  DB2 pet creature map: '.count($creatureMap).' entries.');
 
         $skipped = 0;
         foreach ($pets as $pet) {
             $petName = $pet['name'] ?? '';
             if ($petName === '') {
                 $skipped++;
+
                 continue;
             }
 
-            WowPet::updateOrCreate(
-                ['id' => $pet['id']],
-                [
-                    'name_fr' => $petName,
-                    'creature_id' => $creatureMap[$pet['id']] ?? null,
-                    'is_active' => true,
-                ]
-            );
+            WowPet::query()->updateOrCreate(['id' => $pet['id']], [
+                'name_fr' => $petName,
+                'creature_id' => $creatureMap[$pet['id']] ?? null,
+                'is_active' => true,
+            ]);
         }
 
         if ($skipped > 0) {
             $this->info(sprintf('  Skipped %d pets with empty names.', $skipped));
         }
 
-        $this->info("Pet import complete.");
+        $this->info('Pet import complete.');
     }
 
     private const ICON_REQUEST_DELAY_MS = 300;
@@ -326,9 +318,10 @@ class BlizzardBatchImporter
             \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
 
             // Step 1: Get mount detail to find creature display ID
-            $detail = $this->fetchWithRetry('data/wow/mount/' . $mount->id);
-            if (!$detail) {
+            $detail = $this->fetchWithRetry('data/wow/mount/'.$mount->id);
+            if (! $detail) {
                 $skipped++;
+
                 continue;
             }
 
@@ -337,14 +330,16 @@ class BlizzardBatchImporter
             $displayId = $displays[0]['id'] ?? null;
             if ($displayId === null) {
                 $skipped++;
+
                 continue;
             }
 
             // Step 2: Get creature display media
             \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
-            $media = $this->fetchWithRetry('data/wow/media/creature-display/' . $displayId);
-            if (!$media) {
+            $media = $this->fetchWithRetry('data/wow/media/creature-display/'.$displayId);
+            if (! $media) {
                 $skipped++;
+
                 continue;
             }
 
@@ -383,8 +378,8 @@ class BlizzardBatchImporter
         foreach ($pets as $pet) {
             \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
 
-            $media = $this->fetchWithRetry('data/wow/media/pet/' . $pet->id);
-            if (!$media) {
+            $media = $this->fetchWithRetry('data/wow/media/pet/'.$pet->id);
+            if (! $media) {
                 continue;
             }
 
@@ -408,7 +403,7 @@ class BlizzardBatchImporter
     {
         $this->info('Fetching Decor Index...');
         $response = $this->fetchWithRetry('data/wow/decor/index');
-        if (!$response) {
+        if (! $response) {
             $this->info('ERROR: Could not fetch decor index.');
 
             return;
@@ -416,7 +411,7 @@ class BlizzardBatchImporter
 
         /** @var list<array{id: int, name: string|null}> $decors */
         $decors = $response['decor_items'] ?? [];
-        $this->info('Found ' . count($decors) . ' decor items.');
+        $this->info('Found '.count($decors).' decor items.');
 
         $skipped = 0;
         $count = 0;
@@ -428,13 +423,10 @@ class BlizzardBatchImporter
                 continue;
             }
 
-            WowDecor::updateOrCreate(
-                ['id' => $decor['id']],
-                [
-                    'name_fr' => $decorName,
-                    'is_active' => true,
-                ]
-            );
+            WowDecor::query()->updateOrCreate(['id' => $decor['id']], [
+                'name_fr' => $decorName,
+                'is_active' => true,
+            ]);
             $count++;
         }
 
@@ -468,8 +460,8 @@ class BlizzardBatchImporter
             \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
 
             // Step 1: Get decor detail to find item ID
-            $detail = $this->fetchWithRetry('data/wow/decor/' . $decor->id);
-            if (!$detail) {
+            $detail = $this->fetchWithRetry('data/wow/decor/'.$decor->id);
+            if (! $detail) {
                 $skipped++;
 
                 continue;
@@ -489,8 +481,8 @@ class BlizzardBatchImporter
 
             // Step 2: Get item media
             \Illuminate\Support\Sleep::usleep(self::ICON_REQUEST_DELAY_MS * 1000);
-            $media = $this->fetchWithRetry('data/wow/media/item/' . $itemId);
-            if (!$media) {
+            $media = $this->fetchWithRetry('data/wow/media/item/'.$itemId);
+            if (! $media) {
                 $skipped++;
 
                 continue;
@@ -515,7 +507,7 @@ class BlizzardBatchImporter
     /**
      * Tag mirror quest pairs (same name+zone, no faction) by checking API reputation rewards.
      *
-     * @param array<int, string> $reputationFactionMap [reputation_faction_id => 'Alliance'|'Horde']
+     * @param  array<int, string>  $reputationFactionMap  [reputation_faction_id => 'Alliance'|'Horde']
      */
     public function tagMirrorQuestFactions(array $reputationFactionMap): void
     {
@@ -525,6 +517,7 @@ class BlizzardBatchImporter
 
         if ($pairs === []) {
             $this->info('  No mirror pairs found.');
+
             return;
         }
 
@@ -539,7 +532,7 @@ class BlizzardBatchImporter
 
             // Try quest A first
             \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
-            $detailA = $this->fetchWithRetry('data/wow/quest/' . $questIdA);
+            $detailA = $this->fetchWithRetry('data/wow/quest/'.$questIdA);
             $factionFromA = ($detailA !== null)
                 ? $this->detectFactionFromReputations($detailA, $reputationFactionMap)
                 : null;
@@ -550,7 +543,7 @@ class BlizzardBatchImporter
             } else {
                 // Try quest B
                 \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
-                $detailB = $this->fetchWithRetry('data/wow/quest/' . $questIdB);
+                $detailB = $this->fetchWithRetry('data/wow/quest/'.$questIdB);
                 $factionFromB = ($detailB !== null)
                     ? $this->detectFactionFromReputations($detailB, $reputationFactionMap)
                     : null;
@@ -600,7 +593,7 @@ class BlizzardBatchImporter
         /** @var array<string, list<int>> $groups */
         $groups = [];
         foreach ($untagged as $quest) {
-            $key = $quest->name_fr . '|||' . $quest->zone_name;
+            $key = $quest->name_fr.'|||'.$quest->zone_name;
             $groups[$key][] = $quest->id;
         }
 
@@ -626,8 +619,8 @@ class BlizzardBatchImporter
     /**
      * Detect faction from quest reputation rewards.
      *
-     * @param array<string, mixed> $questDetail
-     * @param array<int, string> $reputationFactionMap
+     * @param  array<string, mixed>  $questDetail
+     * @param  array<int, string>  $reputationFactionMap
      */
     private function detectFactionFromReputations(array $questDetail, array $reputationFactionMap): ?string
     {
@@ -662,7 +655,7 @@ class BlizzardBatchImporter
         /** @var array<string, list<array{id: int, faction: string|null}>> $groups */
         $groups = [];
         foreach ($allRecipes as $allRecipe) {
-            $key = $allRecipe->name_fr . '|||' . $allRecipe->profession_id . '|||' . $allRecipe->expansion_id;
+            $key = $allRecipe->name_fr.'|||'.$allRecipe->profession_id.'|||'.$allRecipe->expansion_id;
             $groups[$key][] = ['id' => $allRecipe->id, 'faction' => $allRecipe->faction];
         }
 
@@ -697,14 +690,14 @@ class BlizzardBatchImporter
      * Expansion ID is resolved from the skill tier name using ExpansionTierMatcher::match().
      */
     /**
-     * @param array<int, string> $recipeFactionMap [recipe_id => 'Alliance'|'Horde'] from DB2 RaceMask
+     * @param  array<int, string>  $recipeFactionMap  [recipe_id => 'Alliance'|'Horde'] from DB2 RaceMask
      */
     public function importProfessions(array $recipeFactionMap = []): void
     {
         $this->info('Fetching profession index...');
 
         $index = $this->fetchWithRetry('data/wow/profession/index');
-        if (!$index) {
+        if (! $index) {
             $this->info('ERROR: Could not fetch profession index.');
 
             return;
@@ -714,11 +707,11 @@ class BlizzardBatchImporter
 
         /** @var list<array{id: int, name: string}> $professions */
         $professions = $index['professions'] ?? [];
-        $this->info('Found ' . count($professions) . ' professions.');
+        $this->info('Found '.count($professions).' professions.');
 
         $recipeSpellMap = $this->loadRecipeSpellMap();
-        $this->info('  DB2 recipe spell map: ' . count($recipeSpellMap) . ' entries.');
-        $this->info('  DB2 recipe faction map: ' . count($recipeFactionMap) . ' entries.');
+        $this->info('  DB2 recipe spell map: '.count($recipeSpellMap).' entries.');
+        $this->info('  DB2 recipe faction map: '.count($recipeFactionMap).' entries.');
 
         $totalRecipes = 0;
 
@@ -729,8 +722,8 @@ class BlizzardBatchImporter
 
             \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
-            $detail = $this->fetchWithRetry('data/wow/profession/' . $professionId);
-            if (!$detail) {
+            $detail = $this->fetchWithRetry('data/wow/profession/'.$professionId);
+            if (! $detail) {
                 continue;
             }
 
@@ -756,15 +749,12 @@ class BlizzardBatchImporter
                 }
             }
 
-            WowProfession::updateOrCreate(
-                ['id' => $professionId],
-                [
-                    'name_fr' => $professionName,
-                    'type' => $type,
-                    'max_skill_levels' => $maxSkillLevels,
-                    'is_active' => true,
-                ]
-            );
+            WowProfession::query()->updateOrCreate(['id' => $professionId], [
+                'name_fr' => $professionName,
+                'type' => $type,
+                'max_skill_levels' => $maxSkillLevels,
+                'is_active' => true,
+            ]);
         }
 
         $this->info(sprintf('Profession import complete: %d professions, %d recipes.', count($professions), $totalRecipes));
@@ -773,8 +763,8 @@ class BlizzardBatchImporter
     /**
      * Import all recipes from a single skill tier.
      *
-     * @param array<int, int> $recipeSpellMap
-     * @param array<int, string> $recipeFactionMap
+     * @param  array<int, int>  $recipeSpellMap
+     * @param  array<int, string>  $recipeFactionMap
      * @return array{count: int, expansion_id: int, max_skill_level: int}
      */
     private function importSkillTierRecipes(
@@ -790,7 +780,7 @@ class BlizzardBatchImporter
             sprintf('data/wow/profession/%d/skill-tier/%d', $professionId, $skillTierId)
         );
 
-        if (!$tierDetail) {
+        if (! $tierDetail) {
             return ['count' => 0, 'expansion_id' => 0, 'max_skill_level' => 0];
         }
 
@@ -814,18 +804,15 @@ class BlizzardBatchImporter
                     continue;
                 }
 
-                WowRecipe::updateOrCreate(
-                    ['id' => $recipe['id']],
-                    [
-                        'name_fr' => $recipeName,
-                        'profession_id' => $professionId,
-                        'expansion_id' => $expansionId,
-                        'category_name' => $categoryName,
-                        'faction' => $recipeFactionMap[$recipe['id']] ?? null,
-                        'wowhead_spell_id' => $recipeSpellMap[$recipe['id']] ?? null,
-                        'is_active' => true,
-                    ]
-                );
+                WowRecipe::query()->updateOrCreate(['id' => $recipe['id']], [
+                    'name_fr' => $recipeName,
+                    'profession_id' => $professionId,
+                    'expansion_id' => $expansionId,
+                    'category_name' => $categoryName,
+                    'faction' => $recipeFactionMap[$recipe['id']] ?? null,
+                    'wowhead_spell_id' => $recipeSpellMap[$recipe['id']] ?? null,
+                    'is_active' => true,
+                ]);
                 $count++;
             }
         }
@@ -838,7 +825,7 @@ class BlizzardBatchImporter
     // ===================== PRIVATE =====================
 
     /**
-     * @param list<array{id: int, name_fr: string, expansion_id: int, category_name: string}> $achievements
+     * @param  list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>  $achievements
      */
     private function traverseAchievementCategory(
         int $categoryId,
@@ -848,8 +835,8 @@ class BlizzardBatchImporter
     ): void {
         \Illuminate\Support\Sleep::usleep(self::REQUEST_DELAY_MS * 1000);
 
-        $category = $this->fetchWithRetry('data/wow/achievement-category/' . $categoryId);
-        if (!$category) {
+        $category = $this->fetchWithRetry('data/wow/achievement-category/'.$categoryId);
+        if (! $category) {
             return;
         }
 
@@ -894,8 +881,9 @@ class BlizzardBatchImporter
     private function loadMountSpellMap(): array
     {
         $path = storage_path('app/blizzard/mount.csv');
-        if (!file_exists($path)) {
-            $this->info('  WARNING: mount.csv not found at ' . $path);
+        if (! file_exists($path)) {
+            $this->info('  WARNING: mount.csv not found at '.$path);
+
             return [];
         }
 
@@ -919,6 +907,7 @@ class BlizzardBatchImporter
         }
 
         fclose($handle);
+
         return $map;
     }
 
@@ -930,8 +919,9 @@ class BlizzardBatchImporter
     private function loadPetCreatureMap(): array
     {
         $path = storage_path('app/blizzard/battle_pet_species.csv');
-        if (!file_exists($path)) {
-            $this->info('  WARNING: battle_pet_species.csv not found at ' . $path);
+        if (! file_exists($path)) {
+            $this->info('  WARNING: battle_pet_species.csv not found at '.$path);
+
             return [];
         }
 
@@ -955,6 +945,7 @@ class BlizzardBatchImporter
         }
 
         fclose($handle);
+
         return $map;
     }
 
@@ -966,8 +957,9 @@ class BlizzardBatchImporter
     private function loadRecipeSpellMap(): array
     {
         $path = storage_path('app/blizzard/skill_line_ability.csv');
-        if (!file_exists($path)) {
-            $this->info('  WARNING: skill_line_ability.csv not found at ' . $path);
+        if (! file_exists($path)) {
+            $this->info('  WARNING: skill_line_ability.csv not found at '.$path);
+
             return [];
         }
 
@@ -991,9 +983,9 @@ class BlizzardBatchImporter
         }
 
         fclose($handle);
+
         return $map;
     }
-
 
     /**
      * @return array<string, mixed>|null
@@ -1003,14 +995,16 @@ class BlizzardBatchImporter
         try {
             /** @var string $region */
             $region = config('services.blizzard.region', 'eu');
+
             return $this->blizzardApiClient->get($endpoint, [
-                'namespace' => 'static-' . $region,
+                'namespace' => 'static-'.$region,
             ]);
         } catch (\Exception $exception) {
             if ($attempt < self::MAX_RETRIES && str_contains($exception->getMessage(), '429')) {
                 $delay = self::RATE_LIMIT_WAIT_S * $attempt;
-                $this->info(sprintf('Rate limit hit, waiting %ds (attempt %d/', $delay, $attempt) . self::MAX_RETRIES . ")...");
+                $this->info(sprintf('Rate limit hit, waiting %ds (attempt %d/', $delay, $attempt).self::MAX_RETRIES.')...');
                 \Illuminate\Support\Sleep::sleep($delay);
+
                 return $this->fetchWithRetry($endpoint, $attempt + 1);
             }
 
@@ -1018,7 +1012,8 @@ class BlizzardBatchImporter
                 return null;
             }
 
-            Log::warning(sprintf('API error [%s]: ', $endpoint) . $exception->getMessage());
+            Log::warning(sprintf('API error [%s]: ', $endpoint).$exception->getMessage());
+
             return null;
         }
     }
@@ -1026,7 +1021,7 @@ class BlizzardBatchImporter
     private function info(string $message): void
     {
         if (app()->runningInConsole()) {
-            echo $message . PHP_EOL;
+            echo $message.PHP_EOL;
         }
 
         Log::info($message);

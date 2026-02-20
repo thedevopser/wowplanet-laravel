@@ -42,8 +42,7 @@ class CharacterProfileService
 
     public function __construct(
         private readonly BlizzardApiClient $blizzardApiClient,
-    ) {
-    }
+    ) {}
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
     {
@@ -64,8 +63,8 @@ class CharacterProfileService
         /** @var string $region */
         $region = config('services.blizzard.region', 'eu');
         $classMedia = $this->blizzardApiClient->get(
-            'data/wow/media/playable-class/' . $classId,
-            ['namespace' => 'static-' . $region],
+            'data/wow/media/playable-class/'.$classId,
+            ['namespace' => 'static-'.$region],
         );
 
         $questsResponse = $this->blizzardApiClient->get(
@@ -107,21 +106,21 @@ class CharacterProfileService
         /** @var list<array{mount: array{id: int}}> $mountsList */
         $mountsList = $mountsResponse['mounts'] ?? [];
         $characterMountIds = array_map(
-            fn(array $m): int => $m['mount']['id'],
+            fn (array $m): int => $m['mount']['id'],
             $mountsList,
         );
 
         /** @var list<array{species: array{id: int}}> $petsList */
         $petsList = $petsResponse['pets'] ?? [];
         $characterPetIds = array_map(
-            fn(array $p): int => $p['species']['id'],
+            fn (array $p): int => $p['species']['id'],
             $petsList,
         );
 
         /** @var list<array{decor: array{id: int}}> $decorList */
         $decorList = $decorResponse['decor_collected'] ?? [];
         $characterDecorIds = array_map(
-            fn(array $d): int => $d['decor']['id'],
+            fn (array $d): int => $d['decor']['id'],
             $decorList,
         );
 
@@ -190,8 +189,8 @@ class CharacterProfileService
     }
 
     /**
-     * @param list<int> $completedQuests
-     * @param list<int> $completedAchievements
+     * @param  list<int>  $completedQuests
+     * @param  list<int>  $completedAchievements
      * @return array<int, array<string, mixed>>
      */
     private function aggregateProgress(
@@ -214,7 +213,7 @@ class CharacterProfileService
 
         for ($expansionIndex = 0; $expansionIndex <= 11; $expansionIndex++) {
             /** @var Collection<int, WowQuest> $expansionQuests */
-            $expansionQuests = $allQuests->get($expansionIndex, new Collection());
+            $expansionQuests = $allQuests->get($expansionIndex, new Collection);
             /** @var Collection<string, Collection<int, WowQuest>> $questsByZone */
             $questsByZone = $expansionQuests->groupBy('zone_name');
 
@@ -247,7 +246,7 @@ class CharacterProfileService
             }
 
             /** @var Collection<int, WowAchievement> $expansionAchievements */
-            $expansionAchievements = $allAchievements->get($expansionIndex, new Collection());
+            $expansionAchievements = $allAchievements->get($expansionIndex, new Collection);
             /** @var Collection<string, Collection<int, WowAchievement>> $achievementsByCategory */
             $achievementsByCategory = $expansionAchievements->groupBy('category_name');
 
@@ -304,8 +303,8 @@ class CharacterProfileService
     }
 
     /**
-     * @param Collection<int, WowMount|WowPet> $allItems
-     * @param list<int> $characterIds
+     * @param  \Illuminate\Database\Eloquent\Collection<int, WowMount>|\Illuminate\Database\Eloquent\Collection<int, WowPet>  $allItems
+     * @param  list<int>  $characterIds
      * @return list<array{id: int, name: string, is_completed: bool, source: string|null, wowhead_id: int|null}>
      */
     private function processCollection(Collection $allItems, array $characterIds): array
@@ -330,8 +329,8 @@ class CharacterProfileService
     }
 
     /**
-     * @param Collection<int, WowDecor> $allItems
-     * @param list<int> $characterIds
+     * @param  Collection<int, WowDecor>  $allItems
+     * @param  list<int>  $characterIds
      * @return list<array{id: int, name: string, is_completed: bool, item_id: int|null, icon_url: string|null}>
      */
     private function processDecorCollection(Collection $allItems, array $characterIds): array
@@ -353,7 +352,7 @@ class CharacterProfileService
     /**
      * Aggregate profession progress: compare character's known recipes with all recipes in DB.
      *
-     * @param array<string, mixed> $professionsResponse
+     * @param  array<string, mixed>  $professionsResponse
      * @return list<array<string, mixed>>
      */
     private function aggregateProfessionProgress(array $professionsResponse, string $characterFaction): array
@@ -397,7 +396,7 @@ class CharacterProfileService
                 ->where(fn (\Illuminate\Contracts\Database\Query\Builder $builder) => $builder->whereNull('faction')->orWhere('faction', $characterFaction))
                 ->get();
 
-            $profession = WowProfession::find($professionId);
+            $profession = WowProfession::query()->find($professionId);
 
             // DB-stored max skill levels per expansion (from game data API import)
             /** @var array<int, int> $dbMaxSkillLevels */
@@ -408,7 +407,7 @@ class CharacterProfileService
 
             for ($exp = 0; $exp <= 11; $exp++) {
                 /** @var Collection<int, WowRecipe> $expansionRecipes */
-                $expansionRecipes = $recipesByExpansion->get($exp, new Collection());
+                $expansionRecipes = $recipesByExpansion->get($exp, new Collection);
                 /** @var Collection<string, Collection<int, WowRecipe>> $recipesByCategory */
                 $recipesByCategory = $expansionRecipes->groupBy('category_name');
 
@@ -493,7 +492,7 @@ class CharacterProfileService
      * For each group of same-named recipes, keep only the highest rank learned,
      * or the highest rank if none are learned.
      *
-     * @param list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}> $items
+     * @param  list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}>  $items
      * @return list<array{id: int, name: string, is_completed: bool, wowhead_spell_id: int|null}>
      */
     private function deduplicateRankedRecipes(array $items): array

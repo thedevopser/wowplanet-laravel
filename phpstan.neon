@@ -1,8 +1,9 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
 parameters:
     level: max
     paths:
         - app
-        - tests
     excludePaths:
-        - ./vendor
-    ignoreErrors: []
+        - vendor

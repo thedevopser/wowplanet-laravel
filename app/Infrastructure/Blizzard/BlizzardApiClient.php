@@ -33,7 +33,7 @@ class BlizzardApiClient
         $region = config('services.blizzard.region', 'eu');
         $this->region = $region;
 
-        $this->namespace = 'profile-' . $this->region;
+        $this->namespace = 'profile-'.$this->region;
     }
 
     public function getAccessToken(): string
@@ -43,8 +43,8 @@ class BlizzardApiClient
             $response = Http::asForm()
                 ->withBasicAuth($this->clientId, $this->clientSecret)
                 ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
-                'grant_type' => 'client_credentials',
-            ]);
+                    'grant_type' => 'client_credentials',
+                ]);
 
             throw_if($response->failed(), \RuntimeException::class, 'Failed to fetch Blizzard access token');
 
@@ -58,8 +58,9 @@ class BlizzardApiClient
     }
 
     /**
-     * @param array<string, mixed> $query
+     * @param  array<string, mixed>  $query
      * @return array<string, mixed>
+     *
      * @throws GuzzleException
      */
     public function get(string $endpoint, array $query = []): array
@@ -70,7 +71,7 @@ class BlizzardApiClient
 
         $response = $this->client->get($endpoint, [
             'headers' => [
-                'Authorization' => 'Bearer ' . $accessToken,
+                'Authorization' => 'Bearer '.$accessToken,
                 'Battlenet-Namespace' => $namespace,
             ],
             'query' => array_merge(['locale' => 'fr_FR'], $query),
@@ -83,15 +84,16 @@ class BlizzardApiClient
     }
 
     /**
-     * @param array<string, mixed> $query
+     * @param  array<string, mixed>  $query
      * @return array<string, mixed>
+     *
      * @throws GuzzleException
      */
     public function getWithUserToken(string $endpoint, string $userToken, array $query = []): array
     {
         $response = $this->client->get($endpoint, [
             'headers' => [
-                'Authorization' => 'Bearer ' . $userToken,
+                'Authorization' => 'Bearer '.$userToken,
                 'Battlenet-Namespace' => $this->namespace,
             ],
             'query' => array_merge(['locale' => 'fr_FR'], $query),
@@ -115,12 +117,12 @@ class BlizzardApiClient
     {
         return [
             'headers' => [
-                'Authorization' => 'Bearer ' . $this->getAccessToken(),
-                'Battlenet-Namespace' => 'static-' . $this->region,
+                'Authorization' => 'Bearer '.$this->getAccessToken(),
+                'Battlenet-Namespace' => 'static-'.$this->region,
             ],
             'query' => [
                 'locale' => 'fr_FR',
-                'namespace' => 'static-' . $this->region,
+                'namespace' => 'static-'.$this->region,
             ],
         ];
     }

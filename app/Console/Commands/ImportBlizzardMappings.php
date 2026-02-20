@@ -22,7 +22,7 @@ class ImportBlizzardMappings extends Command
     {
         $this->info('Starting LUA mapping extraction...');
 
-        if (!File::exists(base_path(self::OUTPUT_PATH))) {
+        if (! File::exists(base_path(self::OUTPUT_PATH))) {
             File::makeDirectory(base_path(self::OUTPUT_PATH), 0755, true);
         }
 
@@ -39,7 +39,7 @@ class ImportBlizzardMappings extends Command
 
         // Load French achievement names from Krowi's localization first
         $frenchAchievementNames = [];
-        $frPath = base_path(self::BASE_PATH . "/Krowi_AchievementFilter/Localization/frFR.lua");
+        $frPath = base_path(self::BASE_PATH.'/Krowi_AchievementFilter/Localization/frFR.lua');
         if (File::exists($frPath)) {
             $frContent = File::get($frPath);
             // Krowi format: L["English Name"] = "French Name"
@@ -65,25 +65,25 @@ class ImportBlizzardMappings extends Command
         ];
 
         foreach ($expansionMap as $folder => $expansionId) {
-            $path = base_path(self::BASE_PATH . sprintf('/Krowi_AchievementFilter/DataAddons/Retail/%s/CategoryData.lua', $folder));
+            $path = base_path(self::BASE_PATH.sprintf('/Krowi_AchievementFilter/DataAddons/Retail/%s/CategoryData.lua', $folder));
 
-            if (!File::exists($path)) {
+            if (! File::exists($path)) {
                 continue;
             }
 
             $content = File::get($path);
             $expansionData = [
                 'total_ids' => [],
-                'categories' => []
+                'categories' => [],
             ];
 
-            $currentCategory = "Général";
+            $currentCategory = 'Général';
             $lines = explode("\n", $content);
 
             foreach ($lines as $line) {
                 if (preg_match('/--\s*([A-Z][a-zA-Z\s\':]+)/', $line, $catMatch)) {
                     $cat = trim($catMatch[1]);
-                    if (!in_array($cat, ["Achievements", "Zones", "Exploration", "Reputation", "Quests"])) {
+                    if (! in_array($cat, ['Achievements', 'Zones', 'Exploration', 'Reputation', 'Quests'])) {
                         // Manual mapping for categories Krowi often misses or doesn't translate
                         $manualCatMap = [
                             'War Within' => 'The War Within',
@@ -115,11 +115,11 @@ class ImportBlizzardMappings extends Command
                 }
 
                 if (preg_match('/(\d+),\s*--\s*(.+)/', $line, $idMatch)) {
-                    $id = (int)$idMatch[1];
+                    $id = (int) $idMatch[1];
                     $enName = trim($idMatch[2]);
                     $frName = $frenchAchievementNames[$enName] ?? $enName;
 
-                    if (!isset($expansionData['categories'][$currentCategory])) {
+                    if (! isset($expansionData['categories'][$currentCategory])) {
                         $expansionData['categories'][$currentCategory] = ['ids' => [], 'names' => []];
                     }
 
@@ -133,7 +133,7 @@ class ImportBlizzardMappings extends Command
             $achievements[$expansionId] = $expansionData;
         }
 
-        File::put(base_path(self::OUTPUT_PATH . '/achievements.json'), (string) json_encode($achievements, JSON_PRETTY_PRINT));
+        File::put(base_path(self::OUTPUT_PATH.'/achievements.json'), (string) json_encode($achievements, JSON_PRETTY_PRINT));
     }
 
     private function processQuests(): void
@@ -156,25 +156,25 @@ class ImportBlizzardMappings extends Command
         ];
 
         foreach ($btwMap as $folder => $expansionId) {
-            $folderPath = base_path(self::BASE_PATH . ('/BTW/' . $folder));
+            $folderPath = base_path(self::BASE_PATH.('/BTW/'.$folder));
 
-            if (!File::isDirectory($folderPath)) {
+            if (! File::isDirectory($folderPath)) {
                 continue;
             }
 
             $expansionData = [
                 'total_ids' => [],
-                'zones' => []
+                'zones' => [],
             ];
 
             // Load French names as a flat map for this expansion
             $frenchNames = [];
-            $frFile = $folderPath . "/Database/Quests.frFR.lua";
+            $frFile = $folderPath.'/Database/Quests.frFR.lua';
             if (File::exists($frFile)) {
                 $frContent = File::get($frFile);
                 preg_match_all('/\[(\d+)\]\s*=\s*{\s*name\s*=\s*"([^"]+)"/', $frContent, $nameMatches);
                 foreach ($nameMatches[1] as $index => $id) {
-                    $frenchNames[(int)$id] = $nameMatches[2][$index];
+                    $frenchNames[(int) $id] = $nameMatches[2][$index];
                 }
             }
 
@@ -208,7 +208,7 @@ class ImportBlizzardMappings extends Command
                 $zoneIds = [];
                 preg_match_all('/id\s*=\s*(\d+)/', $content, $matches);
                 foreach ($matches[1] as $id) {
-                    $zoneIds[] = (int)$id;
+                    $zoneIds[] = (int) $id;
                 }
 
                 preg_match_all('/ids\s*=\s*\{\s*([\d\s,]+)\s*\}/', $content, $listMatches);
@@ -217,7 +217,7 @@ class ImportBlizzardMappings extends Command
                     foreach ($listIds as $listId) {
                         $listId = trim($listId);
                         if (is_numeric($listId)) {
-                            $zoneIds[] = (int)$listId;
+                            $zoneIds[] = (int) $listId;
                         }
                     }
                 }
@@ -226,7 +226,7 @@ class ImportBlizzardMappings extends Command
                 if ($zoneIds !== []) {
                     $expansionData['zones'][$frZoneName] = [
                         'ids' => $zoneIds,
-                        'names' => array_intersect_key($frenchNames, array_flip($zoneIds))
+                        'names' => array_intersect_key($frenchNames, array_flip($zoneIds)),
                     ];
                     $expansionData['total_ids'] = array_merge($expansionData['total_ids'], $zoneIds);
                 }
@@ -236,7 +236,7 @@ class ImportBlizzardMappings extends Command
             $quests[$expansionId] = $expansionData;
         }
 
-        File::put(base_path(self::OUTPUT_PATH . '/quests.json'), (string) json_encode($quests, JSON_PRETTY_PRINT));
+        File::put(base_path(self::OUTPUT_PATH.'/quests.json'), (string) json_encode($quests, JSON_PRETTY_PRINT));
     }
 
     private function translateZoneName(string $name): string

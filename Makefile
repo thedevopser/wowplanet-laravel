@@ -1,7 +1,4 @@
-.PHONY: help build up down install-hooks test lint static refactor quality build-prod push deploy prod-up prod-down
-
-PHPQA = docker run --rm -v $(shell pwd):/project -w /project jakzal/phpqa:php8.4
-PHPQA_IMAGE = phpqa-custom
+.PHONY: help build up down install-hooks test lint lint-check static refactor quality build-prod push deploy prod-up prod-down
 
 help: ## Display this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -37,18 +34,20 @@ clean: ## Clear Laravel caches
 	docker compose exec app php artisan view:clear
 	docker compose exec app php artisan cache:clear
 
-test: ## Run PHPUnit tests
-	docker compose exec app php artisan test
+test: ## Run Pest tests
+	docker compose exec app vendor/bin/pest
 
-lint: ## Fix code style (PSR-12 via phpcbf)
-	$(PHPQA) phpcbf --standard=phpcs.xml || true
+lint: ## Fix code style (Laravel Pint)
+	docker compose exec app vendor/bin/pint
 
-static: ## Run PHPStan static analysis
-	$(PHPQA) phpstan analyse -c phpstan.neon --memory-limit=2G
+lint-check: ## Check code style without fixing (Laravel Pint)
+	docker compose exec app vendor/bin/pint --test
+
+static: ## Run Larastan static analysis
+	docker compose exec app vendor/bin/phpstan analyse --memory-limit=2G
 
 refactor: ## Run Rector automated refactoring
-	docker run --rm -v $(PWD):/project -w /project $(PHPQA_IMAGE) \
-		rector process --config rector.php
+	docker compose exec app vendor/bin/rector process
 
 test-js: ## Run Vitest (Vue component tests)
 	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run

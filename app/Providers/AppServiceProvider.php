@@ -11,7 +11,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-    //
+        //
     }
 
     /**
@@ -19,12 +19,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        /** @var string $env */
-        $env = config('app.env', 'production');
-        if ($env !== 'local' || env('FORCE_HTTPS', false)) {
-            \Illuminate\Support\Facades\URL::forceScheme('https');
-        }
-
         /** @var string $appUrl */
         $appUrl = config('app.url', '');
         if (str_contains($appUrl, 'https://')) {

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard;
 
-use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\RateLimiter;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 class RateLimitingMiddleware
 {
@@ -21,8 +21,9 @@ class RateLimitingMiddleware
                 function () use ($handler, $request, $options): PromiseInterface {
                     /** @var PromiseInterface $promise */
                     $promise = $handler($request, $options);
+
                     return $promise->then(
-                        fn(ResponseInterface $response): ResponseInterface => $response
+                        fn (ResponseInterface $response): ResponseInterface => $response
                     );
                 },
                 1 // Per second

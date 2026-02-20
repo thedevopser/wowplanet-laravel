@@ -10,6 +10,5 @@ readonly class CharacterMedia
         public string $avatarUrl,
         public string $insetUrl,
         public string $mainUrl,
-    ) {
-    }
+    ) {}
 }

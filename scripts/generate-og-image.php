@@ -4,40 +4,39 @@
  * Generate the OG default image (1200x630) for social sharing.
  * Run: docker compose exec app php scripts/generate-og-image.php
  */
-
 $width = 1200;
 $height = 630;
-$outputPath = __DIR__ . '/../public/images/og-default.png';
-$fontDir = __DIR__ . '/../storage/app/fonts';
-$logoPath = __DIR__ . '/../public/images/logo.png';
+$outputPath = __DIR__.'/../public/images/og-default.png';
+$fontDir = __DIR__.'/../storage/app/fonts';
+$logoPath = __DIR__.'/../public/images/logo.png';
 
 // Download Inter font if not cached
-if (!is_dir($fontDir)) {
+if (! is_dir($fontDir)) {
     mkdir($fontDir, 0755, true);
 }
 
-$fontBold = $fontDir . '/Inter-Bold.ttf';
-$fontRegular = $fontDir . '/Inter-Regular.ttf';
+$fontBold = $fontDir.'/Inter-Bold.ttf';
+$fontRegular = $fontDir.'/Inter-Regular.ttf';
 
 $ctx = stream_context_create(['http' => ['header' => 'User-Agent: Mozilla/5.0']]);
 
-if (!file_exists($fontBold)) {
+if (! file_exists($fontBold)) {
     echo "Downloading Inter Bold...\n";
     $url = 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf';
     $data = file_get_contents($url, false, $ctx);
-    if (!$data) {
-        die("Failed to download Inter Bold. Check network.\n");
+    if (! $data) {
+        exit("Failed to download Inter Bold. Check network.\n");
     }
     file_put_contents($fontBold, $data);
     echo "Font saved.\n";
 }
 
-if (!file_exists($fontRegular)) {
+if (! file_exists($fontRegular)) {
     echo "Downloading Inter Regular...\n";
     $url = 'https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf';
     $data = file_get_contents($url, false, $ctx);
-    if (!$data) {
-        die("Failed to download Inter Regular. Check network.\n");
+    if (! $data) {
+        exit("Failed to download Inter Regular. Check network.\n");
     }
     file_put_contents($fontRegular, $data);
     echo "Font saved.\n";
@@ -103,10 +102,10 @@ if (file_exists($logoPath)) {
 
         // Draw circular border behind logo
         $borderColor = imagecolorallocatealpha($img, 59, 130, 246, 60);
-        imagefilledellipse($img, (int)($logoX + $logoSize / 2), (int)($logoY + $logoSize / 2), $logoSize + 16, $logoSize + 16, $borderColor);
+        imagefilledellipse($img, (int) ($logoX + $logoSize / 2), (int) ($logoY + $logoSize / 2), $logoSize + 16, $logoSize + 16, $borderColor);
 
         // Resize and place logo
-        imagecopyresampled($img, $logo, (int)$logoX, (int)$logoY, 0, 0, $logoSize, $logoSize, 640, 640);
+        imagecopyresampled($img, $logo, (int) $logoX, (int) $logoY, 0, 0, $logoSize, $logoSize, 640, 640);
         imagedestroy($logo);
 
         $textX = $logoX + $logoSize + 50;
@@ -120,17 +119,17 @@ if (file_exists($logoPath)) {
 // Title: "WowPlanet"
 $titleSize = 64;
 $titleY = 220;
-imagettftext($img, $titleSize, 0, (int)$textX, (int)$titleY, $white, $fontBold, 'WowPlanet');
+imagettftext($img, $titleSize, 0, (int) $textX, (int) $titleY, $white, $fontBold, 'WowPlanet');
 
 // Subtitle
 $subtitleSize = 26;
 $subtitleY = $titleY + 55;
-imagettftext($img, $subtitleSize, 0, (int)$textX, (int)$subtitleY, $blue400, $fontBold, 'Suivi de progression World of Warcraft');
+imagettftext($img, $subtitleSize, 0, (int) $textX, (int) $subtitleY, $blue400, $fontBold, 'Suivi de progression World of Warcraft');
 
 // Description
 $descSize = 18;
 $descY = $subtitleY + 50;
-imagettftext($img, $descSize, 0, (int)$textX, (int)$descY, $slate400, $fontRegular, 'Quêtes · Hauts-faits · Montures · Mascottes');
+imagettftext($img, $descSize, 0, (int) $textX, (int) $descY, $slate400, $fontRegular, 'Quêtes · Hauts-faits · Montures · Mascottes');
 
 // Stats bar at bottom
 $barY = $height - 80;
@@ -142,10 +141,10 @@ $statX = 80;
 foreach ($stats as $i => $stat) {
     if ($i > 0) {
         // Separator dot
-        imagefilledellipse($img, (int)$statX, (int)($barY + 18), 5, 5, $slate500);
+        imagefilledellipse($img, (int) $statX, (int) ($barY + 18), 5, 5, $slate500);
         $statX += 20;
     }
-    imagettftext($img, 14, 0, (int)$statX, (int)($barY + 24), $slate300, $fontRegular, $stat);
+    imagettftext($img, 14, 0, (int) $statX, (int) ($barY + 24), $slate300, $fontRegular, $stat);
     $bbox = imagettfbbox(14, 0, $fontRegular, $stat);
     $statX += ($bbox[2] - $bbox[0]) + 30;
 }
@@ -158,4 +157,4 @@ imagepng($img, $outputPath, 5);
 imagedestroy($img);
 
 echo "OG image generated: {$outputPath}\n";
-echo "Size: " . round(filesize($outputPath) / 1024) . " KB\n";
+echo 'Size: '.round(filesize($outputPath) / 1024)." KB\n";

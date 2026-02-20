@@ -59,7 +59,7 @@ class UserCharacterService
             $classIds = range(1, 13);
             $token = $this->blizzardApiClient->getAccessToken();
             $baseUrl = sprintf('https://%s.api.blizzard.com', $this->region);
-            $namespace = 'static-' . $this->region;
+            $namespace = 'static-'.$this->region;
 
             /** @var array<string, \Illuminate\Http\Client\Response> $responses */
             $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($classIds, $baseUrl, $namespace, $token): void {
@@ -76,7 +76,7 @@ class UserCharacterService
 
             $icons = [];
             foreach ($responses as $key => $response) {
-                if (!$response->ok()) {
+                if (! $response->ok()) {
                     continue;
                 }
 
@@ -97,7 +97,7 @@ class UserCharacterService
     }
 
     /**
-     * @param array<string, mixed> $response
+     * @param  array<string, mixed>  $response
      * @return list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}>
      */
     private function parseCharacters(array $response): array
@@ -134,19 +134,19 @@ class UserCharacterService
             }
         }
 
-        usort($characters, fn(array $a, array $b): int => strcasecmp($a['name'], $b['name']));
+        usort($characters, fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
 
         return $characters;
     }
 
     /**
-     * @param list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}> $characters
+     * @param  list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}>  $characters
      * @return list<array{name: string, realm: string, realmSlug: string, level: int, classId: int, className: string, raceId: int, raceName: string, faction: string, avatarUrl: string}>
      */
     private function fetchAvatars(array $characters, string $token): array
     {
         $baseUrl = sprintf('https://%s.api.blizzard.com', $this->region);
-        $namespace = 'profile-' . $this->region;
+        $namespace = 'profile-'.$this->region;
 
         /** @var array<string, \Illuminate\Http\Client\Response> $responses */
         $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($characters, $baseUrl, $namespace, $token): void {
@@ -165,7 +165,7 @@ class UserCharacterService
 
         foreach ($characters as $i => &$char) {
             $key = (string) $i;
-            if (!isset($responses[$key])) {
+            if (! isset($responses[$key])) {
                 continue;
             }
 

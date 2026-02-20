@@ -11,17 +11,17 @@ class UserCharacterController extends Controller
 {
     public function __construct(
         private readonly UserCharacterService $userCharacterService,
-    ) {
-    }
+    ) {}
 
     public function index(): JsonResponse
     {
-        if (!$this->userCharacterService->isAuthenticated()) {
+        if (! $this->userCharacterService->isAuthenticated()) {
             return response()->json(['error' => 'Not authenticated'], 401);
         }
 
         try {
             $characters = $this->userCharacterService->getUserCharacters();
+
             return response()->json($characters);
         } catch (\Exception $exception) {
             return response()->json([

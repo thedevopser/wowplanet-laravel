@@ -21,7 +21,7 @@ class BlizzardServiceProvider extends ServiceProvider
 
         $this->app->singleton(
             ExpansionClassifier::class,
-            fn(Application $application): ExpansionClassifier => new ExpansionClassifier(
+            fn (Application $application): ExpansionClassifier => new ExpansionClassifier(
                 $application->make(ExpansionMapping::class),
             ),
         );

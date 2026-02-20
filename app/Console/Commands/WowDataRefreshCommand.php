@@ -23,8 +23,9 @@ class WowDataRefreshCommand extends Command
         /** @var string $type */
         $type = $this->option('type');
 
-        if (!$this->option('force') && !$this->confirm('This will DELETE all existing data and re-import from scratch. Continue?')) {
+        if (! $this->option('force') && ! $this->confirm('This will DELETE all existing data and re-import from scratch. Continue?')) {
             $this->info('Aborted.');
+
             return;
         }
 
@@ -33,20 +34,20 @@ class WowDataRefreshCommand extends Command
 
         if ($type === 'all' || $type === 'achievements') {
             $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
-            $this->info("Truncating wow_achievements...");
-            WowAchievement::truncate();
+            $this->info('Truncating wow_achievements...');
+            WowAchievement::query()->truncate();
             $blizzardBatchImporter->importAchievements($achievementExpansionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info("Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...");
+            $this->info('Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...');
             $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
             $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
-            $this->info("Truncating wow_quests...");
-            WowQuest::truncate();
+            $this->info('Truncating wow_quests...');
+            WowQuest::query()->truncate();
             $this->info(sprintf(
                 'Importing Quests (DB2 areas: %d, modern overrides: %d, faction quests: %d, faction zones: %d)...',
                 count($areaExpansionMap),
@@ -61,20 +62,20 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'mounts') {
-            $this->info("Truncating wow_mounts...");
-            WowMount::truncate();
+            $this->info('Truncating wow_mounts...');
+            WowMount::query()->truncate();
             $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
-            $this->info("Truncating wow_pets...");
-            WowPet::truncate();
+            $this->info('Truncating wow_pets...');
+            WowPet::query()->truncate();
             $blizzardBatchImporter->importPets();
             $this->newLine();
         }
 
-        $this->info("Refresh Complete!");
+        $this->info('Refresh Complete!');
         $this->displayStats();
     }
 
@@ -84,10 +85,10 @@ class WowDataRefreshCommand extends Command
         $this->table(
             ['Type', 'Count'],
             [
-                ['Quests', WowQuest::count()],
-                ['Achievements', WowAchievement::count()],
-                ['Mounts', WowMount::count()],
-                ['Pets', WowPet::count()],
+                ['Quests', WowQuest::query()->count()],
+                ['Achievements', WowAchievement::query()->count()],
+                ['Mounts', WowMount::query()->count()],
+                ['Pets', WowPet::query()->count()],
             ]
         );
     }

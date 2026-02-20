@@ -71,10 +71,10 @@ class AuthController extends Controller
         $response = Http::asForm()
             ->withBasicAuth($this->clientId, $this->clientSecret)
             ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
-            'grant_type' => 'authorization_code',
-            'code' => $code,
-            'redirect_uri' => $this->redirectUri,
-        ]);
+                'grant_type' => 'authorization_code',
+                'code' => $code,
+                'redirect_uri' => $this->redirectUri,
+            ]);
 
         if ($response->failed()) {
             return redirect('/')->with('error', 'Token exchange failed');

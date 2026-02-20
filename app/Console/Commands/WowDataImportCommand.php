@@ -37,7 +37,7 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info("Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...");
+            $this->info('Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...');
             $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
@@ -56,13 +56,13 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'all' || $type === 'mounts') {
-            $this->info("Importing Mounts...");
+            $this->info('Importing Mounts...');
             $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
-            $this->info("Importing Pets...");
+            $this->info('Importing Pets...');
             $blizzardBatchImporter->importPets();
             $this->newLine();
         }
@@ -79,30 +79,30 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'icons' || $type === 'mount-icons') {
-            $this->info("Fetching Mount Icons...");
+            $this->info('Fetching Mount Icons...');
             $blizzardBatchImporter->importMountIcons();
             $this->newLine();
         }
 
         if ($type === 'icons' || $type === 'pet-icons') {
-            $this->info("Fetching Pet Icons...");
+            $this->info('Fetching Pet Icons...');
             $blizzardBatchImporter->importPetIcons();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'decor') {
-            $this->info("Importing Decor...");
+            $this->info('Importing Decor...');
             $blizzardBatchImporter->importDecor();
             $this->newLine();
         }
 
         if ($type === 'icons' || $type === 'decor-icons') {
-            $this->info("Fetching Decor Icons...");
+            $this->info('Fetching Decor Icons...');
             $blizzardBatchImporter->importDecorIcons();
             $this->newLine();
         }
 
-        $this->info("Import Complete!");
+        $this->info('Import Complete!');
         $this->displayStats();
     }
 
@@ -112,13 +112,13 @@ class WowDataImportCommand extends Command
         $this->table(
             ['Type', 'Count'],
             [
-                ['Quests', WowQuest::count()],
-                ['Achievements', WowAchievement::count()],
-                ['Mounts', WowMount::count()],
-                ['Pets', WowPet::count()],
-                ['Professions', WowProfession::count()],
-                ['Recipes', WowRecipe::count()],
-                ['Decor', WowDecor::count()],
+                ['Quests', WowQuest::query()->count()],
+                ['Achievements', WowAchievement::query()->count()],
+                ['Mounts', WowMount::query()->count()],
+                ['Pets', WowPet::query()->count()],
+                ['Professions', WowProfession::query()->count()],
+                ['Recipes', WowRecipe::query()->count()],
+                ['Decor', WowDecor::query()->count()],
             ]
         );
     }

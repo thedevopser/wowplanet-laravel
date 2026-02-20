@@ -11,12 +11,12 @@ class ExpansionClassifier
 {
     public function __construct(
         private readonly ExpansionMapping $expansionMapping,
-    ) {
-    }
+    ) {}
 
     public function classifyZone(int $zoneId): ExpansionId
     {
         $expansionValue = $this->expansionMapping->getZoneMapping()[$zoneId] ?? ExpansionId::CLASSIC;
+
         return new ExpansionId($expansionValue);
     }
 
@@ -45,6 +45,7 @@ class ExpansionClassifier
     public function classifyAchievementCategory(int $categoryId): ExpansionId
     {
         $expansionValue = $this->expansionMapping->getAchievementCategoryMapping()[$categoryId] ?? ExpansionId::CLASSIC;
+
         return new ExpansionId($expansionValue);
     }
 }
