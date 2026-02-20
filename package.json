@@ -11,6 +11,7 @@
     "devDependencies": {
         "@pinia/testing": "^1.0.3",
         "@tailwindcss/vite": "^4.0.0",
+        "@vitest/coverage-v8": "^4.0.18",
         "@vue/test-utils": "^2.4.6",
         "axios": "^1.13.5",
         "concurrently": "^9.0.1",

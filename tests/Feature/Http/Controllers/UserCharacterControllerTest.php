@@ -57,3 +57,34 @@ test('class icons returns json structure', function (): void {
         ->assertOk()
         ->assertJsonCount(2);
 });
+
+test('index returns characters when authenticated', function (): void {
+    $mock = $this->mock(UserCharacterService::class);
+    $mock->shouldReceive('isAuthenticated')->once()->andReturn(true);
+    $mock->shouldReceive('getUserCharacters')->once()->andReturn([
+        ['name' => 'Thrall', 'realm' => 'Hyjal'],
+        ['name' => 'Jaina', 'realm' => 'Archimonde'],
+    ]);
+
+    $this->getJson('/api/user/characters')
+        ->assertOk()
+        ->assertJsonCount(2);
+});
+
+test('index returns 500 when service throws exception', function (): void {
+    $mock = $this->mock(UserCharacterService::class);
+    $mock->shouldReceive('isAuthenticated')->once()->andReturn(true);
+    $mock->shouldReceive('getUserCharacters')->once()->andThrow(new \Exception('API timeout'));
+
+    $this->getJson('/api/user/characters')
+        ->assertStatus(500)
+        ->assertJson(['error' => 'Failed to fetch characters']);
+});
+
+test('class icons returns 500 when service throws exception', function (): void {
+    $mock = $this->mock(UserCharacterService::class);
+    $mock->shouldReceive('getClassIcons')->once()->andThrow(new \Exception('Cache error'));
+
+    $this->getJson('/api/class-icons')
+        ->assertStatus(500);
+});

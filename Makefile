@@ -1,4 +1,4 @@
-.PHONY: help build up down install-hooks test lint lint-check static refactor quality build-prod push deploy prod-up prod-down
+.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod push deploy prod-up prod-down
 
 help: ## Display this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -53,6 +53,32 @@ test-js: ## Run Vitest (Vue component tests)
 	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run
 
 quality: lint static refactor test test-js ## Run all quality checks
+
+coverage-php: ## Run Pest with coverage (min 80%)
+	docker compose exec app vendor/bin/pest --coverage --min=80
+
+coverage-js: ## Run Vitest with coverage
+	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run --coverage
+
+coverage: ## Coverage PHP + JS avec rapports HTML
+	@echo ""
+	@echo "\033[1;36m══════════════════════════════════════════════════════════════\033[0m"
+	@echo "\033[1;36m  PHP Coverage (Pest + pcov) — min 80%\033[0m"
+	@echo "\033[1;36m══════════════════════════════════════════════════════════════\033[0m"
+	@echo ""
+	@docker compose exec app vendor/bin/pest --coverage --min=80 --coverage-html=coverage/php
+	@echo ""
+	@echo "\033[1;33m══════════════════════════════════════════════════════════════\033[0m"
+	@echo "\033[1;33m  JavaScript Coverage (Vitest + v8) — min 80%\033[0m"
+	@echo "\033[1;33m══════════════════════════════════════════════════════════════\033[0m"
+	@echo ""
+	@docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run --coverage
+	@echo ""
+	@echo "\033[1;32m══════════════════════════════════════════════════════════════\033[0m"
+	@echo "\033[1;32m  Rapports HTML :\033[0m"
+	@echo "\033[1;32m    PHP : coverage/php/index.html\033[0m"
+	@echo "\033[1;32m    JS  : coverage/js/index.html\033[0m"
+	@echo "\033[1;32m══════════════════════════════════════════════════════════════\033[0m"
 
 # =============================================================================
 # Production
