@@ -39,6 +39,10 @@
             font-family: 'Outfit', sans-serif;
         }
     </style>
+
+    @production
+    <script defer src="https://umami.wowplanet.fr/script.js" data-website-id="70643c68-1a19-40ef-9a24-dc944c9a6110"></script>
+    @endproduction
 </head>
 
 <body class="antialiased">
