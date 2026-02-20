@@ -11,12 +11,12 @@ beforeEach(function (): void {
 
     // Default: parser returns empty arrays
     $this->parserMock->shouldReceive('getAchievementExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('buildAreaExpansionMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getQuestExpansionMap')->andReturn([])->byDefault();
+    $this->parserMock->shouldReceive('getQuestZoneMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getQuestFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getZoneFactionMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getReputationFactionMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
+    $this->parserMock->shouldReceive('getSpellNameMap')->andReturn([])->byDefault();
 });
 
 test('command imports all types by default', function (): void {

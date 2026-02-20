@@ -4,43 +4,46 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
-use App\Infrastructure\Blizzard\ExpansionTierMatcher;
 use App\Models\WowAchievement;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class AchievementImporter
 {
-    use ImportsFromBlizzardApi;
+    private function info(string $message): void
+    {
+        if (app()->runningInConsole()) {
+            echo $message.PHP_EOL;
+        }
 
-    public function __construct(
-        private readonly BlizzardApiClient $blizzardApiClient,
-    ) {}
+        Log::info($message);
+    }
 
     /**
+     * Import achievements from DB2 CSV data combined with expansion mapping.
+     *
      * @param  array<int, int>  $addonExpansionMap  [achievement_id => expansion_id]
      */
     public function import(array $addonExpansionMap = []): void
     {
-        $this->info('Fetching achievement category tree...');
+        $this->info('Loading achievements from DB2 CSV data...');
 
-        $index = $this->fetchWithRetry('data/wow/achievement-category/index');
-        if (! $index) {
-            $this->info('ERROR: Could not fetch achievement category index.');
+        $categories = $this->parseCategoryCsv();
+        if ($categories === []) {
+            $this->info('ERROR: achievement_category.csv not found or empty.');
 
             return;
         }
 
-        /** @var list<array{id: int, name: string}> $rootCategories */
-        $rootCategories = $index['root_categories'] ?? [];
-        $this->info('Found '.count($rootCategories).' root categories.');
-        $this->info('Addon expansion map: '.count($addonExpansionMap).' achievement IDs.');
+        $achievements = $this->parseAchievementCsv($categories);
+        if ($achievements === []) {
+            $this->info('ERROR: achievement.csv not found or empty.');
 
-        $achievements = [];
-        foreach ($rootCategories as $rootCategory) {
-            $this->info('  Traversing: '.$rootCategory['name']);
-            $this->traverseCategory($rootCategory['id'], $rootCategory['name'], null, $achievements);
+            return;
         }
+
+        $this->info(sprintf('Found %d achievements in CSV.', count($achievements)));
+        $this->info(sprintf('Expansion map covers %d achievement IDs.', count($addonExpansionMap)));
 
         $this->saveAchievements($achievements, $addonExpansionMap);
     }
@@ -73,47 +76,134 @@ class AchievementImporter
             }
         }
 
-        $this->info(sprintf('Achievement import complete: %d total (%d mapped via addon, %d from category tree).', $count, $mapped, $unmapped));
+        $this->info(sprintf(
+            'Achievement import complete: %d total (%d mapped via DB2 expansion data, %d with category-tree fallback).',
+            $count,
+            $mapped,
+            $unmapped,
+        ));
     }
 
     /**
-     * @param  list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>  $achievements
+     * Walk up category hierarchy to find the root category name.
+     *
+     * @param  array<int, array{name: string, parent: int}>  $categories
      */
-    private function traverseCategory(
-        int $categoryId,
-        string $rootCategoryName,
-        ?int $currentExpansionId,
-        array &$achievements,
-    ): void {
-        $this->delayRequest();
+    private function getRootCategoryName(int $categoryId, array $categories): string
+    {
+        $visited = [];
+        $rootName = '';
 
-        $category = $this->fetchWithRetry('data/wow/achievement-category/'.$categoryId);
-        if (! $category) {
-            return;
+        while ($categoryId > 0 && ! isset($visited[$categoryId])) {
+            $visited[$categoryId] = true;
+
+            if (! isset($categories[$categoryId])) {
+                break;
+            }
+
+            $rootName = $categories[$categoryId]['name'];
+            $categoryId = $categories[$categoryId]['parent'];
         }
 
-        /** @var string $categoryName */
-        $categoryName = $category['name'] ?? '';
-        $matched = ExpansionTierMatcher::match($categoryName);
-        if ($matched !== null) {
-            $currentExpansionId = $matched;
+        return $rootName;
+    }
+
+    /**
+     * @return array<int, array{name: string, parent: int}>
+     */
+    private function parseCategoryCsv(): array
+    {
+        $csvPath = storage_path('app/blizzard/achievement_category.csv');
+        if (! File::exists($csvPath)) {
+            return [];
         }
 
-        /** @var list<array{id: int, name: string}> $categoryAchievements */
-        $categoryAchievements = $category['achievements'] ?? [];
-        foreach ($categoryAchievements as $categoryAchievement) {
-            $achievements[] = [
-                'id' => $categoryAchievement['id'],
-                'name_fr' => $categoryAchievement['name'],
-                'expansion_id' => $currentExpansionId ?? 0,
-                'category_name' => $rootCategoryName,
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $nameIdx = (int) array_search('Name_lang', $headers, true);
+        $parentIdx = (int) array_search('Parent', $headers, true);
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $map[(int) $row[$idIdx]] = [
+                'name' => (string) $row[$nameIdx],
+                'parent' => (int) $row[$parentIdx],
             ];
         }
 
-        /** @var list<array{id: int}> $subcategories */
-        $subcategories = $category['subcategories'] ?? [];
-        foreach ($subcategories as $subcategory) {
-            $this->traverseCategory($subcategory['id'], $rootCategoryName, $currentExpansionId, $achievements);
+        fclose($handle);
+
+        return $map;
+    }
+
+    /**
+     * @param  array<int, array{name: string, parent: int}>  $categories
+     * @return list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>
+     */
+    private function parseAchievementCsv(array $categories): array
+    {
+        $csvPath = storage_path('app/blizzard/achievement.csv');
+        if (! File::exists($csvPath)) {
+            return [];
         }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $titleIdx = (int) array_search('Title_lang', $headers, true);
+        $categoryIdx = (int) array_search('Category', $headers, true);
+
+        $achievements = [];
+        $skipped = 0;
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $title = trim($row[$titleIdx] ?? '');
+
+            // Skip achievements with empty names or debug/internal names
+            if ($title === '' || str_starts_with($title, '<Hidden>')) {
+                $skipped++;
+
+                continue;
+            }
+
+            $categoryId = (int) $row[$categoryIdx];
+            $rootCategory = $this->getRootCategoryName($categoryId, $categories);
+
+            $achievements[] = [
+                'id' => (int) $row[$idIdx],
+                'name_fr' => $title,
+                'expansion_id' => 0,
+                'category_name' => $rootCategory !== '' ? $rootCategory : 'Inconnu',
+            ];
+        }
+
+        fclose($handle);
+
+        if ($skipped > 0) {
+            $this->info(sprintf('  Skipped %d achievements with empty/hidden names.', $skipped));
+        }
+
+        return $achievements;
     }
 }

@@ -76,4 +76,45 @@ class Db2CsvLoader
 
         return $map;
     }
+
+    /**
+     * Load a CSV file and build a string map using header names for column lookup.
+     *
+     * @return array<int, string>
+     */
+    public static function loadStringMapByHeaders(string $filename, string $keyHeader, string $valueHeader): array
+    {
+        $path = storage_path('app/blizzard/'.$filename);
+        if (! file_exists($path)) {
+            return [];
+        }
+
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $keyIdx = (int) array_search($keyHeader, $headers, true);
+        $valueIdx = (int) array_search($valueHeader, $headers, true);
+
+        $map = [];
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $key = (int) $row[$keyIdx];
+            $value = trim($row[$valueIdx] ?? '');
+            if ($key > 0 && $value !== '') {
+                $map[$key] = $value;
+            }
+        }
+
+        fclose($handle);
+
+        return $map;
+    }
 }

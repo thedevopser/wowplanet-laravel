@@ -41,21 +41,18 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info('Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...');
-            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
-            $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
+            $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
+            $questZoneMap = $luaAddonParser->getQuestZoneMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
-            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
             $this->info('Truncating wow_quests...');
             WowQuest::query()->truncate();
             $this->info(sprintf(
-                'Importing Quests (DB2 areas: %d, modern overrides: %d, faction quests: %d, faction zones: %d)...',
-                count($areaExpansionMap),
-                count($modernQuestOverrides),
+                'Importing Quests from DB2 CSV (expansion: %d, zones: %d, factions: %d)...',
+                count($questExpansionMap),
+                count($questZoneMap),
                 count($questFactionMap),
-                count($zoneFactionMap),
             ));
-            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap);
+            $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap, $questFactionMap);
             $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
             $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
             $this->newLine();
@@ -69,9 +66,10 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'pets') {
+            $spellNameMap = $luaAddonParser->getSpellNameMap();
             $this->info('Truncating wow_pets...');
             WowPet::query()->truncate();
-            $blizzardBatchImporter->importPets();
+            $blizzardBatchImporter->importPets($spellNameMap);
             $this->newLine();
         }
 

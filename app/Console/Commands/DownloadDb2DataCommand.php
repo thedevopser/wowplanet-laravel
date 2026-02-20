@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Http;
+
+class DownloadDb2DataCommand extends Command
+{
+    protected $signature = 'app:download-db2 {--table= : Download a specific table only}';
+
+    protected $description = 'Download DB2 CSV data from wago.tools for WoW data import';
+
+    /**
+     * DB2 tables to download: [wago_table_name => [local_filename, locale]].
+     *
+     * @var array<string, array{0: string, 1: string|null}>
+     */
+    private const TABLES = [
+        'AreaTable' => ['area_table.csv', 'frFR'],
+        'Map' => ['map.csv', null],
+        'ContentTuning' => ['content_tuning.csv', null],
+        'QuestV2CliTask' => ['quest_v2_cli_task.csv', 'frFR'],
+        'SkillLineAbility' => ['skill_line_ability.csv', null],
+        'Faction' => ['faction.csv', 'frFR'],
+        'Mount' => ['mount.csv', 'frFR'],
+        'BattlePetSpecies' => ['battle_pet_species.csv', 'frFR'],
+        'Achievement' => ['achievement.csv', 'frFR'],
+        'Achievement_Category' => ['achievement_category.csv', 'frFR'],
+        'CriteriaTree' => ['criteria_tree.csv', 'frFR'],
+        'QuestPOIBlob' => ['quest_poi_blob.csv', null],
+        'UiMap' => ['ui_map.csv', 'frFR'],
+        'SpellName' => ['spell_name.csv', 'frFR'],
+        'SkillLine' => ['skill_line.csv', 'frFR'],
+        'TradeSkillCategory' => ['trade_skill_category.csv', 'frFR'],
+    ];
+
+    public function handle(): int
+    {
+        /** @var string|null $singleTable */
+        $singleTable = $this->option('table');
+
+        $tables = self::TABLES;
+        if ($singleTable !== null) {
+            if (! isset($tables[$singleTable])) {
+                $this->error(sprintf('Unknown table "%s". Available: %s', $singleTable, implode(', ', array_keys($tables))));
+
+                return self::FAILURE;
+            }
+
+            $tables = [$singleTable => $tables[$singleTable]];
+        }
+
+        $this->info(sprintf('Downloading %d DB2 table(s) from wago.tools...', count($tables)));
+        $this->newLine();
+
+        $success = 0;
+        $failed = 0;
+
+        foreach ($tables as $wagoTable => [$localFilename, $locale]) {
+            $url = sprintf('https://wago.tools/db2/%s/csv', $wagoTable);
+            if ($locale !== null) {
+                $url .= '?locale='.$locale;
+            }
+
+            $this->info(sprintf('  Downloading %s → %s...', $wagoTable, $localFilename));
+
+            $response = Http::timeout(120)->get($url);
+
+            if (! $response->successful()) {
+                $this->error(sprintf('    FAILED (HTTP %d)', $response->status()));
+                $failed++;
+
+                continue;
+            }
+
+            $content = $response->body();
+            $lines = substr_count($content, "\n");
+
+            $dir = storage_path('app/blizzard');
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+
+            file_put_contents($dir.'/'.$localFilename, $content);
+            $this->info(sprintf('    OK (%d lines, %s)', $lines, $this->formatBytes(strlen($content))));
+            $success++;
+        }
+
+        $this->newLine();
+        $this->info(sprintf('Done: %d succeeded, %d failed.', $success, $failed));
+
+        return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes.' B';
+        }
+
+        if ($bytes < 1048576) {
+            return round($bytes / 1024, 1).' KB';
+        }
+
+        return round($bytes / 1048576, 1).' MB';
+    }
+}

@@ -7,6 +7,7 @@ namespace App\Infrastructure\Blizzard\Importers;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Models\WowQuest;
+use Illuminate\Support\Facades\File;
 
 class QuestImporter
 {
@@ -17,151 +18,118 @@ class QuestImporter
     ) {}
 
     /**
-     * @param  array<int, int>  $areaExpansionMap
-     * @param  array<int, int>  $modernQuestOverrides
-     * @param  array<int, string>  $questFactionMap
-     * @param  array<int, string>  $zoneFactionMap
+     * @param  array<int, int>  $questExpansionMap  [questId => expansionId]
+     * @param  array<int, string>  $questZoneMap  [questId => zoneName]
+     * @param  array<int, string>  $questFactionMap  [questId => 'Alliance'|'Horde']
      */
     public function import(
-        array $areaExpansionMap,
-        array $modernQuestOverrides = [],
+        array $questExpansionMap,
+        array $questZoneMap = [],
         array $questFactionMap = [],
-        array $zoneFactionMap = [],
     ): void {
-        $this->logImportStart($areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap);
+        $this->info('Loading quests from DB2 CSV data...');
+        $this->info(sprintf('  Expansion map: %d entries', count($questExpansionMap)));
+        $this->info(sprintf('  Zone map: %d entries', count($questZoneMap)));
+        $this->info(sprintf('  Faction map: %d entries', count($questFactionMap)));
 
-        $index = $this->fetchWithRetry('data/wow/quest/area/index');
-        if (! $index) {
-            $this->info('ERROR: Could not fetch quest area index.');
+        $quests = $this->parseQuestCsv();
+        if ($quests === []) {
+            $this->info('ERROR: quest_v2_cli_task.csv not found or empty.');
 
             return;
         }
 
-        /** @var list<array{id: int, name: string}> $areas */
-        $areas = $index['areas'] ?? [];
-        $this->info(sprintf('Found %d quest areas to process.', count($areas)));
+        $this->info(sprintf('Found %d quests in CSV.', count($quests)));
 
-        $stats = ['imported' => 0, 'overrides' => 0, 'db2' => 0, 'unmapped' => []];
-
-        foreach ($areas as $i => $area) {
-            $this->importArea($area, $areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap, $stats);
-            $this->logAreaProgress($i, count($areas), $stats['imported']);
-        }
-
-        $this->logImportComplete($stats);
-    }
-
-    /**
-     * @param  array{id: int, name: string}  $area
-     * @param  array<int, int>  $areaExpansionMap
-     * @param  array<int, int>  $modernQuestOverrides
-     * @param  array<int, string>  $questFactionMap
-     * @param  array<int, string>  $zoneFactionMap
-     * @param  array{imported: int, overrides: int, db2: int, unmapped: array<string, int>}  $stats
-     */
-    private function importArea(
-        array $area,
-        array $areaExpansionMap,
-        array $modernQuestOverrides,
-        array $questFactionMap,
-        array $zoneFactionMap,
-        array &$stats,
-    ): void {
-        $this->delayRequest();
-
-        $areaId = $area['id'];
-        $areaDetail = $this->fetchWithRetry('data/wow/quest/area/'.$areaId);
-        if (! $areaDetail) {
-            return;
-        }
-
-        $areaName = $this->resolveAreaName($areaDetail, $area['name']);
-        /** @var list<array{id: int, name: string|null}> $quests */
-        $quests = $areaDetail['quests'] ?? [];
-        if (empty($quests)) {
-            return;
-        }
-
-        $areaExpansionId = $areaExpansionMap[$areaId] ?? null;
-        if ($areaExpansionId === null) {
-            $stats['unmapped'][$areaName] ??= count($quests);
-            $areaExpansionId = 0;
-        }
+        $count = 0;
+        $mapped = 0;
+        $withZone = 0;
 
         foreach ($quests as $quest) {
-            $this->importQuest($quest, $areaId, $areaName, $areaExpansionId, $modernQuestOverrides, $questFactionMap, $zoneFactionMap, $stats);
+            $questId = $quest['id'];
+            $expansionId = $questExpansionMap[$questId] ?? 0;
+            $zoneName = $questZoneMap[$questId] ?? null;
+            $faction = $questFactionMap[$questId] ?? null;
+
+            if ($expansionId > 0) {
+                $mapped++;
+            }
+
+            if ($zoneName !== null) {
+                $withZone++;
+            }
+
+            WowQuest::query()->updateOrCreate(['id' => $questId], [
+                'name_fr' => $quest['name_fr'],
+                'expansion_id' => $expansionId,
+                'zone_name' => $zoneName,
+                'faction' => $faction,
+                'is_active' => true,
+            ]);
+            $count++;
+            if ($count % 2000 === 0) {
+                $this->info(sprintf('  Saved %d...', $count));
+            }
         }
+
+        $this->info(sprintf(
+            'Quest import complete: %d total (%d with expansion, %d with zone, %d without zone).',
+            $count,
+            $mapped,
+            $withZone,
+            $count - $withZone,
+        ));
     }
 
     /**
-     * @param  array{id: int, name: string|null}  $quest
-     * @param  array<int, int>  $modernQuestOverrides
-     * @param  array<int, string>  $questFactionMap
-     * @param  array<int, string>  $zoneFactionMap
-     * @param  array{imported: int, overrides: int, db2: int, unmapped: array<string, int>}  $stats
+     * @return list<array{id: int, name_fr: string}>
      */
-    private function importQuest(
-        array $quest,
-        int $areaId,
-        string $areaName,
-        int $areaExpansionId,
-        array $modernQuestOverrides,
-        array $questFactionMap,
-        array $zoneFactionMap,
-        array &$stats,
-    ): void {
-        $questName = $quest['name'] ?? '';
-        if ($questName === '') {
-            return;
-        }
-
-        $questId = $quest['id'];
-        $expansionId = $this->resolveQuestExpansion($questId, $areaExpansionId, $modernQuestOverrides, $stats);
-
-        WowQuest::query()->updateOrCreate(['id' => $questId], [
-            'name_fr' => $questName,
-            'expansion_id' => $expansionId,
-            'zone_name' => $areaName,
-            'faction' => $questFactionMap[$questId] ?? $zoneFactionMap[$areaId] ?? null,
-            'is_active' => true,
-        ]);
-        $stats['imported']++;
-    }
-
-    /**
-     * @param  array<int, int>  $modernQuestOverrides
-     * @param  array{imported: int, overrides: int, db2: int, unmapped: array<string, int>}  $stats
-     */
-    private function resolveQuestExpansion(int $questId, int $areaExpansionId, array $modernQuestOverrides, array &$stats): int
+    private function parseQuestCsv(): array
     {
-        $hasModernOverride = $areaExpansionId >= 10 && isset($modernQuestOverrides[$questId]);
-        $ctExpansion = $hasModernOverride ? $modernQuestOverrides[$questId] : $areaExpansionId;
-        $isOverridden = $hasModernOverride && $ctExpansion !== $areaExpansionId;
-
-        if ($isOverridden) {
-            $stats['overrides']++;
-
-            return $ctExpansion;
+        $csvPath = storage_path('app/blizzard/quest_v2_cli_task.csv');
+        if (! File::exists($csvPath)) {
+            return [];
         }
 
-        $stats['db2']++;
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
 
-        return $areaExpansionId;
-    }
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
 
-    /**
-     * @param  array<string, mixed>  $areaDetail
-     */
-    private function resolveAreaName(array $areaDetail, string $fallbackName): string
-    {
-        /** @var string|array{name?: string}|null $areaField */
-        $areaField = $areaDetail['area'] ?? null;
+            return [];
+        }
 
-        return match (true) {
-            is_string($areaField) => $areaField,
-            is_array($areaField) => (string) ($areaField['name'] ?? $fallbackName),
-            default => $fallbackName,
-        };
+        $idIdx = (int) array_search('ID', $headers, true);
+        $nameIdx = (int) array_search('QuestTitle_lang', $headers, true);
+
+        $quests = [];
+        $skipped = 0;
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $name = trim($row[$nameIdx] ?? '');
+            if ($name === '') {
+                $skipped++;
+
+                continue;
+            }
+
+            $quests[] = [
+                'id' => (int) $row[$idIdx],
+                'name_fr' => $name,
+            ];
+        }
+
+        fclose($handle);
+
+        if ($skipped > 0) {
+            $this->info(sprintf('  Skipped %d quests with empty names.', $skipped));
+        }
+
+        return $quests;
     }
 
     /**
@@ -305,44 +273,5 @@ class QuestImporter
         }
 
         return $pairs;
-    }
-
-    /**
-     * @param  array<int, int>  $areaExpansionMap
-     * @param  array<int, int>  $modernQuestOverrides
-     * @param  array<int, string>  $questFactionMap
-     * @param  array<int, string>  $zoneFactionMap
-     */
-    private function logImportStart(array $areaExpansionMap, array $modernQuestOverrides, array $questFactionMap, array $zoneFactionMap): void
-    {
-        $this->info('Fetching quest area index...');
-        $this->info('  DB2 area→expansion entries: '.count($areaExpansionMap));
-        $this->info('  Modern per-quest overrides: '.count($modernQuestOverrides).' entries (ContentTuning ≥ 10)');
-        $this->info('  Quest faction map: '.count($questFactionMap).' faction-specific quests');
-        $this->info('  Zone faction map: '.count($zoneFactionMap).' faction-specific zones');
-    }
-
-    private function logAreaProgress(int $index, int $totalAreas, int $totalImported): void
-    {
-        if (($index + 1) % 50 === 0 || ($index + 1) === $totalAreas) {
-            $this->info('  Areas: '.($index + 1).sprintf('/%d | Quests: %d', $totalAreas, $totalImported));
-        }
-    }
-
-    /**
-     * @param  array{imported: int, overrides: int, db2: int, unmapped: array<string, int>}  $stats
-     */
-    private function logImportComplete(array $stats): void
-    {
-        $this->info(sprintf('  Mapping: %d DB2-based | %d modern quest overrides (ContentTuning)', $stats['db2'], $stats['overrides']));
-
-        if ($stats['unmapped'] !== []) {
-            $this->info('  WARNING: Areas not in DB2 AreaTable (defaulted to Classic): '.count($stats['unmapped']));
-            foreach ($stats['unmapped'] as $zone => $count) {
-                $this->info(sprintf('    - %s (%d quests)', $zone, $count));
-            }
-        }
-
-        $this->info(sprintf('Quest import complete: %d quests.', $stats['imported']));
     }
 }

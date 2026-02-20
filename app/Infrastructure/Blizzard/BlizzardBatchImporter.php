@@ -31,18 +31,16 @@ class BlizzardBatchImporter
     }
 
     /**
-     * @param  array<int, int>  $areaExpansionMap
-     * @param  array<int, int>  $modernQuestOverrides
+     * @param  array<int, int>  $questExpansionMap
+     * @param  array<int, string>  $questZoneMap
      * @param  array<int, string>  $questFactionMap
-     * @param  array<int, string>  $zoneFactionMap
      */
     public function importQuests(
-        array $areaExpansionMap,
-        array $modernQuestOverrides = [],
+        array $questExpansionMap,
+        array $questZoneMap = [],
         array $questFactionMap = [],
-        array $zoneFactionMap = [],
     ): void {
-        $this->questImporter->import($areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap);
+        $this->questImporter->import($questExpansionMap, $questZoneMap, $questFactionMap);
     }
 
     public function importMounts(): void
@@ -50,9 +48,12 @@ class BlizzardBatchImporter
         $this->mountImporter->import();
     }
 
-    public function importPets(): void
+    /**
+     * @param  array<int, string>  $spellNameMap
+     */
+    public function importPets(array $spellNameMap = []): void
     {
-        $this->petImporter->import();
+        $this->petImporter->import($spellNameMap);
     }
 
     public function importMountIcons(): void
@@ -89,10 +90,11 @@ class BlizzardBatchImporter
     }
 
     /**
+     * @param  array<int, string>  $spellNameMap
      * @param  array<int, string>  $recipeFactionMap
      */
-    public function importProfessions(array $recipeFactionMap = []): void
+    public function importProfessions(array $spellNameMap = [], array $recipeFactionMap = []): void
     {
-        $this->professionImporter->import($recipeFactionMap);
+        $this->professionImporter->import($spellNameMap, $recipeFactionMap);
     }
 }

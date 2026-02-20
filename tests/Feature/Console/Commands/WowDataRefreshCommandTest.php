@@ -10,11 +10,11 @@ beforeEach(function (): void {
     $this->parserMock = $this->mock(LuaAddonParser::class);
 
     $this->parserMock->shouldReceive('getAchievementExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('buildAreaExpansionMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getQuestExpansionMap')->andReturn([])->byDefault();
+    $this->parserMock->shouldReceive('getQuestZoneMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getQuestFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getZoneFactionMap')->andReturn([])->byDefault();
     $this->parserMock->shouldReceive('getReputationFactionMap')->andReturn([])->byDefault();
+    $this->parserMock->shouldReceive('getSpellNameMap')->andReturn([])->byDefault();
 });
 
 test('command aborts when user declines confirmation', function (): void {

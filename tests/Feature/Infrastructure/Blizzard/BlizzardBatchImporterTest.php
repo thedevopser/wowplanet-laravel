@@ -15,177 +15,126 @@ use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Sleep::fake();
+
+    $dir = storage_path('app/blizzard');
+    if (! is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    // Back up real files to avoid interference with test data
+    $this->testFiles = [
+        'mount.csv', 'battle_pet_species.csv', 'skill_line_ability.csv',
+        'achievement.csv', 'achievement_category.csv',
+        'quest_v2_cli_task.csv', 'skill_line.csv', 'trade_skill_category.csv',
+    ];
+    $this->backups = [];
+    foreach ($this->testFiles as $file) {
+        $path = $dir.'/'.$file;
+        if (file_exists($path)) {
+            $backup = $path.'.testbak';
+            rename($path, $backup);
+            $this->backups[$path] = $backup;
+        }
+    }
+});
+
+afterEach(function (): void {
+    foreach ($this->testFiles as $file) {
+        $path = storage_path('app/blizzard/'.$file);
+        if (file_exists($path)) {
+            unlink($path);
+        }
+    }
+
+    // Restore real files
+    foreach ($this->backups as $path => $backup) {
+        if (file_exists($backup)) {
+            rename($backup, $path);
+        }
+    }
 });
 
 // ─── Quest Import ───────────────────────────────────────────
 
-test('importQuests creates quests with correct expansion from DB2 area map', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+test('importQuests creates quests from CSV with expansion and zone maps', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [
-                ['id' => 1, 'name' => 'Durotar'],
-                ['id' => 2, 'name' => 'Nagrand'],
-            ],
-        ]);
+    bbiWriteQuestCsv([
+        ['100', 'Quête de Durotar'],
+        ['101', 'Quête de Nagrand'],
+        ['200', 'Quête sans zone'],
+    ]);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/1', \Mockery::any())
-        ->andReturn([
-            'area' => 'Durotar',
-            'quests' => [
-                ['id' => 100, 'name' => 'Quête de Durotar'],
-                ['id' => 101, 'name' => 'Seconde quête'],
-            ],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/2', \Mockery::any())
-        ->andReturn([
-            'area' => ['name' => 'Nagrand'],
-            'quests' => [
-                ['id' => 200, 'name' => 'Quête de Nagrand'],
-            ],
-        ]);
-
-    $areaExpansionMap = [1 => 0, 2 => 1]; // Durotar=Classic, Nagrand=TBC
+    $questExpansionMap = [100 => 0, 101 => 1];
+    $questZoneMap = [100 => 'Durotar', 101 => 'Nagrand'];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($areaExpansionMap);
+    $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap);
 
     expect(WowQuest::query()->count())->toBe(3);
     expect(WowQuest::query()->find(100)->expansion_id)->toBe(0);
     expect(WowQuest::query()->find(100)->zone_name)->toBe('Durotar');
-    expect(WowQuest::query()->find(200)->expansion_id)->toBe(1);
-    expect(WowQuest::query()->find(200)->zone_name)->toBe('Nagrand');
+    expect(WowQuest::query()->find(101)->expansion_id)->toBe(1);
+    expect(WowQuest::query()->find(101)->zone_name)->toBe('Nagrand');
+    expect(WowQuest::query()->find(200)->expansion_id)->toBe(0);
+    expect(WowQuest::query()->find(200)->zone_name)->toBeNull();
 });
 
-test('importQuests applies modern quest overrides for expansion >= 10', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+test('importQuests uses expansion map for quest expansion', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [['id' => 10, 'name' => 'Île de Dorn']],
-        ]);
+    bbiWriteQuestCsv([
+        ['500', 'Quête TWW'],
+        ['501', 'Quête Midnight'],
+    ]);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/10', \Mockery::any())
-        ->andReturn([
-            'area' => 'Île de Dorn',
-            'quests' => [
-                ['id' => 500, 'name' => 'Quête TWW'],
-                ['id' => 501, 'name' => 'Quête Midnight'],
-            ],
-        ]);
-
-    $areaExpansionMap = [10 => 10]; // Île de Dorn = TWW
-    $modernQuestOverrides = [501 => 11]; // Quest 501 is actually Midnight
+    $questExpansionMap = [500 => 10, 501 => 11];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides);
+    $blizzardBatchImporter->importQuests($questExpansionMap);
 
-    expect(WowQuest::query()->find(500)->expansion_id)->toBe(10); // TWW from area
-    expect(WowQuest::query()->find(501)->expansion_id)->toBe(11); // Midnight from override
+    expect(WowQuest::query()->find(500)->expansion_id)->toBe(10);
+    expect(WowQuest::query()->find(501)->expansion_id)->toBe(11);
 });
 
 test('importQuests assigns faction from quest faction map', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+    $this->mock(BlizzardApiClient::class);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [['id' => 1, 'name' => 'Durotar']],
-        ]);
+    bbiWriteQuestCsv([
+        ['100', 'Quête Alliance'],
+        ['101', 'Quête neutre'],
+    ]);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/1', \Mockery::any())
-        ->andReturn([
-            'area' => 'Durotar',
-            'quests' => [
-                ['id' => 100, 'name' => 'Quête Alliance'],
-                ['id' => 101, 'name' => 'Quête neutre'],
-            ],
-        ]);
-
-    $areaExpansionMap = [1 => 0];
     $questFactionMap = [100 => 'Alliance'];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($areaExpansionMap, [], $questFactionMap);
+    $blizzardBatchImporter->importQuests([], [], $questFactionMap);
 
     expect(WowQuest::query()->find(100)->faction)->toBe('Alliance');
     expect(WowQuest::query()->find(101)->faction)->toBeNull();
 });
 
-test('importQuests assigns faction from zone faction map as fallback', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [['id' => 1, 'name' => 'Durotar']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/1', \Mockery::any())
-        ->andReturn([
-            'area' => 'Durotar',
-            'quests' => [['id' => 100, 'name' => 'Quête Horde']],
-        ]);
-
-    $areaExpansionMap = [1 => 0];
-    $zoneFactionMap = [1 => 'Horde'];
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($areaExpansionMap, [], [], $zoneFactionMap);
-
-    expect(WowQuest::query()->find(100)->faction)->toBe('Horde');
-});
-
 test('importQuests skips quests with empty names', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+    $this->mock(BlizzardApiClient::class);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [['id' => 1, 'name' => 'Zone']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/1', \Mockery::any())
-        ->andReturn([
-            'area' => 'Zone',
-            'quests' => [
-                ['id' => 100, 'name' => ''],
-                ['id' => 101, 'name' => 'Quête valide'],
-            ],
-        ]);
+    bbiWriteQuestCsv([
+        ['100', ''],
+        ['101', 'Quête valide'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests([1 => 0]);
+    $blizzardBatchImporter->importQuests([]);
 
     expect(WowQuest::query()->count())->toBe(1);
     expect(WowQuest::query()->first()->id)->toBe(101);
 });
 
-test('importQuests defaults unmapped areas to expansion 0', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+test('importQuests defaults unmapped quests to expansion 0', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andReturn([
-            'areas' => [['id' => 999, 'name' => 'Zone inconnue']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/999', \Mockery::any())
-        ->andReturn([
-            'area' => 'Zone inconnue',
-            'quests' => [['id' => 100, 'name' => 'Quête orpheline']],
-        ]);
+    bbiWriteQuestCsv([
+        ['100', 'Quête orpheline'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importQuests([]); // empty map
@@ -193,29 +142,26 @@ test('importQuests defaults unmapped areas to expansion 0', function (): void {
     expect(WowQuest::query()->find(100)->expansion_id)->toBe(0);
 });
 
+test('importQuests handles missing CSV gracefully', function (): void {
+    $this->mock(BlizzardApiClient::class);
+
+    // No CSV file written
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importQuests([]);
+
+    expect(WowQuest::query()->count())->toBe(0);
+});
+
 // ─── Achievement Import ─────────────────────────────────────
 
-test('importAchievements creates achievements from category tree', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/index', \Mockery::any())
-        ->andReturn([
-            'root_categories' => [
-                ['id' => 1, 'name' => 'Général'],
-            ],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/1', \Mockery::any())
-        ->andReturn([
-            'name' => 'Général',
-            'achievements' => [
-                ['id' => 10, 'name' => 'Bienvenue !'],
-                ['id' => 11, 'name' => 'Niveau 10'],
-            ],
-            'subcategories' => [],
-        ]);
+test('importAchievements creates achievements from CSV data', function (): void {
+    bbiWriteAchievementCategoryCsv([
+        ['1', 'Général', '-1'],
+    ]);
+    bbiWriteAchievementCsv([
+        ['10', 'Bienvenue !', '1'],
+        ['11', 'Niveau 10', '1'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements();
@@ -223,97 +169,53 @@ test('importAchievements creates achievements from category tree', function (): 
     expect(WowAchievement::query()->count())->toBe(2);
     expect(WowAchievement::query()->find(10)->name_fr)->toBe('Bienvenue !');
     expect(WowAchievement::query()->find(10)->category_name)->toBe('Général');
-    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(0); // default when no expansion match
+    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(0);
 });
 
-test('importAchievements uses addon expansion map when available', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
+test('importAchievements uses expansion map when available', function (): void {
+    bbiWriteAchievementCategoryCsv([
+        ['1', 'Général', '-1'],
+    ]);
+    bbiWriteAchievementCsv([
+        ['10', 'Achievement X', '1'],
+        ['11', 'Achievement Y', '1'],
+    ]);
 
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/index', \Mockery::any())
-        ->andReturn([
-            'root_categories' => [['id' => 1, 'name' => 'Général']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/1', \Mockery::any())
-        ->andReturn([
-            'name' => 'Général',
-            'achievements' => [
-                ['id' => 10, 'name' => 'Achievement X'],
-                ['id' => 11, 'name' => 'Achievement Y'],
-            ],
-            'subcategories' => [],
-        ]);
-
-    $addonMap = [10 => 7]; // Achievement 10 mapped to BfA via addon
+    $addonMap = [10 => 7]; // Achievement 10 mapped to BfA
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements($addonMap);
 
-    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(7); // From addon
-    expect(WowAchievement::query()->find(11)->expansion_id)->toBe(0); // Default (no match in category)
+    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(7); // From map
+    expect(WowAchievement::query()->find(11)->expansion_id)->toBe(0); // Default
 });
 
-test('importAchievements traverses subcategories recursively', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/index', \Mockery::any())
-        ->andReturn([
-            'root_categories' => [['id' => 1, 'name' => 'Quêtes']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/1', \Mockery::any())
-        ->andReturn([
-            'name' => 'Quêtes',
-            'achievements' => [],
-            'subcategories' => [['id' => 2]],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/2', \Mockery::any())
-        ->andReturn([
-            'name' => 'Norfendre',
-            'achievements' => [
-                ['id' => 20, 'name' => 'Quêtes du Norfendre'],
-            ],
-            'subcategories' => [],
-        ]);
+test('importAchievements resolves root category from hierarchy', function (): void {
+    bbiWriteAchievementCategoryCsv([
+        ['1', 'Quêtes', '-1'],
+        ['2', 'Norfendre', '1'],
+    ]);
+    bbiWriteAchievementCsv([
+        ['20', 'Quêtes du Norfendre', '2'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements();
 
     expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(20)->expansion_id)->toBe(2); // Norfendre = WotLK
-    expect(WowAchievement::query()->find(20)->category_name)->toBe('Quêtes'); // root category name
+    expect(WowAchievement::query()->find(20)->category_name)->toBe('Quêtes');
 });
 
 // ─── Mount Import ───────────────────────────────────────────
 
-test('importMounts creates mounts from index', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/mount/index', \Mockery::any())
-        ->andReturn([
-            'mounts' => [
-                ['id' => 1, 'name' => 'Loup noir'],
-                ['id' => 2, 'name' => 'Destrier squelette'],
-                ['id' => 3, 'name' => ''], // empty name, should be skipped
-            ],
-        ]);
-
-    // Create a mock mount.csv for spell map
-    $csvDir = storage_path('app/blizzard');
-    if (! is_dir($csvDir)) {
-        mkdir($csvDir, 0755, true);
-    }
+test('importMounts creates mounts from CSV', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
     file_put_contents(storage_path('app/blizzard/mount.csv'), implode("\n", [
         'Name_lang,SourceText_lang,Description_lang,ID,MountTypeID,Flags,SourceTypeEnum,SourceSpellID',
-        ',,,"1",0,0,0,"12345"',
+        '"Loup noir",,,"1",0,0,0,"12345"',
+        '"Destrier squelette",,,"2",0,0,0,"0"',
+        ',,,"3",0,0,0,"0"',
     ]));
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -327,34 +229,28 @@ test('importMounts creates mounts from index', function (): void {
 
 // ─── Pet Import ─────────────────────────────────────────────
 
-test('importPets creates pets from index', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/pet/index', \Mockery::any())
-        ->andReturn([
-            'pets' => [
-                ['id' => 1, 'name' => 'Dragonnet'],
-                ['id' => 2, 'name' => ''], // should be skipped
-            ],
-        ]);
-
-    $csvDir = storage_path('app/blizzard');
-    if (! is_dir($csvDir)) {
-        mkdir($csvDir, 0755, true);
-    }
+test('importPets creates pets from CSV with spell name map', function (): void {
+    $this->mock(BlizzardApiClient::class);
 
     file_put_contents(storage_path('app/blizzard/battle_pet_species.csv'), implode("\n", [
         'Description_lang,SourceText_lang,ID,CreatureID,SummonSpellID,IconFileDataID',
-        ',,"1","9999",0,0',
+        ',,"1","9999","50001",0',
+        ',,"2","8888","50002",0',
+        ',,"3","7777","0",0',
     ]));
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importPets();
+    $spellNameMap = [
+        50001 => 'Invocation : Dragonnet',
+        50002 => 'Invoquer Petit chat',
+    ];
 
-    expect(WowPet::query()->count())->toBe(1);
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importPets($spellNameMap);
+
+    expect(WowPet::query()->count())->toBe(2);
     expect(WowPet::query()->find(1)->name_fr)->toBe('Dragonnet');
     expect(WowPet::query()->find(1)->creature_id)->toBe(9999);
+    expect(WowPet::query()->find(2)->name_fr)->toBe('Petit chat');
 });
 
 // ─── Decor Import ───────────────────────────────────────────
@@ -381,55 +277,26 @@ test('importDecor creates decor items from index', function (): void {
 
 // ─── Profession Import ──────────────────────────────────────
 
-test('importProfessions creates professions and recipes', function (): void {
-    // Pre-create profession (recipes have FK constraint on profession_id)
-    WowProfession::factory()->create(['id' => 171, 'name_fr' => 'Alchimie old']);
+test('importProfessions creates professions and recipes from CSV', function (): void {
+    bbiWriteSkillLineCsv([
+        ['171', 'Alchimie', '11', '0'],
+        ['2499', 'Alchimie de Khaz Algar', '11', '171'],
+    ]);
+    bbiWriteSkillLineAbilityCsv([
+        ['5001', '2499', '80001', '100'],
+        ['5002', '2499', '80002', '0'],
+    ]);
+    bbiWriteTradeSkillCategoryCsv([
+        ['100', 'Potions'],
+    ]);
 
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/index', \Mockery::any())
-        ->andReturn([
-            'professions' => [
-                ['id' => 171, 'name' => 'Alchimie'],
-            ],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/171', \Mockery::any())
-        ->andReturn([
-            'skill_tiers' => [
-                ['id' => 2499, 'name' => 'Alchimie de Khaz Algar'],
-            ],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/171/skill-tier/2499', \Mockery::any())
-        ->andReturn([
-            'maximum_skill_level' => 100,
-            'categories' => [
-                [
-                    'name' => 'Potions',
-                    'recipes' => [
-                        ['id' => 5001, 'name' => 'Potion de vie'],
-                        ['id' => 5002, 'name' => 'Potion de mana'],
-                    ],
-                ],
-            ],
-        ]);
-
-    $csvDir = storage_path('app/blizzard');
-    if (! is_dir($csvDir)) {
-        mkdir($csvDir, 0755, true);
-    }
-
-    file_put_contents(storage_path('app/blizzard/skill_line_ability.csv'), implode("\n", [
-        'RaceMask,AbilityVerb_lang,AbilityAllVerb_lang,ID,SkillLine,Spell',
-        '0,,,"5001",171,"80001"',
-    ]));
+    $spellNameMap = [
+        80001 => 'Potion de vie',
+        80002 => 'Potion de mana',
+    ];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importProfessions();
+    $blizzardBatchImporter->importProfessions($spellNameMap);
 
     expect(WowProfession::query()->count())->toBe(1);
     expect(WowProfession::query()->find(171)->name_fr)->toBe('Alchimie');
@@ -443,45 +310,20 @@ test('importProfessions creates professions and recipes', function (): void {
 });
 
 test('importProfessions assigns recipe factions from faction map', function (): void {
-    WowProfession::factory()->create(['id' => 171, 'name_fr' => 'Alchimie']);
+    bbiWriteSkillLineCsv([
+        ['171', 'Alchimie', '11', '0'],
+        ['2499', 'Alchimie Classique', '11', '171'],
+    ]);
+    bbiWriteSkillLineAbilityCsv([
+        ['5001', '2499', '80001', '0'],
+    ]);
+    bbiWriteTradeSkillCategoryCsv([]);
 
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/index', \Mockery::any())
-        ->andReturn([
-            'professions' => [['id' => 171, 'name' => 'Alchimie']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/171', \Mockery::any())
-        ->andReturn([
-            'skill_tiers' => [['id' => 2499, 'name' => 'Alchimie Classique']],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/profession/171/skill-tier/2499', \Mockery::any())
-        ->andReturn([
-            'maximum_skill_level' => 300,
-            'categories' => [
-                [
-                    'name' => 'Potions',
-                    'recipes' => [['id' => 5001, 'name' => 'Potion Alliance']],
-                ],
-            ],
-        ]);
-
-    $csvDir = storage_path('app/blizzard');
-    if (! is_dir($csvDir)) {
-        mkdir($csvDir, 0755, true);
-    }
-
-    file_put_contents(storage_path('app/blizzard/skill_line_ability.csv'), "header\n");
-
+    $spellNameMap = [80001 => 'Potion Alliance'];
     $recipeFactionMap = [5001 => 'Alliance'];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importProfessions($recipeFactionMap);
+    $blizzardBatchImporter->importProfessions($spellNameMap, $recipeFactionMap);
 
     expect(WowRecipe::query()->find(5001)->faction)->toBe('Alliance');
 });
@@ -642,28 +484,93 @@ test('importDecorIcons fetches item_id and icon URLs', function (): void {
 
 // ─── Edge Cases ─────────────────────────────────────────────
 
-test('importQuests handles API failure gracefully', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/quest/area/index', \Mockery::any())
-        ->andThrow(new \Exception('429 Too Many Requests'));
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests([]);
-
-    expect(WowQuest::query()->count())->toBe(0);
-});
-
-test('importAchievements handles empty category index gracefully', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/achievement-category/index', \Mockery::any())
-        ->andThrow(new \Exception('404 Not Found'));
-
+test('importAchievements handles missing CSV files gracefully', function (): void {
+    // No CSV files written — should produce 0 achievements
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements();
 
     expect(WowAchievement::query()->count())->toBe(0);
 });
+
+test('importAchievements skips achievements with empty or hidden names', function (): void {
+    bbiWriteAchievementCategoryCsv([
+        ['1', 'Général', '-1'],
+    ]);
+    bbiWriteAchievementCsv([
+        ['10', 'Valid Achievement', '1'],
+        ['11', '', '1'],
+        ['12', '<Hidden> Debug Achievement', '1'],
+    ]);
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importAchievements();
+
+    expect(WowAchievement::query()->count())->toBe(1);
+    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Valid Achievement');
+});
+
+// ─── CSV helpers ────────────────────────────────────────────
+
+function bbiWriteQuestCsv(array $rows): void
+{
+    $lines = ['ID,QuestTitle_lang,ContentTuningID,FiltRaces'];
+    foreach ($rows as $row) {
+        $title = str_replace('"', '""', $row[1]);
+        $lines[] = sprintf('"%s","%s","0","-1"', $row[0], $title);
+    }
+
+    file_put_contents(storage_path('app/blizzard/quest_v2_cli_task.csv'), implode("\n", $lines));
+}
+
+function bbiWriteAchievementCsv(array $rows): void
+{
+    $lines = ['Description_lang,Title_lang,Reward_lang,ID,Instance_ID,Faction,Supercedes,Category,Minimum_criteria,Points,Flags,Ui_order,IconFileID,RewardItemID,Criteria_tree,Shares_criteria,CovenantID,HiddenBeforeDisplaySeason,LegacyAfterTimeEvent'];
+    foreach ($rows as $row) {
+        // $row = [ID, Title, Category]
+        $title = str_replace('"', '""', $row[1]);
+        $lines[] = sprintf(',"%s",,"%s","0","-1","0","%s","0","0","0","0","0","0","0","0","0","0","0"', $title, $row[0], $row[2]);
+    }
+
+    file_put_contents(storage_path('app/blizzard/achievement.csv'), implode("\n", $lines));
+}
+
+function bbiWriteAchievementCategoryCsv(array $rows): void
+{
+    $lines = ['Name_lang,ID,Parent,Ui_order'];
+    foreach ($rows as $row) {
+        // $row = [ID, Name, Parent]
+        $lines[] = sprintf('"%s","%s","%s","0"', $row[1], $row[0], $row[2]);
+    }
+
+    file_put_contents(storage_path('app/blizzard/achievement_category.csv'), implode("\n", $lines));
+}
+
+function bbiWriteSkillLineCsv(array $rows): void
+{
+    $lines = ['ID,DisplayName_lang,CategoryID,ParentSkillLineID'];
+    foreach ($rows as $row) {
+        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
+    }
+
+    file_put_contents(storage_path('app/blizzard/skill_line.csv'), implode("\n", $lines));
+}
+
+function bbiWriteSkillLineAbilityCsv(array $rows): void
+{
+    $lines = ['ID,SkillLine,Spell,TradeSkillCategoryID'];
+    foreach ($rows as $row) {
+        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
+    }
+
+    file_put_contents(storage_path('app/blizzard/skill_line_ability.csv'), implode("\n", $lines));
+}
+
+function bbiWriteTradeSkillCategoryCsv(array $rows): void
+{
+    $lines = ['ID,Name_lang'];
+    foreach ($rows as $row) {
+        $lines[] = sprintf('"%s","%s"', $row[0], $row[1]);
+    }
+
+    file_put_contents(storage_path('app/blizzard/trade_skill_category.csv'), implode("\n", $lines));
+}

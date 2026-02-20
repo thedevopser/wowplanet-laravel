@@ -19,7 +19,7 @@ class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all}';
 
-    protected $description = 'Import WoW data from Blizzard API (quests, achievements, mounts, pets, professions, decor)';
+    protected $description = 'Import WoW data from DB2 CSVs and Blizzard API (icons, decor, mirror factions)';
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
@@ -29,51 +29,54 @@ class WowDataImportCommand extends Command
         $this->info(sprintf('Starting WoW Data Import (type: %s)', $type));
         $this->newLine();
 
+        /** @var array<int, string>|null $spellNameMap */
+        $spellNameMap = null;
+
         if ($type === 'all' || $type === 'achievements') {
             $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
-            $this->info(sprintf('Importing Achievements (category tree + addon expansion mapping, %d mapped)...', count($achievementExpansionMap)));
+            $this->info(sprintf('Importing Achievements from DB2 CSV (expansion map: %d IDs)...', count($achievementExpansionMap)));
             $blizzardBatchImporter->importAchievements($achievementExpansionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info('Building area→expansion map from DB2 data (AreaTable + Map + ContentTuning)...');
-            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
-            $modernQuestOverrides = $luaAddonParser->getQuestExpansionMap();
+            $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
+            $questZoneMap = $luaAddonParser->getQuestZoneMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
-            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
             $this->info(sprintf(
-                'Importing Quests (DB2 areas: %d, modern overrides: %d, faction quests: %d, faction zones: %d)...',
-                count($areaExpansionMap),
-                count($modernQuestOverrides),
+                'Importing Quests from DB2 CSV (expansion: %d, zones: %d, factions: %d)...',
+                count($questExpansionMap),
+                count($questZoneMap),
                 count($questFactionMap),
-                count($zoneFactionMap),
             ));
-            $blizzardBatchImporter->importQuests($areaExpansionMap, $modernQuestOverrides, $questFactionMap, $zoneFactionMap);
+            $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap, $questFactionMap);
             $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
             $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'mounts') {
-            $this->info('Importing Mounts...');
+            $this->info('Importing Mounts from DB2 CSV...');
             $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
-            $this->info('Importing Pets...');
-            $blizzardBatchImporter->importPets();
+            $spellNameMap ??= $luaAddonParser->getSpellNameMap();
+            $this->info(sprintf('Importing Pets from DB2 CSV (spell names: %d)...', count($spellNameMap)));
+            $blizzardBatchImporter->importPets($spellNameMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'professions') {
+            $spellNameMap ??= $luaAddonParser->getSpellNameMap();
             $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
             $this->info(sprintf(
-                'Importing Professions and Recipes (faction-specific: %d)...',
+                'Importing Professions from DB2 CSV (spell names: %d, factions: %d)...',
+                count($spellNameMap),
                 count($recipeFactionMap),
             ));
-            $blizzardBatchImporter->importProfessions($recipeFactionMap);
+            $blizzardBatchImporter->importProfessions($spellNameMap, $recipeFactionMap);
             $blizzardBatchImporter->tagMirrorRecipeFactions();
             $this->newLine();
         }

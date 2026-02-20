@@ -6,8 +6,8 @@ namespace App\Infrastructure\Blizzard\Importers;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
-use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
 use App\Models\WowMount;
+use Illuminate\Support\Facades\File;
 
 class MountImporter
 {
@@ -19,43 +19,84 @@ class MountImporter
 
     public function import(): void
     {
-        $this->info('Fetching Mount Index...');
-        $response = $this->fetchWithRetry('data/wow/mount/index');
-        if (! $response) {
-            $this->info('ERROR: Could not fetch mount index.');
+        $this->info('Loading mounts from DB2 CSV data...');
+
+        $mounts = $this->parseMountCsv();
+        if ($mounts === []) {
+            $this->info('ERROR: mount.csv not found or empty.');
 
             return;
         }
 
-        /** @var list<array{id: int, name: string|null}> $mounts */
-        $mounts = $response['mounts'] ?? [];
-        $this->info('Found '.count($mounts).' mounts.');
+        $this->info(sprintf('Found %d mounts in CSV.', count($mounts)));
 
-        // mount.csv: Name_lang(0), SourceText_lang(1), Description_lang(2), ID(3), ..., SourceSpellID(7)
-        $spellMap = Db2CsvLoader::loadMap('mount.csv', 3, 7);
-        $this->info('  DB2 mount spell map: '.count($spellMap).' entries.');
-
-        $skipped = 0;
+        $count = 0;
         foreach ($mounts as $mount) {
-            $mountName = $mount['name'] ?? '';
-            if ($mountName === '') {
+            WowMount::query()->updateOrCreate(['id' => $mount['id']], [
+                'name_fr' => $mount['name_fr'],
+                'source_spell_id' => $mount['source_spell_id'] > 0 ? $mount['source_spell_id'] : null,
+                'is_active' => true,
+            ]);
+            $count++;
+            if ($count % 500 === 0) {
+                $this->info(sprintf('  Saved %d...', $count));
+            }
+        }
+
+        $this->info(sprintf('Mount import complete: %d mounts.', $count));
+    }
+
+    /**
+     * @return list<array{id: int, name_fr: string, source_spell_id: int}>
+     */
+    private function parseMountCsv(): array
+    {
+        $csvPath = storage_path('app/blizzard/mount.csv');
+        if (! File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $nameIdx = (int) array_search('Name_lang', $headers, true);
+        $idIdx = (int) array_search('ID', $headers, true);
+        $spellIdx = (int) array_search('SourceSpellID', $headers, true);
+
+        $mounts = [];
+        $skipped = 0;
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $name = trim($row[$nameIdx] ?? '');
+            if ($name === '') {
                 $skipped++;
 
                 continue;
             }
 
-            WowMount::query()->updateOrCreate(['id' => $mount['id']], [
-                'name_fr' => $mountName,
-                'source_spell_id' => $spellMap[$mount['id']] ?? null,
-                'is_active' => true,
-            ]);
+            $mounts[] = [
+                'id' => (int) $row[$idIdx],
+                'name_fr' => $name,
+                'source_spell_id' => (int) ($row[$spellIdx] ?? 0),
+            ];
         }
+
+        fclose($handle);
 
         if ($skipped > 0) {
             $this->info(sprintf('  Skipped %d mounts with empty names.', $skipped));
         }
 
-        $this->info('Mount import complete.');
+        return $mounts;
     }
 
     public function importIcons(): void
