@@ -1,5 +1,5 @@
 <template>
-    <header class="border-b border-white/10 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+    <header class="border-b border-white/10 bg-slate-900/50 backdrop-blur-md z-50 shrink-0">
         <div class="max-w-7xl mx-auto px-3 sm:px-4">
             <!-- Main header row -->
             <div class="h-12 sm:h-14 md:h-16 flex items-center justify-between gap-2 sm:gap-3">

@@ -3,6 +3,8 @@ import HomePage from './pages/HomePage.vue';
 import CharacterPage from './pages/CharacterPage.vue';
 import MyCharactersPage from './pages/MyCharactersPage.vue';
 import ClassStatsPage from './pages/ClassStatsPage.vue';
+import PrivacyPage from './pages/PrivacyPage.vue';
+import CguPage from './pages/CguPage.vue';
 
 const routes = [
     {
@@ -28,6 +30,18 @@ const routes = [
         name: 'class-stats',
         component: ClassStatsPage,
         meta: { title: 'Mes classes - WowPlanet' },
+    },
+    {
+        path: '/privacy',
+        name: 'privacy',
+        component: PrivacyPage,
+        meta: { title: 'Politique de confidentialité - WowPlanet' },
+    },
+    {
+        path: '/cgu',
+        name: 'cgu',
+        component: CguPage,
+        meta: { title: 'CGU - WowPlanet' },
     },
     {
         path: '/:pathMatch(.*)*',

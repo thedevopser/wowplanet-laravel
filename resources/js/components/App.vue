@@ -1,14 +1,18 @@
 <template>
-    <div class="min-h-screen dark bg-slate-900 text-slate-100 font-sans selection:bg-blue-500/30 overflow-x-hidden">
+    <div class="flex flex-col h-screen dark bg-slate-900 text-slate-100 font-sans selection:bg-blue-500/30 overflow-hidden">
         <AppHeader />
 
-        <main class="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <main class="flex-1 overflow-y-auto">
+            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
             <div v-if="store.error" class="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-lg mb-6">
                 {{ store.error }}
             </div>
 
             <router-view />
+            </div>
         </main>
+
+        <AppFooter />
     </div>
 </template>
 
@@ -16,6 +20,7 @@
 import { onMounted } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import AppHeader from './AppHeader.vue';
+import AppFooter from './AppFooter.vue';
 
 const store = useCharacterStore();
 
