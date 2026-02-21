@@ -28,6 +28,7 @@ test('it creates with all fields', function (): void {
         pets: [['id' => 1, 'name' => 'Dragonnet', 'is_completed' => false]],
         decorCount: 50,
         decor: [['id' => 500, 'name' => 'Foyer orné', 'is_completed' => true, 'item_id' => 245000, 'icon_url' => 'https://example.com/icon.jpg']],
+        exaltedCount: 42,
     );
 
     expect($characterProfileDTO->name)->toBe('Thrall')
@@ -43,7 +44,8 @@ test('it creates with all fields', function (): void {
         ->and($characterProfileDTO->mounts)->toHaveCount(1)
         ->and($characterProfileDTO->pets)->toHaveCount(1)
         ->and($characterProfileDTO->decorCount)->toBe(50)
-        ->and($characterProfileDTO->decor)->toHaveCount(1);
+        ->and($characterProfileDTO->decor)->toHaveCount(1)
+        ->and($characterProfileDTO->exaltedCount)->toBe(42);
 });
 
 test('it is readonly', function (): void {
@@ -87,5 +89,6 @@ test('it defaults mounts and pets to empty arrays', function (): void {
     expect($characterProfileDTO->mounts)->toBe([])
         ->and($characterProfileDTO->pets)->toBe([])
         ->and($characterProfileDTO->decorCount)->toBe(0)
-        ->and($characterProfileDTO->decor)->toBe([]);
+        ->and($characterProfileDTO->decor)->toBe([])
+        ->and($characterProfileDTO->exaltedCount)->toBe(0);
 });

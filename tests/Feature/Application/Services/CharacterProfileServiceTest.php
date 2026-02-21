@@ -107,6 +107,13 @@ test('get profile returns correct dto', function (): void {
             'secondaries' => [],
         ]);
 
+    /** @var \Mockery\Expectation $reputationsExp */
+    $reputationsExp = $mock->shouldReceive('get');
+    $reputationsExp->with('profile/wow/character/hyjal/thrall/reputations')
+        ->andReturn([
+            'reputations' => [],
+        ]);
+
     /** @var \Mockery\Expectation $decorExp */
     $decorExp = $mock->shouldReceive('get');
     $decorExp->with('profile/wow/character/hyjal/thrall/collections/decor')
@@ -124,6 +131,7 @@ test('get profile returns correct dto', function (): void {
         ->and($characterProfileDTO->mountsCount)->toBe(1)
         ->and($characterProfileDTO->petsCount)->toBe(1)
         ->and($characterProfileDTO->decorCount)->toBe(1)
+        ->and($characterProfileDTO->exaltedCount)->toBe(0)
         ->and($characterProfileDTO->classIconUrl)->toBe('https://render.com/class-icon.jpg')
         ->and($characterProfileDTO->professions)->toBe([])
         ->and($characterProfileDTO->decor)->toHaveCount(1)
@@ -189,6 +197,10 @@ test('aggregate progress groups by expansion and zone', function (): void {
 
         if (str_contains($endpoint, '/professions')) {
             return ['primaries' => [], 'secondaries' => []];
+        }
+
+        if (str_contains($endpoint, '/reputations')) {
+            return ['reputations' => []];
         }
 
         return [
@@ -279,6 +291,10 @@ test('aggregate progress filters quests by character faction', function (): void
             return ['primaries' => [], 'secondaries' => []];
         }
 
+        if (str_contains($endpoint, '/reputations')) {
+            return ['reputations' => []];
+        }
+
         return [
             'name' => 'Thrall',
             'realm' => ['name' => 'Hyjal'],
@@ -340,6 +356,10 @@ test('get profile handles decor api 404 gracefully', function (): void {
 
         if (str_contains($endpoint, '/professions')) {
             return ['primaries' => [], 'secondaries' => []];
+        }
+
+        if (str_contains($endpoint, '/reputations')) {
+            return ['reputations' => []];
         }
 
         return [

@@ -57,6 +57,7 @@ describe('CharacterPage', () => {
 
         expect(wrapper.text()).toContain('Quêtes');
         expect(wrapper.text()).toContain('Hauts-faits');
+        expect(wrapper.text()).toContain('Réputations');
         expect(wrapper.text()).toContain('Montures');
         expect(wrapper.text()).toContain('Mascottes');
     });

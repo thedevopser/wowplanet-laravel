@@ -20,7 +20,7 @@ class PingSearchEnginesCommand extends Command
         $appUrl = rtrim($configUrl, '/');
         $sitemapUrl = $appUrl.'/sitemap.xml';
 
-        $this->info('Sitemap URL: ' . $sitemapUrl);
+        $this->info('Sitemap URL: '.$sitemapUrl);
         $this->newLine();
 
         $this->pingBing($sitemapUrl);
@@ -54,9 +54,9 @@ class PingSearchEnginesCommand extends Command
     {
         $this->info('Google Search Console (manual submission required):');
         $this->line('  1. Go to https://search.google.com/search-console');
-        $this->line('  2. Select property: ' . $sitemapUrl);
+        $this->line('  2. Select property: '.$sitemapUrl);
         $this->line('  3. Navigate to Sitemaps in the left menu');
-        $this->line('  4. Enter: ' . $sitemapUrl);
+        $this->line('  4. Enter: '.$sitemapUrl);
         $this->line('  5. Click Submit');
         $this->newLine();
         $this->info('Note: Google deprecated the ping endpoint in 2023.');

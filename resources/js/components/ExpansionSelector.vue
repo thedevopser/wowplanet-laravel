@@ -28,8 +28,8 @@ const props = defineProps({
     expansions: { type: Array, required: true },
     activeExpansion: { type: Number, required: true },
     collections: { type: Object, required: true },
-    collectionType: { type: String, required: true, validator: v => ['quests', 'achievements', 'recipes'].includes(v) },
-    activeColor: { type: String, default: 'blue', validator: v => ['blue', 'amber', 'emerald'].includes(v) },
+    collectionType: { type: String, required: true, validator: v => ['quests', 'achievements', 'recipes', 'reputations'].includes(v) },
+    activeColor: { type: String, default: 'blue', validator: v => ['blue', 'amber', 'emerald', 'purple'].includes(v) },
 });
 
 defineEmits(['update:activeExpansion']);
@@ -46,6 +46,10 @@ const colorMap = {
     emerald: {
         active: 'bg-emerald-600 border-emerald-400 text-white shadow-xl shadow-emerald-500/20',
         badge: 'bg-emerald-700/50 border-white/20',
+    },
+    purple: {
+        active: 'bg-purple-600 border-purple-400 text-white shadow-xl shadow-purple-500/20',
+        badge: 'bg-purple-700/50 border-white/20',
     },
 };
 

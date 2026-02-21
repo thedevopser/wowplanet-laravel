@@ -9,6 +9,7 @@ use App\Application\Services\Progress\AchievementProgressAggregator;
 use App\Application\Services\Progress\CollectionProgressAggregator;
 use App\Application\Services\Progress\ProfessionProgressAggregator;
 use App\Application\Services\Progress\QuestProgressAggregator;
+use App\Application\Services\Progress\ReputationProgressAggregator;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 
 class CharacterProfileService
@@ -19,6 +20,7 @@ class CharacterProfileService
         private readonly AchievementProgressAggregator $achievementProgressAggregator,
         private readonly CollectionProgressAggregator $collectionProgressAggregator,
         private readonly ProfessionProgressAggregator $professionProgressAggregator,
+        private readonly ReputationProgressAggregator $reputationProgressAggregator,
     ) {}
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
@@ -42,13 +44,16 @@ class CharacterProfileService
         $characterDecorIds = $apiData['characterDecorIds'];
         /** @var array<string, mixed> $professionsResponse */
         $professionsResponse = $apiData['professionsResponse'];
+        /** @var array<string, mixed> $reputationsResponse */
+        $reputationsResponse = $apiData['reputationsResponse'];
 
         $characterFaction = $this->extractFaction($summary);
 
         $questProgress = $this->questProgressAggregator->aggregate($completedQuestIds, $characterFaction);
         $achievementProgress = $this->achievementProgressAggregator->aggregate($completedAchievementIds);
+        $reputationProgress = $this->reputationProgressAggregator->aggregate($reputationsResponse);
 
-        $collections = $this->mergeCollections($questProgress, $achievementProgress);
+        $collections = $this->mergeCollections($questProgress, $achievementProgress, $reputationProgress);
 
         $mounts = $this->collectionProgressAggregator->aggregateMounts($characterMountIds);
         $pets = $this->collectionProgressAggregator->aggregatePets($characterPetIds);
@@ -84,6 +89,7 @@ class CharacterProfileService
         $mountsResponse = $this->blizzardApiClient->get($base.'/collections/mounts');
         $petsResponse = $this->blizzardApiClient->get($base.'/collections/pets');
         $professionsResponse = $this->blizzardApiClient->get($base.'/professions');
+        $reputationsResponse = $this->blizzardApiClient->get($base.'/reputations');
 
         $decorResponse = [];
         try {
@@ -115,6 +121,7 @@ class CharacterProfileService
             'achievementPoints' => is_int($achievementsResponse['total_points'] ?? null)
                 ? $achievementsResponse['total_points'] : 0,
             'professionsResponse' => $professionsResponse,
+            'reputationsResponse' => $reputationsResponse,
         ];
     }
 
@@ -132,9 +139,10 @@ class CharacterProfileService
     /**
      * @param  array<int, array{total: int, completed: int, zones: list<array<string, mixed>>}>  $questProgress
      * @param  array<int, array{total: int, completed: int, categories: list<array<string, mixed>>}>  $achievementProgress
+     * @param  array<int, array{total: int, completed: int, factions: list<array<string, mixed>>}>  $reputationProgress
      * @return array<int, array<string, mixed>>
      */
-    private function mergeCollections(array $questProgress, array $achievementProgress): array
+    private function mergeCollections(array $questProgress, array $achievementProgress, array $reputationProgress): array
     {
         $collections = [];
 
@@ -142,10 +150,26 @@ class CharacterProfileService
             $collections[$i] = [
                 'quests' => $questProgress[$i] ?? ['total' => 0, 'completed' => 0, 'zones' => []],
                 'achievements' => $achievementProgress[$i] ?? ['total' => 0, 'completed' => 0, 'categories' => []],
+                'reputations' => $reputationProgress[$i] ?? ['total' => 0, 'completed' => 0, 'factions' => []],
             ];
         }
 
         return $collections;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $collections
+     */
+    private function countExalted(array $collections): int
+    {
+        $count = 0;
+        foreach ($collections as $collection) {
+            /** @var array{completed: int, total: int} $reputations */
+            $reputations = $collection['reputations'] ?? ['completed' => 0, 'total' => 0];
+            $count += $reputations['completed'];
+        }
+
+        return $count;
     }
 
     /**
@@ -215,6 +239,7 @@ class CharacterProfileService
             professions: $professions,
             decorCount: count($decorIds),
             decor: $decor,
+            exaltedCount: $this->countExalted($collections),
         );
     }
 }

@@ -13,6 +13,7 @@ const baseCharacter = {
     classIconUrl: 'https://render.worldofwarcraft.com/class.jpg',
     mountsCount: 150,
     petsCount: 200,
+    exaltedCount: 42,
 };
 
 describe('CharacterCard', () => {
@@ -59,5 +60,12 @@ describe('CharacterCard', () => {
         const mainAvatar = wrapper.findAll('img').find(img => img.attributes('src') === baseCharacter.avatarUrl);
 
         expect(mainAvatar).toBeTruthy();
+    });
+
+    it('displays completed reputations count', () => {
+        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+
+        expect(wrapper.text()).toContain('42');
+        expect(wrapper.text()).toContain('Rép. terminées');
     });
 });

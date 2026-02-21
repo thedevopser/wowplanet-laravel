@@ -24,6 +24,7 @@
 
             <QuestsTab v-if="activeTab === 'quests'" />
             <AchievementsTab v-if="activeTab === 'achievements'" />
+            <ReputationsTab v-if="activeTab === 'reputations'" />
             <ProfessionsTab v-if="activeTab === 'professions'" />
             <MountsTab v-if="activeTab === 'mounts'" :character="store.character" />
             <PetsTab v-if="activeTab === 'pets'" :character="store.character" />
@@ -40,6 +41,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 import CharacterCard from '../components/CharacterCard.vue';
 import QuestsTab from '../components/QuestsTab.vue';
 import AchievementsTab from '../components/AchievementsTab.vue';
+import ReputationsTab from '../components/ReputationsTab.vue';
 import MountsTab from '../components/MountsTab.vue';
 import PetsTab from '../components/PetsTab.vue';
 import ProfessionsTab from '../components/ProfessionsTab.vue';
@@ -52,6 +54,7 @@ const activeTab = ref('quests');
 const contentTabs = computed(() => [
     { id: 'quests', label: 'Quêtes', count: undefined },
     { id: 'achievements', label: 'Hauts-faits', count: undefined },
+    { id: 'reputations', label: 'Réputations', count: undefined },
     { id: 'professions', label: 'Métiers', count: store.character?.professions?.length || undefined },
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },

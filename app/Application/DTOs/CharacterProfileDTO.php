@@ -34,5 +34,6 @@ readonly class CharacterProfileDTO
         public array $professions = [],
         public int $decorCount = 0,
         public array $decor = [],
+        public int $exaltedCount = 0,
     ) {}
 }

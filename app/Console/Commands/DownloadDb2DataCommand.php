@@ -35,6 +35,7 @@ class DownloadDb2DataCommand extends Command
         'SpellName' => ['spell_name.csv', 'frFR'],
         'SkillLine' => ['skill_line.csv', 'frFR'],
         'TradeSkillCategory' => ['trade_skill_category.csv', 'frFR'],
+        'CurrencyTypes' => ['currency_types.csv', null],
     ];
 
     public function handle(): int

@@ -172,7 +172,7 @@ class CharacterSeoService
     public function generateSitemap(): string
     {
         /** @var string $xml */
-        $xml = Cache::remember('sitemap_xml', 3600, fn(): string => $this->buildSitemap()->render());
+        $xml = Cache::remember('sitemap_xml', 3600, fn (): string => $this->buildSitemap()->render());
 
         return $xml;
     }
