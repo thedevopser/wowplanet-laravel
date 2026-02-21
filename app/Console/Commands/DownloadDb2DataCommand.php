@@ -91,9 +91,49 @@ class DownloadDb2DataCommand extends Command
         }
 
         $this->newLine();
+
+        if ($singleTable === null) {
+            $this->info('Downloading decor categories from SimpleArmory...');
+            $decorResult = $this->downloadExtraFile(
+                'https://simplearmory.com/data/decors.json',
+                'decors_categories.json',
+            );
+            if ($decorResult) {
+                $success++;
+            } else {
+                $failed++;
+            }
+
+            $this->newLine();
+        }
+
         $this->info(sprintf('Done: %d succeeded, %d failed.', $success, $failed));
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function downloadExtraFile(string $url, string $localFilename): bool
+    {
+        $this->info(sprintf('  Downloading %s...', $localFilename));
+
+        $response = Http::timeout(120)->get($url);
+
+        if (! $response->successful()) {
+            $this->error(sprintf('    FAILED (HTTP %d)', $response->status()));
+
+            return false;
+        }
+
+        $content = $response->body();
+        $dir = storage_path('app/blizzard');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        file_put_contents($dir.'/'.$localFilename, $content);
+        $this->info(sprintf('    OK (%s)', $this->formatBytes(strlen($content))));
+
+        return true;
     }
 
     private function formatBytes(int $bytes): string

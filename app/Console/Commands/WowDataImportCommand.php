@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
+use App\Infrastructure\Parsers\DecorCategoryMapper;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
 use App\Models\WowDecor;
@@ -96,6 +97,9 @@ class WowDataImportCommand extends Command
         if ($type === 'all' || $type === 'decor') {
             $this->info('Importing Decor...');
             $blizzardBatchImporter->importDecor();
+            $decorCategoryMap = DecorCategoryMapper::build();
+            $this->info(sprintf('Decor category map: %d IDs', count($decorCategoryMap)));
+            $blizzardBatchImporter->importDecorCategories($decorCategoryMap);
             $this->newLine();
         }
 

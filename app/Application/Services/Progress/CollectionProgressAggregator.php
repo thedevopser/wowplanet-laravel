@@ -31,7 +31,7 @@ class CollectionProgressAggregator
 
     /**
      * @param  list<int>  $characterDecorIds
-     * @return list<array{id: int, name: string, is_completed: bool, item_id: int|null, icon_url: string|null}>
+     * @return list<array{id: int, name: string, is_completed: bool, item_id: int|null, icon_url: string|null, category: string|null, source: string|null}>
      */
     public function aggregateDecor(array $characterDecorIds): array
     {
@@ -43,6 +43,8 @@ class CollectionProgressAggregator
                 'is_completed' => in_array($item->id, $characterDecorIds),
                 'item_id' => $item->item_id,
                 'icon_url' => $item->icon_url,
+                'category' => $item->category,
+                'source' => $item->source,
             ];
         }
 

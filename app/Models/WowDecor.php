@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * @property int $id
  * @property string $name_fr
+ * @property string|null $category
+ * @property string|null $source
  * @property int|null $item_id
  * @property string|null $icon_url
  * @property bool $is_active
@@ -35,6 +37,8 @@ class WowDecor extends Model
     protected $fillable = [
         'id',
         'name_fr',
+        'category',
+        'source',
         'item_id',
         'icon_url',
         'is_active',

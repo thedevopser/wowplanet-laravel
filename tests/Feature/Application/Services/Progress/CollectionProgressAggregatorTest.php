@@ -34,9 +34,9 @@ test('aggregatePets returns pet list with completion status', function (): void 
     expect(collect($result)->every('is_completed', true))->toBeTrue();
 });
 
-test('aggregateDecor returns decor list with completion status', function (): void {
-    WowDecor::factory()->create(['id' => 100, 'name_fr' => 'Statue', 'item_id' => 999]);
-    WowDecor::factory()->create(['id' => 101, 'name_fr' => 'Torche', 'item_id' => 998]);
+test('aggregateDecor returns decor list with completion status and category', function (): void {
+    WowDecor::factory()->create(['id' => 100, 'name_fr' => 'Statue', 'item_id' => 999, 'category' => 'The War Within', 'source' => 'Quest']);
+    WowDecor::factory()->create(['id' => 101, 'name_fr' => 'Torche', 'item_id' => 998, 'category' => 'Midnight', 'source' => 'Vendor']);
 
     $aggregator = new CollectionProgressAggregator;
     $result = $aggregator->aggregateDecor([100]);
@@ -47,7 +47,11 @@ test('aggregateDecor returns decor list with completion status', function (): vo
     $torche = collect($result)->firstWhere('id', 101);
     expect($statue['is_completed'])->toBeTrue();
     expect($statue['item_id'])->toBe(999);
+    expect($statue['category'])->toBe('The War Within');
+    expect($statue['source'])->toBe('Quest');
     expect($torche['is_completed'])->toBeFalse();
+    expect($torche['category'])->toBe('Midnight');
+    expect($torche['source'])->toBe('Vendor');
 });
 
 test('aggregateMounts returns empty array when no mounts exist', function (): void {

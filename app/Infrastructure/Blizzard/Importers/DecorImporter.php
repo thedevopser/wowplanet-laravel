@@ -54,6 +54,31 @@ class DecorImporter
         $this->info(sprintf('Decor import complete: %d items.', $count));
     }
 
+    /**
+     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     */
+    public function importCategories(array $categoryMap): void
+    {
+        $this->info('Enriching decor with categories...');
+
+        $updated = 0;
+        $unmatched = 0;
+
+        foreach (WowDecor::all() as $decor) {
+            if (isset($categoryMap[$decor->id])) {
+                $decor->update([
+                    'category' => $categoryMap[$decor->id]['category'],
+                    'source' => $categoryMap[$decor->id]['source'],
+                ]);
+                $updated++;
+            } else {
+                $unmatched++;
+            }
+        }
+
+        $this->info(sprintf('Decor categories: %d updated, %d unmatched.', $updated, $unmatched));
+    }
+
     public function importIcons(): void
     {
         $this->info('Fetching decor icons...');

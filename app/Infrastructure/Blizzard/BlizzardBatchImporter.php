@@ -71,6 +71,14 @@ class BlizzardBatchImporter
         $this->decorImporter->import();
     }
 
+    /**
+     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     */
+    public function importDecorCategories(array $categoryMap): void
+    {
+        $this->decorImporter->importCategories($categoryMap);
+    }
+
     public function importDecorIcons(): void
     {
         $this->decorImporter->importIcons();

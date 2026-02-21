@@ -275,6 +275,24 @@ test('importDecor creates decor items from index', function (): void {
     expect(WowDecor::query()->find(1)->name_fr)->toBe('Foyer orné');
 });
 
+test('importDecorCategories enriches decor items with category and source', function (): void {
+    WowDecor::factory()->create(['id' => 1, 'name_fr' => 'Foyer orné']);
+    WowDecor::factory()->create(['id' => 2, 'name_fr' => 'Tapis elfique']);
+
+    $categoryMap = [
+        1 => ['category' => 'The War Within', 'source' => 'Quest'],
+        2 => ['category' => 'Midnight', 'source' => 'Achievement'],
+    ];
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importDecorCategories($categoryMap);
+
+    expect(WowDecor::query()->find(1)->category)->toBe('The War Within');
+    expect(WowDecor::query()->find(1)->source)->toBe('Quest');
+    expect(WowDecor::query()->find(2)->category)->toBe('Midnight');
+    expect(WowDecor::query()->find(2)->source)->toBe('Achievement');
+});
+
 // ─── Profession Import ──────────────────────────────────────
 
 test('importProfessions creates professions and recipes from CSV', function (): void {

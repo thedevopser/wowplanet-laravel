@@ -13,17 +13,25 @@ const sampleDecor = [
     { id: 3, name: 'Bureau ancien', is_completed: true, item_id: null, icon_url: 'https://example.com/b.png' },
 ];
 
+/** Sample decor with category/source for categorized view tests */
+const categorizedDecor = [
+    { id: 1, name: 'Chandelier doré', is_completed: true, item_id: 100, icon_url: 'https://example.com/a.png', category: 'The War Within', source: 'Quest' },
+    { id: 2, name: 'Armoire sombre', is_completed: false, item_id: 200, icon_url: null, category: 'The War Within', source: 'Quest' },
+    { id: 3, name: 'Bureau ancien', is_completed: true, item_id: null, icon_url: 'https://example.com/b.png', category: 'The War Within', source: 'Achievement' },
+];
+
 describe('DecorTab', () => {
     it('renders heading and decor count', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor, 2) } });
+        const wrapper = mount(DecorTab, { props: { character: makeCharacter(categorizedDecor, 2) } });
 
         expect(wrapper.text()).toContain('Décorations');
         expect(wrapper.text()).toContain('2');
-        expect(wrapper.text()).toContain('/ 3 total');
+        expect(wrapper.text()).toContain('2 / 3');
     });
 
     it('sorts decor alphabetically', () => {
         const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+        // Uncategorized items are rendered as flat list sorted alphabetically
         const names = wrapper.findAll('.font-bold.text-slate-200').map(el => el.text());
 
         expect(names[0]).toBe('Armoire sombre');
@@ -42,7 +50,6 @@ describe('DecorTab', () => {
     it('filters decor by search text', async () => {
         const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
-        // Type in search input
         const input = wrapper.find('input[type="text"]');
         await input.setValue('armoire');
 
@@ -71,21 +78,28 @@ describe('DecorTab', () => {
         expect(wrapper.text()).toContain('Aucun résultat trouvé.');
     });
 
-    it('paginates at 24 items per page', () => {
-        const manyDecor = Array.from({ length: 30 }, (_, i) => ({
+    it('paginates source cards at 8 per page', () => {
+        // Create items spread across 10 different sources to trigger pagination (8 per page)
+        const sourceNames = [
+            'Quest', 'Achievement', 'Vendor', 'Raid Drop', 'Dungeon Drop',
+            'Reputation', 'Treasure', 'Delves', 'Rare', 'Drop',
+        ];
+        const manyDecor = sourceNames.map((source, i) => ({
             id: i + 1,
             name: `Décor ${String(i + 1).padStart(2, '0')}`,
             is_completed: false,
             item_id: i + 100,
             icon_url: null,
+            category: 'The War Within',
+            source,
         }));
         const wrapper = mount(DecorTab, { props: { character: makeCharacter(manyDecor) } });
 
-        // Should show pagination controls
+        // Should show pagination controls (10 sources / 8 per page = 2 pages)
         expect(wrapper.text()).toContain('1 / 2');
-        // Only 24 items visible on first page
-        const items = wrapper.findAll('.font-bold.text-slate-200');
-        expect(items.length).toBe(24);
+        // Only 8 source cards visible on first page
+        const sourceCards = wrapper.findAll('.bg-slate-800\\/40.border');
+        expect(sourceCards.length).toBe(8);
     });
 
     it('generates wowhead link with item_id when available', () => {
@@ -113,12 +127,19 @@ describe('DecorTab', () => {
     });
 
     it('resets page when search changes', async () => {
-        const manyDecor = Array.from({ length: 30 }, (_, i) => ({
+        // Create items spread across 10 different sources to trigger pagination
+        const sourceNames = [
+            'Quest', 'Achievement', 'Vendor', 'Raid Drop', 'Dungeon Drop',
+            'Reputation', 'Treasure', 'Delves', 'Rare', 'Drop',
+        ];
+        const manyDecor = sourceNames.map((source, i) => ({
             id: i + 1,
             name: `Décor ${String(i + 1).padStart(2, '0')}`,
             is_completed: false,
             item_id: i + 100,
             icon_url: null,
+            category: 'The War Within',
+            source,
         }));
         const wrapper = mount(DecorTab, { props: { character: makeCharacter(manyDecor) } });
 
@@ -131,7 +152,6 @@ describe('DecorTab', () => {
         const input = wrapper.find('input[type="text"]');
         await input.setValue('01');
 
-        // Page should be reset (pagination may disappear with few results)
         expect(wrapper.vm.page).toBe(1);
     });
 });

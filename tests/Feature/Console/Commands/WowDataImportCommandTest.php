@@ -28,6 +28,7 @@ test('command imports all types by default', function (): void {
     $this->importerMock->shouldReceive('importProfessions')->once();
     $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
     $this->importerMock->shouldReceive('importDecor')->once();
+    $this->importerMock->shouldReceive('importDecorCategories')->once();
 
     $this->artisan('app:wow-data-import')->assertSuccessful();
 });
@@ -65,7 +66,7 @@ test('command imports only professions when --type=professions', function (): vo
 });
 
 test('command displays stats table after import', function (): void {
-    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor');
+    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor', 'importDecorCategories');
 
     $this->artisan('app:wow-data-import')
         ->assertSuccessful()
