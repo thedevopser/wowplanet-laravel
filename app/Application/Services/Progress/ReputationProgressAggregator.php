@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Services\Progress;
 
+use App\Infrastructure\Parsers\AddonDataParser;
 use App\Infrastructure\Parsers\Db2FactionExpansionMapper;
 
 class ReputationProgressAggregator
@@ -12,22 +13,28 @@ class ReputationProgressAggregator
 
     public function __construct(
         private readonly Db2FactionExpansionMapper $db2FactionExpansionMapper,
+        private readonly AddonDataParser $addonDataParser,
     ) {}
 
     /**
      * @param  array<string, mixed>  $reputationsResponse
      * @return array<int, array{total: int, completed: int, factions: list<array<string, mixed>>}>
      */
-    public function aggregate(array $reputationsResponse): array
+    public function aggregate(array $reputationsResponse, string $characterFaction = ''): array
     {
         $factionExpansionMap = $this->db2FactionExpansionMapper->build();
         $maxRenownMap = $this->db2FactionExpansionMapper->buildMaxRenownMap();
+        $factionNamesMap = $this->db2FactionExpansionMapper->buildFactionNamesMap();
+        $reputationFactionMap = $this->addonDataParser->getReputationFactionMap();
 
         /** @var list<array<string, mixed>> $reputations */
         $reputations = $reputationsResponse['reputations'] ?? [];
 
         /** @var array<int, list<array<string, mixed>>> $grouped */
         $grouped = [];
+
+        /** @var array<int, true> $startedFactionIds */
+        $startedFactionIds = [];
 
         foreach ($reputations as $reputation) {
             /** @var array{id?: int, name?: string} $faction */
@@ -38,6 +45,10 @@ class ReputationProgressAggregator
             }
 
             if (! isset($factionExpansionMap[$factionId])) {
+                continue;
+            }
+
+            if ($this->isOppositeFaction($factionId, $characterFaction, $reputationFactionMap)) {
                 continue;
             }
 
@@ -62,6 +73,32 @@ class ReputationProgressAggregator
                 'raw' => (int) ($standing['raw'] ?? 0),
                 'renown_level' => $renownLevel,
                 'completed' => $completed,
+                'started' => true,
+            ];
+
+            $startedFactionIds[$factionId] = true;
+        }
+
+        foreach ($factionExpansionMap as $factionId => $expansionId) {
+            if (isset($startedFactionIds[$factionId])) {
+                continue;
+            }
+
+            if ($this->isOppositeFaction($factionId, $characterFaction, $reputationFactionMap)) {
+                continue;
+            }
+
+            $grouped[$expansionId][] = [
+                'id' => $factionId,
+                'name' => $factionNamesMap[$factionId] ?? '',
+                'standing_name' => 'Non commencée',
+                'tier' => -1,
+                'value' => 0,
+                'max' => 0,
+                'raw' => 0,
+                'renown_level' => 0,
+                'completed' => false,
+                'started' => false,
             ];
         }
 
@@ -85,6 +122,20 @@ class ReputationProgressAggregator
 
         // Renown max: compare renown_level against known max from DB2
         return $renownLevel > 0 && isset($maxRenownMap[$factionId]) && $renownLevel >= $maxRenownMap[$factionId];
+    }
+
+    /**
+     * @param  array<int, string>  $reputationFactionMap
+     */
+    private function isOppositeFaction(int $factionId, string $characterFaction, array $reputationFactionMap): bool
+    {
+        if ($characterFaction === '') {
+            return false;
+        }
+
+        $requiredFaction = $reputationFactionMap[$factionId] ?? null;
+
+        return $requiredFaction !== null && $requiredFaction !== $characterFaction;
     }
 
     /**

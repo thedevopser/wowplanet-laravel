@@ -51,7 +51,7 @@ class CharacterProfileService
 
         $questProgress = $this->questProgressAggregator->aggregate($completedQuestIds, $characterFaction);
         $achievementProgress = $this->achievementProgressAggregator->aggregate($completedAchievementIds);
-        $reputationProgress = $this->reputationProgressAggregator->aggregate($reputationsResponse);
+        $reputationProgress = $this->reputationProgressAggregator->aggregate($reputationsResponse, $characterFaction);
 
         $collections = $this->mergeCollections($questProgress, $achievementProgress, $reputationProgress);
 

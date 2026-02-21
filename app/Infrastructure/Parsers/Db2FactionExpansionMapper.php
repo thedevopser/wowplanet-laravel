@@ -97,6 +97,63 @@ class Db2FactionExpansionMapper
     }
 
     /**
+     * Build faction_id → localized name map for all reputation factions.
+     *
+     * @return array<int, string>
+     */
+    public function buildFactionNamesMap(): array
+    {
+        $csvPath = storage_path('app/blizzard/faction.csv');
+        if (! File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $nameIdx = (int) array_search('Name_lang', $headers, true);
+        $repIdx = (int) array_search('ReputationIndex', $headers, true);
+        $parentIdx = (int) array_search('ParentFactionID', $headers, true);
+
+        $names = [];
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $factionId = (int) $row[$idIdx];
+            $parentId = (int) $row[$parentIdx];
+            $repIndex = (int) $row[$repIdx];
+            $name = (string) $row[$nameIdx];
+
+            if ($repIndex < 0) {
+                continue;
+            }
+
+            if ($parentId === 0) {
+                continue;
+            }
+
+            if ($this->shouldExclude($name)) {
+                continue;
+            }
+
+            $names[$factionId] = $name;
+        }
+
+        fclose($handle);
+
+        return $names;
+    }
+
+    /**
      * Walk the parent chain to find the expansion header.
      *
      * @param  array<int, int>  $parentMap

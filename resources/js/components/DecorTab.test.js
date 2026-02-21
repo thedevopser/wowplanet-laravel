@@ -51,11 +51,11 @@ describe('DecorTab', () => {
         expect(names[0]).toBe('Armoire sombre');
     });
 
-    it('hides completed decor when checkbox is checked', async () => {
+    it('hides completed decor when toggle is clicked', async () => {
         const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
-        const checkbox = wrapper.find('input[type="checkbox"]');
-        await checkbox.setValue(true);
+        const toggleBtn = wrapper.findAll('button').find(b => b.text().includes('Masquer'));
+        await toggleBtn.trigger('click');
 
         const names = wrapper.findAll('.font-bold.text-slate-200').map(el => el.text());
         expect(names).toHaveLength(1);

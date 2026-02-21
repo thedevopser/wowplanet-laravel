@@ -3,18 +3,33 @@
 declare(strict_types=1);
 
 use App\Application\Services\Progress\ReputationProgressAggregator;
+use App\Infrastructure\Parsers\AddonDataParser;
 use App\Infrastructure\Parsers\Db2FactionExpansionMapper;
 
-test('aggregate groups reputations by expansion', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([
-        72 => 0,   // Hurlevent → Classic
-        1037 => 2, // Chevaliers → WotLK
-    ]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+function makeAggregator(
+    array $buildMap = [],
+    array $maxRenownMap = [],
+    array $namesMap = [],
+    array $factionMap = [],
+): ReputationProgressAggregator {
+    $mapperMock = Mockery::mock(Db2FactionExpansionMapper::class);
+    $mapperMock->shouldReceive('build')->andReturn($buildMap);
+    $mapperMock->shouldReceive('buildMaxRenownMap')->andReturn($maxRenownMap);
+    $mapperMock->shouldReceive('buildFactionNamesMap')->andReturn($namesMap);
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $addonMock = Mockery::mock(AddonDataParser::class);
+    $addonMock->shouldReceive('getReputationFactionMap')->andReturn($factionMap);
+
+    return new ReputationProgressAggregator($mapperMock, $addonMock);
+}
+
+test('aggregate groups reputations by expansion', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 1037 => 2],
+        namesMap: [72 => 'Hurlevent', 1037 => 'Chevaliers de la Lame d\'ébène'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 72, 'name' => 'Hurlevent'],
@@ -31,22 +46,24 @@ test('aggregate groups reputations by expansion', function (): void {
         ->and($result[0]['completed'])->toBe(1)
         ->and($result[0]['factions'])->toHaveCount(1)
         ->and($result[0]['factions'][0]['name'])->toBe('Hurlevent')
-        ->and($result[0]['factions'][0]['tier'])->toBe(7);
+        ->and($result[0]['factions'][0]['tier'])->toBe(7)
+        ->and($result[0]['factions'][0]['started'])->toBeTrue();
 
     expect($result[2]['total'])->toBe(1)
         ->and($result[2]['completed'])->toBe(0)
         ->and($result[2]['factions'][0]['name'])->toBe('Chevaliers de la Lame d\'ébène')
         ->and($result[2]['factions'][0]['value'])->toBe(5000)
-        ->and($result[2]['factions'][0]['max'])->toBe(12000);
+        ->and($result[2]['factions'][0]['max'])->toBe(12000)
+        ->and($result[2]['factions'][0]['started'])->toBeTrue();
 });
 
 test('aggregate counts exalted tier as completed', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([72 => 0]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0],
+        namesMap: [72 => 'Hurlevent'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 72, 'name' => 'Hurlevent'],
@@ -56,16 +73,18 @@ test('aggregate counts exalted tier as completed', function (): void {
     ]);
 
     expect($result[0]['completed'])->toBe(1)
-        ->and($result[0]['factions'][0]['completed'])->toBeTrue();
+        ->and($result[0]['factions'][0]['completed'])->toBeTrue()
+        ->and($result[0]['factions'][0]['started'])->toBeTrue();
 });
 
 test('aggregate counts max renown as completed via renown_level', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([2503 => 9]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([2503 => 25]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2503 => 9],
+        maxRenownMap: [2503 => 25],
+        namesMap: [2503 => 'Centaure maruuk'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 2503, 'name' => 'Centaure maruuk'],
@@ -80,12 +99,13 @@ test('aggregate counts max renown as completed via renown_level', function (): v
 });
 
 test('aggregate does not count in-progress renown as completed', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([2503 => 9]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([2503 => 25]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2503 => 9],
+        maxRenownMap: [2503 => 25],
+        namesMap: [2503 => 'Centaure maruuk'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 2503, 'name' => 'Centaure maruuk'],
@@ -100,12 +120,9 @@ test('aggregate does not count in-progress renown as completed', function (): vo
 });
 
 test('aggregate skips factions not in expansion map', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator();
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 9999, 'name' => 'Unknown'],
@@ -114,43 +131,43 @@ test('aggregate skips factions not in expansion map', function (): void {
         ],
     ]);
 
-    // All expansion slots should have 0 factions
     for ($i = 0; $i <= 11; $i++) {
         expect($result[$i]['total'])->toBe(0);
     }
 });
 
 test('aggregate returns all 12 expansion slots', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator();
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate(['reputations' => []]);
+    $result = $reputationProgressAggregator->aggregate(['reputations' => []]);
 
     expect($result)->toHaveCount(12);
     expect(array_keys($result))->toBe(range(0, 11));
 });
 
-test('aggregate handles empty reputations response', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([72 => 0]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+test('aggregate adds unstarted factions from DB2 map when API response is empty', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0],
+        namesMap: [72 => 'Hurlevent'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([]);
+    $result = $reputationProgressAggregator->aggregate([]);
 
-    expect($result)->toHaveCount(12);
-    expect($result[0]['total'])->toBe(0);
+    expect($result[0]['total'])->toBe(1)
+        ->and($result[0]['completed'])->toBe(0)
+        ->and($result[0]['factions'][0]['name'])->toBe('Hurlevent')
+        ->and($result[0]['factions'][0]['started'])->toBeFalse()
+        ->and($result[0]['factions'][0]['tier'])->toBe(-1)
+        ->and($result[0]['factions'][0]['standing_name'])->toBe('Non commencée');
 });
 
 test('aggregate preserves faction data fields', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([72 => 0]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0],
+        namesMap: [72 => 'Hurlevent'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 72, 'name' => 'Hurlevent'],
@@ -168,16 +185,17 @@ test('aggregate preserves faction data fields', function (): void {
         ->and($faction['max'])->toBe(21000)
         ->and($faction['raw'])->toBe(35000)
         ->and($faction['renown_level'])->toBe(0)
-        ->and($faction['completed'])->toBeFalse();
+        ->and($faction['completed'])->toBeFalse()
+        ->and($faction['started'])->toBeTrue();
 });
 
 test('aggregate counts max === 0 with tier > 0 as completed', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([2600 => 10]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2600 => 10],
+        namesMap: [2600 => 'Council of Dornogal'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 2600, 'name' => 'Council of Dornogal'],
@@ -191,12 +209,12 @@ test('aggregate counts max === 0 with tier > 0 as completed', function (): void 
 });
 
 test('aggregate handles renown without max renown map entry', function (): void {
-    $mock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mock->shouldReceive('build')->andReturn([2503 => 9]);
-    $mock->shouldReceive('buildMaxRenownMap')->andReturn([]);
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2503 => 9],
+        namesMap: [2503 => 'Centaure maruuk'],
+    );
 
-    $aggregator = new ReputationProgressAggregator($mock);
-    $result = $aggregator->aggregate([
+    $result = $reputationProgressAggregator->aggregate([
         'reputations' => [
             [
                 'faction' => ['id' => 2503, 'name' => 'Centaure maruuk'],
@@ -205,7 +223,105 @@ test('aggregate handles renown without max renown map entry', function (): void 
         ],
     ]);
 
-    // Without max renown in map, cannot determine if completed
     expect($result[9]['completed'])->toBe(0)
         ->and($result[9]['factions'][0]['completed'])->toBeFalse();
+});
+
+// ─── New tests: unstarted factions ──────────────────────────
+
+test('aggregate mixes started and unstarted factions in same expansion', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 76 => 0],
+        namesMap: [72 => 'Hurlevent', 76 => 'Orgrimmar'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 72, 'name' => 'Hurlevent'],
+                'standing' => ['name' => 'Exalté', 'tier' => 7, 'value' => 0, 'max' => 0, 'raw' => 42999],
+            ],
+        ],
+    ]);
+
+    expect($result[0]['total'])->toBe(2)
+        ->and($result[0]['completed'])->toBe(1);
+
+    $started = collect($result[0]['factions'])->where('started', true);
+    $unstarted = collect($result[0]['factions'])->where('started', false);
+
+    expect($started)->toHaveCount(1)
+        ->and($started->first()['name'])->toBe('Hurlevent');
+    expect($unstarted)->toHaveCount(1)
+        ->and($unstarted->first()['name'])->toBe('Orgrimmar')
+        ->and($unstarted->first()['standing_name'])->toBe('Non commencée')
+        ->and($unstarted->first()['tier'])->toBe(-1)
+        ->and($unstarted->first()['completed'])->toBeFalse();
+});
+
+// ─── New tests: faction filtering ───────────────────────────
+
+test('aggregate filters opposite faction reputations for Alliance character', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 530 => 0, 1037 => 0],
+        namesMap: [72 => 'Hurlevent', 530 => 'Trolls Sombrelance', 1037 => 'Neutres'],
+        factionMap: [72 => 'Alliance', 530 => 'Horde'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate(['reputations' => []], 'Alliance');
+
+    $names = collect($result[0]['factions'])->pluck('name')->all();
+    expect($names)->toContain('Hurlevent')
+        ->and($names)->toContain('Neutres')
+        ->and($names)->not->toContain('Trolls Sombrelance')
+        ->and($result[0]['total'])->toBe(2);
+});
+
+test('aggregate filters opposite faction reputations for Horde character', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 530 => 0, 1037 => 0],
+        namesMap: [72 => 'Hurlevent', 530 => 'Trolls Sombrelance', 1037 => 'Neutres'],
+        factionMap: [72 => 'Alliance', 530 => 'Horde'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate(['reputations' => []], 'Horde');
+
+    $names = collect($result[0]['factions'])->pluck('name')->all();
+    expect($names)->toContain('Trolls Sombrelance')
+        ->and($names)->toContain('Neutres')
+        ->and($names)->not->toContain('Hurlevent')
+        ->and($result[0]['total'])->toBe(2);
+});
+
+test('aggregate does not filter when characterFaction is empty', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 530 => 0],
+        namesMap: [72 => 'Hurlevent', 530 => 'Trolls Sombrelance'],
+        factionMap: [72 => 'Alliance', 530 => 'Horde'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate(['reputations' => []]);
+
+    expect($result[0]['total'])->toBe(2);
+});
+
+test('aggregate filters opposite faction for started reputations too', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [72 => 0, 530 => 0],
+        namesMap: [72 => 'Hurlevent', 530 => 'Trolls Sombrelance'],
+        factionMap: [72 => 'Alliance', 530 => 'Horde'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 530, 'name' => 'Trolls Sombrelance'],
+                'standing' => ['name' => 'Neutre', 'tier' => 3, 'value' => 0, 'max' => 3000, 'raw' => 0],
+            ],
+        ],
+    ], 'Alliance');
+
+    $names = collect($result[0]['factions'])->pluck('name')->all();
+    expect($names)->not->toContain('Trolls Sombrelance')
+        ->and($result[0]['total'])->toBe(1);
 });

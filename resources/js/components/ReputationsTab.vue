@@ -43,7 +43,26 @@
                 v-model:hideCompleted="hideCompleted"
                 placeholder="Rechercher une faction..."
                 hideLabel="Masquer terminées"
-            />
+            >
+                <template #extra-toggles>
+                    <button
+                        type="button"
+                        @click="hideUnstarted = !hideUnstarted"
+                        :class="[
+                            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border transition-all select-none',
+                            hideUnstarted
+                                ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                                : 'bg-slate-800/60 border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/20'
+                        ]"
+                    >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path v-if="hideUnstarted" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path v-if="!hideUnstarted" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Masquer non commencées
+                    </button>
+                </template>
+            </SearchFilter>
 
             <!-- Factions Grid -->
             <section v-if="filteredFactions.length">
@@ -66,7 +85,12 @@
                     <div
                         v-for="faction in paginatedFactions"
                         :key="faction.id"
-                        class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group"
+                        :class="[
+                            'border p-4 rounded-2xl transition-colors group',
+                            faction.started === false
+                                ? 'bg-slate-900/30 border-slate-700/30 opacity-60'
+                                : 'bg-slate-800/40 border-white/5 hover:bg-slate-800/60'
+                        ]"
                     >
                         <div class="flex justify-between items-start mb-2">
                             <a
@@ -99,7 +123,7 @@
             <div v-else-if="currentCollection.reputations.total === 0" class="text-center py-8 text-slate-500 text-sm">
                 Aucune réputation pour cette extension.
             </div>
-            <div v-else-if="search || hideCompleted" class="text-center py-8 text-slate-500 text-sm">
+            <div v-else-if="search || hideCompleted || hideUnstarted" class="text-center py-8 text-slate-500 text-sm">
                 Aucun résultat trouvé.
             </div>
         </div>
@@ -119,6 +143,7 @@ const page = ref(1);
 const itemsPerPage = 12;
 const search = ref('');
 const hideCompleted = ref(false);
+const hideUnstarted = ref(false);
 
 const currentCollection = computed(() => store.character?.collections?.[activeExpansion.value] || null);
 
@@ -131,7 +156,11 @@ const progressPercent = computed(() => {
 const sortedFactions = computed(() => {
     if (!currentCollection.value) return [];
     const factions = currentCollection.value.reputations.factions || [];
-    return [...factions].sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    return [...factions].sort((a, b) => {
+        if (a.started !== b.started) return a.started ? -1 : 1;
+        if (a.started && b.started && a.completed !== b.completed) return a.completed ? 1 : -1;
+        return a.name.localeCompare(b.name, 'fr');
+    });
 });
 
 const filteredFactions = computed(() => {
@@ -143,6 +172,9 @@ const filteredFactions = computed(() => {
     }
     if (hideCompleted.value) {
         factions = factions.filter(f => !f.completed);
+    }
+    if (hideUnstarted.value) {
+        factions = factions.filter(f => f.started !== false);
     }
 
     return factions;
@@ -160,6 +192,10 @@ const factionProgress = (faction) => {
 };
 
 const standingClasses = (faction) => {
+    if (faction.started === false) {
+        return 'text-slate-500 bg-slate-500/10 border-slate-500/30';
+    }
+
     // Renown factions: amber for completed, sky for in-progress
     if (faction.renown_level > 0) {
         return faction.completed
@@ -202,7 +238,7 @@ watch(activeExpansion, () => {
     page.value = 1;
 });
 
-watch([search, hideCompleted], () => {
+watch([search, hideCompleted, hideUnstarted], () => {
     page.value = 1;
 });
 </script>

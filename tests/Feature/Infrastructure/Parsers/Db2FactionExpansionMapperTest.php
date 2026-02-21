@@ -265,6 +265,59 @@ test('buildMaxRenownMap excludes factions whose currency has no MaxQty', functio
     expect($map)->not->toHaveKey(2503);
 });
 
+// ─── buildFactionNamesMap() ──────────────────────────────────
+
+test('buildFactionNamesMap returns empty when faction.csv is missing', function (): void {
+    expect($this->mapper->buildFactionNamesMap())->toBe([]);
+});
+
+test('buildFactionNamesMap returns names for valid factions', function (): void {
+    factionWriteCsv([
+        ['1118', 'Classique', '0', '-1'],
+        ['72', 'Hurlevent', '1118', '0'],
+        ['1037', 'Chevaliers', '1118', '0'],
+    ]);
+
+    $map = $this->mapper->buildFactionNamesMap();
+
+    expect($map)->toHaveKey(72)
+        ->and($map[72])->toBe('Hurlevent')
+        ->and($map)->toHaveKey(1037)
+        ->and($map[1037])->toBe('Chevaliers');
+});
+
+test('buildFactionNamesMap excludes factions with ReputationIndex below 0', function (): void {
+    factionWriteCsv([
+        ['1118', 'Classique', '0', '-1'],
+    ]);
+
+    $map = $this->mapper->buildFactionNamesMap();
+
+    expect($map)->not->toHaveKey(1118);
+});
+
+test('buildFactionNamesMap excludes parangon factions', function (): void {
+    factionWriteCsv([
+        ['1118', 'Classique', '0', '-1'],
+        ['999', 'Hurlevent (parangon)', '1118', '0'],
+    ]);
+
+    $map = $this->mapper->buildFactionNamesMap();
+
+    expect($map)->not->toHaveKey(999);
+});
+
+test('buildFactionNamesMap excludes DEPRECATED factions', function (): void {
+    factionWriteCsv([
+        ['1118', 'Classique', '0', '-1'],
+        ['998', 'DEPRECATED Old', '1118', '0'],
+    ]);
+
+    $map = $this->mapper->buildFactionNamesMap();
+
+    expect($map)->not->toHaveKey(998);
+});
+
 // ─── Helpers ─────────────────────────────────────────────────
 
 function factionWriteCsv(array $rows): void
