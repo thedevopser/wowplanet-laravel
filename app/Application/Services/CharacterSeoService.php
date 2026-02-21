@@ -8,6 +8,8 @@ use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\CharacterVisit;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Spatie\Sitemap\Sitemap;
+use Spatie\Sitemap\Tags\Url;
 
 class CharacterSeoService
 {
@@ -169,17 +171,24 @@ class CharacterSeoService
 
     public function generateSitemap(): string
     {
+        /** @var string $xml */
+        $xml = Cache::remember('sitemap_xml', 3600, fn(): string => $this->buildSitemap()->render());
+
+        return $xml;
+    }
+
+    private function buildSitemap(): Sitemap
+    {
         /** @var string $configUrl */
         $configUrl = config('app.url', '');
         $appUrl = rtrim($configUrl, '/');
 
-        $urls = [];
-
-        $urls[] = [
-            'loc' => $appUrl,
-            'changefreq' => 'weekly',
-            'priority' => '1.0',
-        ];
+        $sitemap = Sitemap::create()
+            ->add(
+                Url::create($appUrl)
+                    ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
+                    ->setPriority(1.0),
+            );
 
         /** @var \Illuminate\Database\Eloquent\Collection<int, CharacterVisit> $recentVisits */
         $recentVisits = CharacterVisit::query()
@@ -191,31 +200,15 @@ class CharacterSeoService
         foreach ($recentVisits as $recentVisit) {
             /** @var \Carbon\Carbon $lastVisitedAt */
             $lastVisitedAt = $recentVisit->last_visited_at;
-            $urls[] = [
-                'loc' => $appUrl.'/character/'
-                    .$recentVisit->realm_slug.'/'.$recentVisit->character_name,
-                'lastmod' => $lastVisitedAt->toW3cString(),
-                'changefreq' => 'daily',
-                'priority' => '0.8',
-            ];
+            $sitemap->add(
+                Url::create($appUrl.'/character/'.$recentVisit->realm_slug.'/'.$recentVisit->character_name)
+                    ->setLastModificationDate($lastVisitedAt)
+                    ->setChangeFrequency(Url::CHANGE_FREQUENCY_DAILY)
+                    ->setPriority(0.8),
+            );
         }
 
-        $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n";
-        $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'."\n";
-
-        foreach ($urls as $url) {
-            $xml .= "  <url>\n";
-            $xml .= '    <loc>'.htmlspecialchars($url['loc'])."</loc>\n";
-            if (isset($url['lastmod'])) {
-                $xml .= "    <lastmod>{$url['lastmod']}</lastmod>\n";
-            }
-
-            $xml .= "    <changefreq>{$url['changefreq']}</changefreq>\n";
-            $xml .= "    <priority>{$url['priority']}</priority>\n";
-            $xml .= "  </url>\n";
-        }
-
-        return $xml.'</urlset>';
+        return $sitemap;
     }
 
     /**

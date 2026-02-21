@@ -41,7 +41,7 @@ class SeoController extends Controller
         $xml = $this->characterSeoService->generateSitemap();
 
         return response($xml, 200, [
-            'Content-Type' => 'application/xml',
+            'Content-Type' => 'application/xml; charset=UTF-8',
         ]);
     }
 

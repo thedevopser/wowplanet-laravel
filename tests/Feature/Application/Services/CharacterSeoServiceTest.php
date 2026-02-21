@@ -79,13 +79,21 @@ test('generate sitemap returns valid xml', function (): void {
 
     $this->mock(BlizzardApiClient::class);
 
+    Cache::flush();
     $characterSeoService = resolve(CharacterSeoService::class);
     $xml = $characterSeoService->generateSitemap();
 
     expect($xml)->toStartWith('<?xml')
-        ->toContain('<urlset')
+        ->toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"')
         ->toContain('/character/hyjal/thrall')
-        ->toContain('/character/dalaran/jaina');
+        ->toContain('/character/dalaran/jaina')
+        ->toContain('<changefreq>weekly</changefreq>')
+        ->toContain('<changefreq>daily</changefreq>')
+        ->toContain('<priority>1.0</priority>')
+        ->toContain('<priority>0.8</priority>');
+
+    $parsed = simplexml_load_string($xml);
+    expect($parsed)->not->toBeFalse('Sitemap XML should be parseable');
 });
 
 test('get character meta tracks visit', function (): void {

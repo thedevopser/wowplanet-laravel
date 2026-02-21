@@ -52,11 +52,11 @@ test('sitemap returns xml', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('generateSitemap');
-    $exp->once()->andReturn('<?xml version="1.0"?><urlset></urlset>');
+    $exp->once()->andReturn('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
 
     $this->get('/sitemap.xml')
         ->assertOk()
-        ->assertHeader('Content-Type', 'application/xml');
+        ->assertHeader('Content-Type', 'application/xml; charset=UTF-8');
 });
 
 test('robots returns plain text', function (): void {
