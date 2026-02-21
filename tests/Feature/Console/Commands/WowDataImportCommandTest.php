@@ -24,6 +24,7 @@ test('command imports all types by default', function (): void {
     $this->importerMock->shouldReceive('importQuests')->once();
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
     $this->importerMock->shouldReceive('importMounts')->once();
+    $this->importerMock->shouldReceive('importMountCategories')->once();
     $this->importerMock->shouldReceive('importPets')->once();
     $this->importerMock->shouldReceive('importProfessions')->once();
     $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
@@ -51,6 +52,7 @@ test('command imports only achievements when --type=achievements', function (): 
 
 test('command imports only mounts when --type=mounts', function (): void {
     $this->importerMock->shouldReceive('importMounts')->once();
+    $this->importerMock->shouldReceive('importMountCategories')->once();
     $this->importerMock->shouldNotReceive('importQuests');
     $this->importerMock->shouldNotReceive('importAchievements');
 
@@ -66,7 +68,7 @@ test('command imports only professions when --type=professions', function (): vo
 });
 
 test('command displays stats table after import', function (): void {
-    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor', 'importDecorCategories');
+    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importMountCategories', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor', 'importDecorCategories');
 
     $this->artisan('app:wow-data-import')
         ->assertSuccessful()

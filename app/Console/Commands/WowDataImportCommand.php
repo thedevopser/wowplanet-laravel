@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\DecorCategoryMapper;
 use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Parsers\MountCategoryMapper;
 use App\Models\WowAchievement;
 use App\Models\WowDecor;
 use App\Models\WowMount;
@@ -59,6 +60,9 @@ class WowDataImportCommand extends Command
         if ($type === 'all' || $type === 'mounts') {
             $this->info('Importing Mounts from DB2 CSV...');
             $blizzardBatchImporter->importMounts();
+            $mountCategoryMap = MountCategoryMapper::build();
+            $this->info(sprintf('Mount category map: %d IDs', count($mountCategoryMap)));
+            $blizzardBatchImporter->importMountCategories($mountCategoryMap);
             $this->newLine();
         }
 

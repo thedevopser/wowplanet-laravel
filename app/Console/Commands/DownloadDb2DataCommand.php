@@ -104,6 +104,17 @@ class DownloadDb2DataCommand extends Command
                 $failed++;
             }
 
+            $this->info('Downloading mount categories from SimpleArmory...');
+            $mountResult = $this->downloadExtraFile(
+                'https://simplearmory.com/data/mounts.json',
+                'mounts_categories.json',
+            );
+            if ($mountResult) {
+                $success++;
+            } else {
+                $failed++;
+            }
+
             $this->newLine();
         }
 

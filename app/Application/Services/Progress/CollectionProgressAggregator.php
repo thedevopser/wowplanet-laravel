@@ -13,11 +13,24 @@ class CollectionProgressAggregator
 {
     /**
      * @param  list<int>  $characterMountIds
-     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, wowhead_id: int|null, icon_url: string|null}>
+     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, category: string|null, wowhead_id: int|null, icon_url: string|null}>
      */
     public function aggregateMounts(array $characterMountIds): array
     {
-        return $this->processCollection(WowMount::all(), $characterMountIds, fn (WowMount $wowMount) => $wowMount->source_spell_id); // @phpstan-ignore argument.type
+        $result = [];
+        foreach (WowMount::all() as $mount) {
+            $result[] = [
+                'id' => $mount->id,
+                'name' => $mount->name_fr,
+                'is_completed' => in_array($mount->id, $characterMountIds),
+                'source' => $mount->source ?? null,
+                'category' => $mount->category ?? null,
+                'wowhead_id' => $mount->source_spell_id,
+                'icon_url' => $mount->icon_url ?? null,
+            ];
+        }
+
+        return $result;
     }
 
     /**

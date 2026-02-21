@@ -99,6 +99,31 @@ class MountImporter
         return $mounts;
     }
 
+    /**
+     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     */
+    public function importCategories(array $categoryMap): void
+    {
+        $this->info('Enriching mounts with categories...');
+
+        $updated = 0;
+        $unmatched = 0;
+
+        foreach (WowMount::all() as $mount) {
+            if (isset($categoryMap[$mount->id])) {
+                $mount->update([
+                    'category' => $categoryMap[$mount->id]['category'],
+                    'source' => $categoryMap[$mount->id]['source'],
+                ]);
+                $updated++;
+            } else {
+                $unmatched++;
+            }
+        }
+
+        $this->info(sprintf('Mount categories: %d updated, %d unmatched.', $updated, $unmatched));
+    }
+
     public function importIcons(): void
     {
         $this->info('Fetching mount icons...');

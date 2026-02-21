@@ -56,6 +56,14 @@ class BlizzardBatchImporter
         $this->petImporter->import($spellNameMap);
     }
 
+    /**
+     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     */
+    public function importMountCategories(array $categoryMap): void
+    {
+        $this->mountImporter->importCategories($categoryMap);
+    }
+
     public function importMountIcons(): void
     {
         $this->mountImporter->importIcons();

@@ -2,31 +2,35 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import MountsTab from './MountsTab.vue';
 
-const character = {
-    mountsCount: 3,
-    mounts: [
-        { id: 1, name: 'Loup de guerre', is_completed: true, wowhead_id: 1001 },
-        { id: 2, name: 'Destrier noir', is_completed: false, wowhead_id: 1002 },
-        { id: 3, name: 'Aigle de guerre', is_completed: true, wowhead_id: 1003 },
-    ],
-};
+const makeCharacter = (mounts = [], mountsCount = null) => ({
+    mountsCount: mountsCount ?? mounts.filter(m => m.is_completed).length,
+    mounts,
+});
+
+/** Uncategorized mounts (no category/source) → "Non classé" flat list */
+const sampleMounts = [
+    { id: 1, name: 'Loup de guerre', is_completed: true, wowhead_id: 1001 },
+    { id: 2, name: 'Destrier noir', is_completed: false, wowhead_id: 1002 },
+    { id: 3, name: 'Aigle de guerre', is_completed: true, wowhead_id: 1003 },
+];
+
+/** Categorized mounts for categorized view tests */
+const categorizedMounts = [
+    { id: 1, name: 'Loup de guerre', is_completed: true, wowhead_id: 1001, icon_url: null, category: 'Classic', source: 'Reputation' },
+    { id: 2, name: 'Destrier noir', is_completed: false, wowhead_id: 1002, icon_url: null, category: 'Classic', source: 'Reputation' },
+    { id: 3, name: 'Aigle de guerre', is_completed: true, wowhead_id: 1003, icon_url: null, category: 'Classic', source: 'Achievement' },
+];
 
 describe('MountsTab', () => {
-    it('renders the mounts heading', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
+    it('renders the mounts heading and count', () => {
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(categorizedMounts, 2) } });
 
         expect(wrapper.text()).toContain('Montures');
+        expect(wrapper.text()).toContain('2 / 3');
     });
 
-    it('displays mounts count', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
-
-        expect(wrapper.text()).toContain('3');
-        expect(wrapper.text()).toContain('/ 3 total');
-    });
-
-    it('displays mount names sorted alphabetically', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
+    it('displays mount names sorted alphabetically in uncategorized view', () => {
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const mountNames = wrapper.findAll('.font-bold.text-slate-200').map(el => el.text());
 
         expect(mountNames[0]).toBe('Aigle de guerre');
@@ -35,14 +39,14 @@ describe('MountsTab', () => {
     });
 
     it('shows "Obtenue" badge for collected mounts', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const badges = wrapper.findAll('.text-green-400');
 
         expect(badges.length).toBe(2);
     });
 
     it('displays mount IDs', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
 
         expect(wrapper.text()).toContain('ID: 1');
         expect(wrapper.text()).toContain('ID: 2');
@@ -50,7 +54,7 @@ describe('MountsTab', () => {
     });
 
     it('links to wowhead', () => {
-        const wrapper = mount(MountsTab, { props: { character } });
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         expect(links.length).toBe(3);
@@ -58,9 +62,30 @@ describe('MountsTab', () => {
     });
 
     it('handles empty mounts array', () => {
-        const wrapper = mount(MountsTab, { props: { character: { mountsCount: 0, mounts: [] } } });
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter([], 0) } });
 
-        expect(wrapper.text()).toContain('0');
-        expect(wrapper.text()).toContain('/ 0 total');
+        expect(wrapper.text()).toContain('Montures');
+        expect(wrapper.text()).toContain('Aucun résultat trouvé.');
+    });
+
+    it('paginates source cards at 8 per page', () => {
+        const sourceNames = [
+            'Quest', 'Achievement', 'Vendor', 'Raid Drop', 'Dungeon Drop',
+            'Reputation', 'Treasure', 'Rare Spawn', 'Renown', 'Daily Activities',
+        ];
+        const manyMounts = sourceNames.map((source, i) => ({
+            id: i + 1,
+            name: `Monture ${String(i + 1).padStart(2, '0')}`,
+            is_completed: false,
+            wowhead_id: i + 100,
+            icon_url: null,
+            category: 'The War Within',
+            source,
+        }));
+        const wrapper = mount(MountsTab, { props: { character: makeCharacter(manyMounts) } });
+
+        expect(wrapper.text()).toContain('1 / 2');
+        const sourceCards = wrapper.findAll('.bg-slate-800\\/40.border');
+        expect(sourceCards.length).toBe(8);
     });
 });

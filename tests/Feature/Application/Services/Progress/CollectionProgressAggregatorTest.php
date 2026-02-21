@@ -7,9 +7,9 @@ use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 
-test('aggregateMounts returns mount list with completion status', function (): void {
-    WowMount::factory()->create(['id' => 1, 'name_fr' => 'Loup', 'source' => 'Vendeur']);
-    WowMount::factory()->create(['id' => 2, 'name_fr' => 'Cheval', 'source' => 'Quête']);
+test('aggregateMounts returns mount list with completion status and category', function (): void {
+    WowMount::factory()->create(['id' => 1, 'name_fr' => 'Loup', 'source' => 'Vendeur', 'category' => 'Classic']);
+    WowMount::factory()->create(['id' => 2, 'name_fr' => 'Cheval', 'source' => 'Quête', 'category' => 'The War Within']);
 
     $aggregator = new CollectionProgressAggregator;
     $result = $aggregator->aggregateMounts([1]);
@@ -20,7 +20,9 @@ test('aggregateMounts returns mount list with completion status', function (): v
     $cheval = collect($result)->firstWhere('id', 2);
     expect($loup['is_completed'])->toBeTrue();
     expect($loup['source'])->toBe('Vendeur');
+    expect($loup['category'])->toBe('Classic');
     expect($cheval['is_completed'])->toBeFalse();
+    expect($cheval['category'])->toBe('The War Within');
 });
 
 test('aggregatePets returns pet list with completion status', function (): void {

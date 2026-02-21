@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $id
  * @property string $name_fr
  * @property string|null $source
+ * @property string|null $category
  * @property int|null $source_spell_id
  * @property string|null $icon_url
  * @property bool $is_active
@@ -37,6 +38,7 @@ class WowMount extends Model
         'id',
         'name_fr',
         'source',
+        'category',
         'source_spell_id',
         'icon_url',
         'is_active',

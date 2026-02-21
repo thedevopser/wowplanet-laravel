@@ -227,6 +227,24 @@ test('importMounts creates mounts from CSV', function (): void {
     expect(WowMount::query()->find(2)->name_fr)->toBe('Destrier squelette');
 });
 
+test('importMountCategories enriches mounts with category and source', function (): void {
+    WowMount::factory()->create(['id' => 1, 'name_fr' => 'Loup noir']);
+    WowMount::factory()->create(['id' => 2, 'name_fr' => 'Destrier']);
+
+    $categoryMap = [
+        1 => ['category' => 'Classic', 'source' => 'Reputation'],
+        2 => ['category' => 'The War Within', 'source' => 'Achievement'],
+    ];
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importMountCategories($categoryMap);
+
+    expect(WowMount::query()->find(1)->category)->toBe('Classic');
+    expect(WowMount::query()->find(1)->source)->toBe('Reputation');
+    expect(WowMount::query()->find(2)->category)->toBe('The War Within');
+    expect(WowMount::query()->find(2)->source)->toBe('Achievement');
+});
+
 // ─── Pet Import ─────────────────────────────────────────────
 
 test('importPets creates pets from CSV with spell name map', function (): void {
