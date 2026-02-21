@@ -18,6 +18,8 @@ class AddonDataParser
         self::HORDE_BITMASK => 'Horde',
     ];
 
+    private const STORMWIND_FACTION_ID = 72;
+
     /**
      * Build quest_id → expansion_id map from ContentTuning for ALL expansions.
      * Uses DB2 QuestV2CliTask.ContentTuningID + ContentTuning.ExpansionID.
@@ -105,7 +107,12 @@ class AddonDataParser
     }
 
     /**
-     * Build reputation_faction_id → faction map from Faction.csv ReputationBase values.
+     * Build reputation_faction_id → 'Alliance'|'Horde' map from Faction.csv.
+     *
+     * Exclusive factions are detected by ReputationMax_1 < 0 (one group of races
+     * can never gain reputation). Alliance/Horde is determined by comparing each
+     * faction's ReputationRaceMask_0 against Stormwind's (ID 72) — if the masks
+     * overlap, group 0 contains Alliance races.
      *
      * @return array<int, string>
      */
@@ -129,18 +136,39 @@ class AddonDataParser
         }
 
         $idIdx = (int) array_search('ID', $headers, true);
-        $base0Idx = (int) array_search('ReputationBase_0', $headers, true);
-        $base1Idx = (int) array_search('ReputationBase_1', $headers, true);
+        $mask0Idx = (int) array_search('ReputationRaceMask_0', $headers, true);
+        $max0Idx = (int) array_search('ReputationMax_0', $headers, true);
+        $max1Idx = (int) array_search('ReputationMax_1', $headers, true);
 
-        $map = [];
+        $allianceRefMask = 0;
+        /** @var array<int, int> $exclusiveFactions faction_id → mask_0 */
+        $exclusiveFactions = [];
+
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $faction = $this->resolveReputationFaction((int) $row[$base0Idx], (int) $row[$base1Idx]);
-            if ($faction !== null) {
-                $map[(int) $row[$idIdx]] = $faction;
+            $id = (int) $row[$idIdx];
+            $mask0 = (int) $row[$mask0Idx];
+            $max0 = (int) $row[$max0Idx];
+            $max1 = (int) $row[$max1Idx];
+
+            if ($id === self::STORMWIND_FACTION_ID) {
+                $allianceRefMask = $mask0;
+            }
+
+            if ($max1 < 0 && $max0 > 0) {
+                $exclusiveFactions[$id] = $mask0;
             }
         }
 
         fclose($handle);
+
+        if ($allianceRefMask === 0) {
+            return [];
+        }
+
+        $map = [];
+        foreach ($exclusiveFactions as $factionId => $mask0) {
+            $map[$factionId] = ($allianceRefMask & $mask0) !== 0 ? 'Alliance' : 'Horde';
+        }
 
         return $map;
     }
@@ -201,19 +229,6 @@ class AddonDataParser
         fclose($handle);
 
         return $map;
-    }
-
-    private function resolveReputationFaction(int $allianceBase, int $hordeBase): ?string
-    {
-        if ($allianceBase >= 0 && $hordeBase < 0) {
-            return 'Alliance';
-        }
-
-        if ($hordeBase >= 0 && $allianceBase < 0) {
-            return 'Horde';
-        }
-
-        return null;
     }
 
     /**

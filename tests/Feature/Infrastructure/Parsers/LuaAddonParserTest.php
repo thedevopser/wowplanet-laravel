@@ -212,16 +212,22 @@ test('getRecipeFactionMap extracts faction from RaceMask', function (): void {
 
 // ─── getReputationFactionMap ────────────────────────────────
 
-test('getReputationFactionMap extracts faction from ReputationBase', function (): void {
+test('getReputationFactionMap detects exclusive factions via mask overlap', function (): void {
     writeFactionCsv([
-        ['1000', '100', '-1'],
-        ['1001', '-1', '100'],
-        ['1002', '100', '100'],
+        // Stormwind (Alliance reference)
+        ['72', '825576524', '42000', '-42000'],
+        // Alliance: mask overlaps with Stormwind
+        ['1000', '825576524', '42000', '-42000'],
+        // Horde: mask does NOT overlap
+        ['1001', '1308791200', '42000', '-42000'],
+        // Neutral: both max >= 0
+        ['1002', '825576524', '42000', '42000'],
     ]);
 
     $map = $this->parser->getReputationFactionMap();
 
-    expect($map)->toHaveCount(2);
+    expect($map)->toHaveCount(3);
+    expect($map[72])->toBe('Alliance');
     expect($map[1000])->toBe('Alliance');
     expect($map[1001])->toBe('Horde');
     expect($map)->not->toHaveKey(1002);
@@ -338,7 +344,7 @@ function writeSkillLineAbilityCsv(array $rows): void
 
 function writeFactionCsv(array $rows): void
 {
-    $lines = ['ID,ReputationBase_0,ReputationBase_1'];
+    $lines = ['ID,ReputationRaceMask_0,ReputationMax_0,ReputationMax_1'];
     foreach ($rows as $row) {
         $lines[] = implode(',', $row);
     }

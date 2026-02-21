@@ -121,24 +121,46 @@ test('getReputationFactionMap returns empty when file missing', function (): voi
     expect($this->parser->getReputationFactionMap())->toBe([]);
 });
 
-test('getReputationFactionMap handles both negative bases as neutral', function (): void {
-    adpWriteFactionCsv([['500', '-1', '-1']]);
-
-    expect($this->parser->getReputationFactionMap())->toBe([]);
-});
-
-test('getReputationFactionMap detects alliance and horde', function (): void {
+test('getReputationFactionMap skips non-exclusive factions', function (): void {
     adpWriteFactionCsv([
-        ['1', '100', '-1'],
-        ['2', '-1', '100'],
-        ['3', '100', '100'],
+        // Stormwind (Alliance reference)
+        ['72', '825576524', '42000', '-42000'],
+        // Neutral faction: both max >= 0
+        ['500', '825576524', '42000', '42000'],
     ]);
 
     $map = $this->parser->getReputationFactionMap();
 
-    expect($map)->toHaveCount(2);
-    expect($map[1])->toBe('Alliance');
-    expect($map[2])->toBe('Horde');
+    expect($map)->toHaveCount(1);
+    expect($map)->not->toHaveKey(500);
+});
+
+test('getReputationFactionMap detects alliance and horde via mask overlap', function (): void {
+    adpWriteFactionCsv([
+        // Stormwind (Alliance reference, mask = 825576524)
+        ['72', '825576524', '42000', '-42000'],
+        // Alliance faction: mask overlaps with Stormwind
+        ['946', '825576524', '42000', '-42000'],
+        // Horde faction: mask does NOT overlap with Stormwind
+        ['947', '1308791200', '42000', '-42000'],
+        // Neutral faction: Max_1 >= 0
+        ['989', '825576524', '42000', '0'],
+    ]);
+
+    $map = $this->parser->getReputationFactionMap();
+
+    expect($map)->toHaveCount(3);
+    expect($map[72])->toBe('Alliance');
+    expect($map[946])->toBe('Alliance');
+    expect($map[947])->toBe('Horde');
+});
+
+test('getReputationFactionMap returns empty when Stormwind not in CSV', function (): void {
+    adpWriteFactionCsv([
+        ['500', '825576524', '42000', '-42000'],
+    ]);
+
+    expect($this->parser->getReputationFactionMap())->toBe([]);
 });
 
 // ─── getZoneFactionMap ──────────────────────────────────────
@@ -185,7 +207,7 @@ function adpWriteQuestCliTaskCsv(array $rows): void
 
 function adpWriteFactionCsv(array $rows): void
 {
-    $lines = ['ID,ReputationBase_0,ReputationBase_1'];
+    $lines = ['ID,ReputationRaceMask_0,ReputationMax_0,ReputationMax_1'];
     foreach ($rows as $row) {
         $lines[] = implode(',', $row);
     }
