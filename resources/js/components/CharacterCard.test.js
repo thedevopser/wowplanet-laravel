@@ -11,6 +11,7 @@ const baseCharacter = {
     realm: 'Hyjal',
     avatarUrl: 'https://render.worldofwarcraft.com/avatar.jpg',
     classIconUrl: 'https://render.worldofwarcraft.com/class.jpg',
+    faction: 'Alliance',
     mountsCount: 150,
     petsCount: 200,
     exaltedCount: 42,
@@ -67,5 +68,26 @@ describe('CharacterCard', () => {
 
         expect(wrapper.text()).toContain('42');
         expect(wrapper.text()).toContain('Rép. terminées');
+    });
+
+    it('displays faction name', () => {
+        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+
+        expect(wrapper.text()).toContain('Alliance');
+    });
+
+    it('applies blue color for Alliance faction', () => {
+        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const factionSpan = wrapper.findAll('span').find(s => s.text() === 'Alliance');
+
+        expect(factionSpan.attributes('style')).toContain('#3b82f6');
+    });
+
+    it('applies red color for Horde faction', () => {
+        const character = { ...baseCharacter, faction: 'Horde' };
+        const wrapper = mount(CharacterCard, { props: { character } });
+        const factionSpan = wrapper.findAll('span').find(s => s.text() === 'Horde');
+
+        expect(factionSpan.attributes('style')).toContain('#ef4444');
     });
 });

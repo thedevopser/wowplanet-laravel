@@ -59,6 +59,7 @@
                     </div>
                     <div class="flex flex-wrap items-center gap-2 mt-3 text-[11px] sm:text-xs text-slate-400">
                         <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5 font-mono">Niv {{ char.level }}</span>
+                        <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5 font-bold" :style="{ color: char.faction === 'Alliance' ? '#3b82f6' : '#ef4444' }">{{ char.faction }}</span>
                         <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5">{{ char.raceName }}</span>
                         <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5" :style="{ color: classColors[char.classId] || '#FFFFFF' }">{{ char.className }}</span>
                     </div>

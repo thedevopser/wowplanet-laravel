@@ -96,4 +96,22 @@ describe('MyCharactersPage', () => {
 
         expect(store.fetchUserCharacters).toHaveBeenCalled();
     });
+
+    it('displays faction badge with correct color', async () => {
+        const wrapper = await mountPage({ userCharacters });
+
+        expect(wrapper.text()).toContain('Alliance');
+        expect(wrapper.text()).toContain('Horde');
+    });
+
+    it('filters characters by faction', async () => {
+        const wrapper = await mountPage({ userCharacters });
+
+        const searchInput = wrapper.find('input[placeholder*="Rechercher"]');
+        await searchInput.setValue('horde');
+
+        expect(wrapper.text()).toContain('Thrall');
+        expect(wrapper.text()).not.toContain('Arthas');
+        expect(wrapper.text()).not.toContain('Jaina');
+    });
 });

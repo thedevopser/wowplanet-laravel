@@ -16,6 +16,8 @@
                         <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
                         <span>{{ character.race }}</span>
                         <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
+                        <span class="font-bold" :style="{ color: factionColor }">{{ character.faction }}</span>
+                        <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
                         <span class="font-bold tracking-wide uppercase text-xs sm:text-sm" :style="{ color: classColor }">{{ character.class }}</span>
                         <span class="w-1 h-1 bg-slate-700 rounded-full"></span>
                         <span>{{ character.realm }}</span>
@@ -58,4 +60,5 @@ const props = defineProps({
 });
 
 const classColor = computed(() => classColors[props.character.classId] || '#FFFFFF');
+const factionColor = computed(() => props.character.faction === 'Alliance' ? '#3b82f6' : '#ef4444');
 </script>
