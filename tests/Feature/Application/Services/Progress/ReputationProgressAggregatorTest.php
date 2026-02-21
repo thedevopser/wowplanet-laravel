@@ -305,7 +305,7 @@ test('aggregate does not filter when characterFaction is empty', function (): vo
     expect($result[0]['total'])->toBe(2);
 });
 
-test('aggregate filters opposite faction for started reputations too', function (): void {
+test('aggregate keeps opposite faction reputations when started via API', function (): void {
     $reputationProgressAggregator = makeAggregator(
         buildMap: [72 => 0, 530 => 0],
         namesMap: [72 => 'Hurlevent', 530 => 'Trolls Sombrelance'],
@@ -322,6 +322,8 @@ test('aggregate filters opposite faction for started reputations too', function 
     ], 'Alliance');
 
     $names = collect($result[0]['factions'])->pluck('name')->all();
-    expect($names)->not->toContain('Trolls Sombrelance')
-        ->and($result[0]['total'])->toBe(1);
+    // API returned it for this character, so it must be kept even if tagged Horde
+    expect($names)->toContain('Trolls Sombrelance')
+        ->and($names)->toContain('Hurlevent')
+        ->and($result[0]['total'])->toBe(2);
 });

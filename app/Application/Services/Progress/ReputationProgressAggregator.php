@@ -48,10 +48,6 @@ class ReputationProgressAggregator
                 continue;
             }
 
-            if ($this->isOppositeFaction($factionId, $characterFaction, $reputationFactionMap)) {
-                continue;
-            }
-
             /** @var array{raw?: int, value?: int, max?: int, tier?: int, name?: string, renown_level?: int} $standing */
             $standing = $reputation['standing'] ?? [];
 
