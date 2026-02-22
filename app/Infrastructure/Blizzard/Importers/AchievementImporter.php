@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Log;
 
 class AchievementImporter
 {
+    private const TRACKING_FLAGS_MASK = 0x120000;
+
     private function info(string $message): void
     {
         if (app()->runningInConsole()) {
@@ -35,24 +37,25 @@ class AchievementImporter
             return;
         }
 
-        $achievements = $this->parseAchievementCsv($categories);
-        if ($achievements === []) {
+        $result = $this->parseAchievementCsv($categories);
+        if ($result['achievements'] === []) {
             $this->info('ERROR: achievement.csv not found or empty.');
 
             return;
         }
 
-        $this->info(sprintf('Found %d achievements in CSV.', count($achievements)));
+        $this->info(sprintf('Found %d achievements in CSV.', count($result['achievements'])));
         $this->info(sprintf('Expansion map covers %d achievement IDs.', count($addonExpansionMap)));
 
-        $this->saveAchievements($achievements, $addonExpansionMap);
+        $this->saveAchievements($result['achievements'], $addonExpansionMap, $result['trackingIds']);
     }
 
     /**
      * @param  list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>  $achievements
      * @param  array<int, int>  $addonExpansionMap
+     * @param  list<int>  $trackingIds
      */
-    private function saveAchievements(array $achievements, array $addonExpansionMap): void
+    private function saveAchievements(array $achievements, array $addonExpansionMap, array $trackingIds): void
     {
         $this->info('Saving '.count($achievements).' achievements to database...');
         $mapped = 0;
@@ -94,6 +97,20 @@ class AchievementImporter
 
         if ($cleaned > 0) {
             $this->info(sprintf('Deactivated %d debug/internal achievements.', $cleaned));
+        }
+
+        // Deactivate tracking achievements (bits 17+20, 0 points) not returned by Blizzard API
+        if ($trackingIds !== []) {
+            $deactivated = 0;
+            foreach (array_chunk($trackingIds, 500) as $chunk) {
+                $deactivated += WowAchievement::query()
+                    ->whereIn('id', $chunk)
+                    ->update(['is_active' => false]);
+            }
+
+            if ($deactivated > 0) {
+                $this->info(sprintf('Deactivated %d tracking achievements (no API visibility).', $deactivated));
+            }
         }
     }
 
@@ -170,32 +187,35 @@ class AchievementImporter
 
     /**
      * @param  array<int, array{name: string, parent: int}>  $categories
-     * @return list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>
+     * @return array{achievements: list<array{id: int, name_fr: string, expansion_id: int, category_name: string}>, trackingIds: list<int>}
      */
     private function parseAchievementCsv(array $categories): array
     {
         $csvPath = storage_path('app/blizzard/achievement.csv');
         if (! File::exists($csvPath)) {
-            return [];
+            return ['achievements' => [], 'trackingIds' => []];
         }
 
         $handle = fopen($csvPath, 'r');
         if ($handle === false) {
-            return [];
+            return ['achievements' => [], 'trackingIds' => []];
         }
 
         $headers = fgetcsv($handle, 0, ',', '"', '');
         if ($headers === false) {
             fclose($handle);
 
-            return [];
+            return ['achievements' => [], 'trackingIds' => []];
         }
 
         $idIdx = (int) array_search('ID', $headers, true);
         $titleIdx = (int) array_search('Title_lang', $headers, true);
         $categoryIdx = (int) array_search('Category', $headers, true);
+        $flagsIdx = (int) array_search('Flags', $headers, true);
+        $pointsIdx = (int) array_search('Points', $headers, true);
 
         $achievements = [];
+        $trackingIds = [];
         $skipped = 0;
 
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
@@ -203,6 +223,16 @@ class AchievementImporter
 
             // Skip achievements with empty names or debug/internal names
             if ($title === '' || $this->isInternalAchievement($title)) {
+                $skipped++;
+
+                continue;
+            }
+
+            // Skip tracking achievements (bits 17+20 set, 0 points) — not returned by Blizzard API
+            $flags = (int) ($row[$flagsIdx] ?? 0);
+            $points = (int) ($row[$pointsIdx] ?? 0);
+            if (($flags & self::TRACKING_FLAGS_MASK) === self::TRACKING_FLAGS_MASK && $points === 0) {
+                $trackingIds[] = (int) $row[$idIdx];
                 $skipped++;
 
                 continue;
@@ -222,9 +252,9 @@ class AchievementImporter
         fclose($handle);
 
         if ($skipped > 0) {
-            $this->info(sprintf('  Skipped %d achievements with empty/hidden names.', $skipped));
+            $this->info(sprintf('  Skipped %d achievements with empty/hidden/tracking names.', $skipped));
         }
 
-        return $achievements;
+        return ['achievements' => $achievements, 'trackingIds' => $trackingIds];
     }
 }
