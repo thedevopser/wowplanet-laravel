@@ -18,6 +18,26 @@ class Db2AchievementExpansionMapper
     private const ACHIEVEMENT_EXPANSION_OVERRIDES = [];
 
     /**
+     * Map ID → ExpansionID overrides for maps with incorrect ExpansionID in wago.tools DB2 data.
+     *
+     * @var array<int, int>
+     */
+    /**
+     * Area ID → ExpansionID overrides for areas whose ContinentID gives
+     * incorrect expansion (e.g. Midnight zones on Eastern Kingdoms continent 0).
+     *
+     * @var array<int, int>
+     */
+    private const AREA_ID_EXPANSION_OVERRIDES = [
+        15947 => 11, // Zul'Aman (Midnight) — ContinentID 0 gives expansion 0
+    ];
+
+    private const MAP_EXPANSION_OVERRIDES = [
+        2711 => 11, // Bois des Chants éternels continent → Midnight (missing from map.csv)
+        2810 => 10, // Manaforge Omega → The War Within (DB2 has 0)
+    ];
+
+    /**
      * Direct category_id → expansion_id mapping for categories
      * whose names don't contain expansion keywords but whose expansion is known.
      *
@@ -44,9 +64,10 @@ class Db2AchievementExpansionMapper
 
         // Gouffres
         15522 => 10, // Gouffres (root) → TWW
+        15571 => 11, // Gouffres (Midnight) → Midnight
 
         // Logis
-        15606 => 10, // Logis (root) → TWW
+        15606 => 11, // Logis (root) → Midnight
 
         // Évènements mondiaux
         15545 => 10, // Duos infâmes → TWW
@@ -54,6 +75,7 @@ class Db2AchievementExpansionMapper
 
         // Statistiques subcategories
         15533 => 10, // Gouffres (stats) → TWW
+        15572 => 11, // Gouffres stats (Midnight) → Midnight
         15550 => 10, // Duos infâmes (stats) → TWW
         15562 => 6,  // Legion Remix (stats) → Legion
 
@@ -153,6 +175,12 @@ class Db2AchievementExpansionMapper
         $categories = $this->parseCategoryCsv();
         $achievements = $this->parseAchievementCsv();
         $mapTable = Db2CsvLoader::loadMapByHeaders('map.csv', 'ID', 'ExpansionID');
+
+        // Fix incorrect ExpansionID values in wago.tools DB2 data
+        foreach (self::MAP_EXPANSION_OVERRIDES as $mapId => $expansionId) {
+            $mapTable[$mapId] = $expansionId;
+        }
+
         $modernAreaLookup = $this->buildAreaNameLookup($mapTable, self::AREA_MATCH_MIN_EXPANSION);
         $allAreaLookup = $this->buildAreaNameLookup($mapTable, 0);
         $criteriaTree = $this->parseCriteriaTreeIndex();
@@ -311,11 +339,13 @@ class Db2AchievementExpansionMapper
             return [];
         }
 
+        $idIdx = (int) array_search('ID', $headers, true);
         $nameIdx = (int) array_search('AreaName_lang', $headers, true);
         $contIdx = (int) array_search('ContinentID', $headers, true);
 
         $lookup = [];
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $areaId = (int) $row[$idIdx];
             $name = trim((string) $row[$nameIdx]);
             $continentId = (int) $row[$contIdx];
             if ($name === '') {
@@ -330,11 +360,15 @@ class Db2AchievementExpansionMapper
                 continue;
             }
 
-            if (! isset($mapTable[$continentId])) {
+            // Area-level override takes priority over continent-based resolution
+            if (isset(self::AREA_ID_EXPANSION_OVERRIDES[$areaId])) {
+                $expansion = self::AREA_ID_EXPANSION_OVERRIDES[$areaId];
+            } elseif (isset($mapTable[$continentId])) {
+                $expansion = $mapTable[$continentId];
+            } else {
                 continue;
             }
 
-            $expansion = $mapTable[$continentId];
             if ($expansion < $minExpansion) {
                 continue;
             }

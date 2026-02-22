@@ -100,7 +100,7 @@ class CharacterProfileService
 
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
-        /** @var list<array{id: int}> $achievementsList */
+        /** @var list<array{id: int, completed_timestamp?: int}> $achievementsList */
         $achievementsList = $achievementsResponse['achievements'] ?? [];
         /** @var list<array{mount: array{id: int}}> $mountsList */
         $mountsList = $mountsResponse['mounts'] ?? [];
@@ -114,7 +114,10 @@ class CharacterProfileService
             'media' => $media,
             'classMedia' => $classMedia,
             'completedQuestIds' => array_column($questsList, 'id'),
-            'completedAchievementIds' => array_column($achievementsList, 'id'),
+            'completedAchievementIds' => array_column(
+                array_filter($achievementsList, fn (array $a): bool => isset($a['completed_timestamp'])),
+                'id',
+            ),
             'characterMountIds' => array_map(fn (array $m): int => $m['mount']['id'], $mountsList),
             'characterPetIds' => array_map(fn (array $p): int => $p['species']['id'], $petsList),
             'characterDecorIds' => array_map(fn (array $d): int => $d['decor']['id'], $decorList),

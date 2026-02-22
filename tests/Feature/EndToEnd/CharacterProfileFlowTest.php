@@ -46,7 +46,7 @@ test('full character profile flow', function (): void {
         }
 
         if (str_contains($endpoint, 'achievements')) {
-            return ['achievements' => [['id' => 200]]];
+            return ['achievements' => [['id' => 200, 'completed_timestamp' => 1700000000000]]];
         }
 
         if (str_contains($endpoint, 'collections/mounts')) {

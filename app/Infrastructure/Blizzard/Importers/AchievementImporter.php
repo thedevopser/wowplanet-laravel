@@ -82,6 +82,27 @@ class AchievementImporter
             $mapped,
             $unmapped,
         ));
+
+        // Deactivate any debug/internal achievements that were imported in previous runs
+        $cleaned = WowAchievement::query()
+            ->where(function (\Illuminate\Contracts\Database\Query\Builder $builder): void {
+                $builder->where('name_fr', 'like', '<DNT>%')
+                    ->orWhere('name_fr', 'like', '[HIDDEN]%')
+                    ->orWhere('name_fr', 'like', '%[DNT]%');
+            })
+            ->update(['is_active' => false]);
+
+        if ($cleaned > 0) {
+            $this->info(sprintf('Deactivated %d debug/internal achievements.', $cleaned));
+        }
+    }
+
+    private function isInternalAchievement(string $title): bool
+    {
+        return str_starts_with($title, '<Hidden>')
+            || str_starts_with($title, '<DNT>')
+            || str_starts_with($title, '[HIDDEN]')
+            || str_contains($title, '[DNT]');
     }
 
     /**
@@ -181,7 +202,7 @@ class AchievementImporter
             $title = trim($row[$titleIdx] ?? '');
 
             // Skip achievements with empty names or debug/internal names
-            if ($title === '' || str_starts_with($title, '<Hidden>')) {
+            if ($title === '' || $this->isInternalAchievement($title)) {
                 $skipped++;
 
                 continue;

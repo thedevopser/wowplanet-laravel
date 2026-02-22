@@ -12,6 +12,9 @@ class ExpansionTierMatcher
      */
     public static function match(string $name): ?int
     {
+        // Normalize non-breaking spaces (U+00A0) from wago.tools DB2 data
+        $name = str_replace("\u{00A0}", ' ', $name);
+
         $keywords = [
             // Multi-word (most specific first)
             "Royaumes de l'Est" => 0,

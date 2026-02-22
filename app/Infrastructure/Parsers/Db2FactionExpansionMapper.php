@@ -291,6 +291,11 @@ class Db2FactionExpansionMapper
             return true;
         }
 
+        // Delve season factions — the Blizzard API /reputations endpoint does not return them
+        if (mb_stripos($name, 'gouffre') !== false) {
+            return true;
+        }
+
         return str_contains($name, 'DEPRECATED') || str_contains($name, '[DNT]') || str_contains($name, 'JOUEUR');
     }
 }

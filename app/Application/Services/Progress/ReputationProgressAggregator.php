@@ -75,6 +75,18 @@ class ReputationProgressAggregator
             $startedFactionIds[$factionId] = true;
         }
 
+        // Collect started faction names to avoid adding duplicates with different IDs
+        /** @var array<string, true> $startedFactionNames */
+        $startedFactionNames = [];
+        foreach ($grouped as $factions) {
+            foreach ($factions as $faction) {
+                /** @var string $fName */
+                $fName = $faction['name'];
+                $startedFactionNames[$fName] = true;
+            }
+        }
+
+        $unstartedNames = [];
         foreach ($factionExpansionMap as $factionId => $expansionId) {
             if (isset($startedFactionIds[$factionId])) {
                 continue;
@@ -84,9 +96,23 @@ class ReputationProgressAggregator
                 continue;
             }
 
+            $name = $factionNamesMap[$factionId] ?? '';
+
+            // Skip if a faction with the same name is already started (duplicate faction ID)
+            if (isset($startedFactionNames[$name])) {
+                continue;
+            }
+
+            // Skip if an unstarted faction with the same name was already added
+            if (isset($unstartedNames[$name])) {
+                continue;
+            }
+
+            $unstartedNames[$name] = true;
+
             $grouped[$expansionId][] = [
                 'id' => $factionId,
-                'name' => $factionNamesMap[$factionId] ?? '',
+                'name' => $name,
                 'standing_name' => 'Non commencée',
                 'tier' => -1,
                 'value' => 0,

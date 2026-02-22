@@ -529,6 +529,75 @@ test('build criteria tree matches expansion keywords in descendant descriptions'
     expect($map[2400])->toBe(8); // Château Nathria → Shadowlands
 });
 
+// ─── Midnight category and area fixes ────────────────────────
+
+test('build resolves Midnight Gouffres category to Midnight', function (): void {
+    achWriteCategoryCsv([
+        ['15522', 'Gouffres', '-1'],
+        ['15571', 'Midnight', '15522'],
+    ]);
+    achWriteAchievementCsvFull([
+        ['2500', '15571', '0', 'Adepte des profondeurs : Midnight', 'Terminer les Gouffres de Midnight.'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map[2500])->toBe(11); // Midnight Gouffres → Midnight
+});
+
+test('build resolves Logis category to Midnight', function (): void {
+    achWriteCategoryCsv([
+        ['15606', 'Logis', '-1'],
+    ]);
+    achWriteAchievementCsvFull([
+        ['2600', '15606', '0', 'Décorateur', 'Placez 100 décorations.'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map[2600])->toBe(11); // Logis → Midnight
+});
+
+test('build resolves Midnight flight glyph via MAP_EXPANSION_OVERRIDES for missing continent', function (): void {
+    achWriteCategoryCsv([
+        ['15301', "Contenu d'extension", '-1'],
+        ['15462', 'Vol dynamique', '15301'],
+    ]);
+    achWriteAchievementCsvFull([
+        ['2700', '15462', '0', 'Glyphes de vol dynamique : travée Rayonnante', 'Obtenir le glyphe dans le bois des Chants éternels.'],
+    ]);
+    // Map 2711 NOT in CSV (missing from real DB2 data) — MAP_EXPANSION_OVERRIDES injects it as 11
+    achWriteMapCsv([]);
+    achWriteAreaTableCsv([
+        ['15173', 'Bois des Chants éternels', '2711'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map[2700])->toBe(11);
+});
+
+test('build resolves Zul Aman flight glyph via AREA_ID_EXPANSION_OVERRIDES', function (): void {
+    achWriteCategoryCsv([
+        ['15301', "Contenu d'extension", '-1'],
+        ['15462', 'Vol dynamique', '15301'],
+    ]);
+    achWriteAchievementCsvFull([
+        ['2800', '15462', '0', "Glyphes de vol dynamique : guet d'Ombre-Bassin", "Obtenir le glyphe à Zul'Aman."],
+    ]);
+    achWriteMapCsv([
+        ['0', '0'], // Eastern Kingdoms → Classic
+    ]);
+    achWriteAreaTableCsv([
+        // Area 15947 has ContinentID 0 but AREA_ID_EXPANSION_OVERRIDES says 11
+        ['15947', "Zul'Aman", '0'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map[2800])->toBe(11);
+});
+
 // ─── Helpers (prefixed to avoid Pest global conflicts) ──────
 
 function achWriteAchievementCsv(array $rows): void
