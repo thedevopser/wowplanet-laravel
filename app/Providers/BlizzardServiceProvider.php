@@ -37,7 +37,7 @@ class BlizzardServiceProvider extends ServiceProvider
                 $client = new Client([
                     'base_uri' => sprintf('https://%s.api.blizzard.com/', $region),
                     'handler' => $handlerStack,
-                    'timeout' => 5.0,
+                    'timeout' => 15.0,
                 ]);
 
                 return new BlizzardApiClient($client);

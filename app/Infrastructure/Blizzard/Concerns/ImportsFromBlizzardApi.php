@@ -53,6 +53,8 @@ trait ImportsFromBlizzardApi
         }
     }
 
+    private const MAX_BATCH_RETRIES = 2;
+
     /**
      * Fetch multiple endpoints concurrently using Guzzle promises.
      *
@@ -68,54 +70,70 @@ trait ImportsFromBlizzardApi
 
         $results = [];
         $stats = ['ok' => 0, 'not_found' => 0, 'timeout' => 0, 'error' => 0];
+        $pending = $endpoints;
 
-        foreach (array_chunk($endpoints, $batchSize, true) as $batch) {
-            $promises = [];
-            foreach ($batch as $key => $endpoint) {
-                $promises[$key] = $this->blizzardApiClient->getAsync($endpoint, [
-                    'namespace' => $namespace,
-                ]);
+        for ($attempt = 0; $attempt <= self::MAX_BATCH_RETRIES; $attempt++) {
+            if ($attempt > 0) {
+                $delay = $attempt * self::RATE_LIMIT_WAIT_S;
+                $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds)...', count($pending), $attempt, self::MAX_BATCH_RETRIES, $delay));
+                Sleep::sleep($delay);
             }
 
-            /** @var array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
-            $settled = Utils::settle($promises)->wait();
+            $failed = [];
 
-            foreach ($settled as $key => $result) {
-                if ($result['state'] === 'fulfilled' && isset($result['value'])) {
-                    /** @var array<string, mixed> $decoded */
-                    $decoded = json_decode($result['value']->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
-                    $results[$key] = $decoded;
-                    $stats['ok']++;
-
-                    continue;
+            foreach (array_chunk($pending, $batchSize, true) as $batch) {
+                $promises = [];
+                foreach ($batch as $key => $endpoint) {
+                    $promises[$key] = $this->blizzardApiClient->getAsync($endpoint, [
+                        'namespace' => $namespace,
+                    ]);
                 }
 
-                $results[$key] = null;
-                $reason = $result['reason'] ?? null;
+                /** @var array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
+                $settled = Utils::settle($promises)->wait();
 
-                if ($this->isNotFoundError($reason)) {
-                    $stats['not_found']++;
+                foreach ($settled as $key => $result) {
+                    if ($result['state'] === 'fulfilled' && isset($result['value'])) {
+                        /** @var array<string, mixed> $decoded */
+                        $decoded = json_decode($result['value']->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+                        $results[$key] = $decoded;
+                        $stats['ok']++;
 
-                    continue;
+                        continue;
+                    }
+
+                    $reason = $result['reason'] ?? null;
+
+                    if ($this->isNotFoundError($reason)) {
+                        $results[$key] = null;
+                        $stats['not_found']++;
+
+                        continue;
+                    }
+
+                    $failed[$key] = $pending[$key];
+                    Log::debug(sprintf('Async API error [%s]: %s', $pending[$key] ?? '?', $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
                 }
-
-                if ($reason instanceof \Throwable && str_contains($reason->getMessage(), 'timed out')) {
-                    $stats['timeout']++;
-                } else {
-                    $stats['error']++;
-                }
-
-                Log::debug(sprintf('Async API error [%s]: %s', $endpoints[$key] ?? '?', $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
             }
+
+            $pending = $failed;
+
+            if ($pending === []) {
+                break;
+            }
+        }
+
+        foreach (array_keys($pending) as $key) {
+            $results[$key] = null;
+            $stats['error']++;
         }
 
         $total = count($endpoints);
         $this->info(sprintf(
-            '  API batch: %d/%d OK, %d not found, %d timeout, %d errors',
+            '  API batch: %d/%d OK, %d not found, %d errors',
             $stats['ok'],
             $total,
             $stats['not_found'],
-            $stats['timeout'],
             $stats['error'],
         ));
 
