@@ -16,7 +16,6 @@ beforeEach(function (): void {
     $this->testFiles = [
         'area_table.csv', 'map.csv', 'content_tuning.csv',
         'quest_v2_cli_task.csv', 'skill_line_ability.csv', 'faction.csv',
-        'achievement.csv', 'achievement_category.csv', 'criteria_tree.csv',
         'spell_name.csv', 'ui_map.csv', 'quest_poi_blob.csv',
     ];
     $this->backups = [];
@@ -133,28 +132,6 @@ test('buildAreaExpansionMap walks parent chain when map not found', function ():
     $map = $this->parser->buildAreaExpansionMap();
 
     expect($map[500])->toBe(1);
-});
-
-// ─── getAchievementExpansionMap (DB2-based) ─────────────────
-
-test('getAchievementExpansionMap returns mapping from DB2 category hierarchy', function (): void {
-    lapWriteCategoryCsv([
-        ['92', 'Quêtes', '-1'],
-        ['14861', 'Norfendre', '92'],
-    ]);
-    lapWriteAchievementCsv([
-        ['100', '14861', '0'],
-    ]);
-
-    $map = $this->parser->getAchievementExpansionMap();
-
-    expect($map[100])->toBe(2);
-});
-
-test('getAchievementExpansionMap returns empty array when files missing', function (): void {
-    $map = $this->parser->getAchievementExpansionMap();
-
-    expect($map)->toBe([]);
 });
 
 // ─── getQuestFactionMap ─────────────────────────────────────
@@ -350,24 +327,4 @@ function writeFactionCsv(array $rows): void
     }
 
     file_put_contents(storage_path('app/blizzard/faction.csv'), implode("\n", $lines));
-}
-
-function lapWriteAchievementCsv(array $rows): void
-{
-    $lines = ['Description_lang,Title_lang,Reward_lang,ID,Instance_ID,Faction,Supercedes,Category,Minimum_criteria,Points,Flags,Ui_order,IconFileID,RewardItemID,Criteria_tree,Shares_criteria,CovenantID,HiddenBeforeDisplaySeason,LegacyAfterTimeEvent'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf(',,,"%s","%s","-1","0","%s","0","0","0","0","0","0","0","0","0","0","0"', $row[0], $row[2], $row[1]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/achievement.csv'), implode("\n", $lines));
-}
-
-function lapWriteCategoryCsv(array $rows): void
-{
-    $lines = ['Name_lang,ID,Parent,Ui_order'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s","%s","0"', $row[1], $row[0], $row[2]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/achievement_category.csv'), implode("\n", $lines));
 }

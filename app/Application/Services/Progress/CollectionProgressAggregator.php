@@ -7,7 +7,6 @@ namespace App\Application\Services\Progress;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
-use Illuminate\Support\Collection;
 
 class CollectionProgressAggregator
 {
@@ -35,11 +34,24 @@ class CollectionProgressAggregator
 
     /**
      * @param  list<int>  $characterPetIds
-     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, wowhead_id: int|null, icon_url: string|null}>
+     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, category: string|null, wowhead_id: int|null, icon_url: string|null}>
      */
     public function aggregatePets(array $characterPetIds): array
     {
-        return $this->processCollection(WowPet::all(), $characterPetIds, fn (WowPet $wowPet) => $wowPet->creature_id); // @phpstan-ignore argument.type
+        $result = [];
+        foreach (WowPet::all() as $pet) {
+            $result[] = [
+                'id' => $pet->id,
+                'name' => $pet->name_fr,
+                'is_completed' => in_array($pet->id, $characterPetIds),
+                'source' => $pet->source ?? null,
+                'category' => $pet->category ?? null,
+                'wowhead_id' => $pet->creature_id,
+                'icon_url' => $pet->icon_url ?? null,
+            ];
+        }
+
+        return $result;
     }
 
     /**
@@ -49,39 +61,20 @@ class CollectionProgressAggregator
     public function aggregateDecor(array $characterDecorIds): array
     {
         $result = [];
-        foreach (WowDecor::all() as $item) {
-            $result[] = [
-                'id' => $item->id,
-                'name' => $item->name_fr,
-                'is_completed' => in_array($item->id, $characterDecorIds),
-                'item_id' => $item->item_id,
-                'icon_url' => $item->icon_url,
-                'category' => $item->category,
-                'source' => $item->source,
-            ];
-        }
+        $decors = WowDecor::query()
+            ->where('is_active', true)
+            ->orWhereIn('id', $characterDecorIds)
+            ->get();
 
-        return $result;
-    }
-
-    /**
-     * @param  Collection<int, WowMount|WowPet>  $allItems
-     * @param  list<int>  $characterIds
-     * @return list<array{id: int, name: string, is_completed: bool, source: string|null, wowhead_id: int|null, icon_url: string|null}>
-     */
-    private function processCollection(Collection $allItems, array $characterIds, \Closure $wowheadIdResolver): array
-    {
-        $result = [];
-        foreach ($allItems as $allItem) {
-            /** @var int|null $wowheadId */
-            $wowheadId = $wowheadIdResolver($allItem);
+        foreach ($decors as $decor) {
             $result[] = [
-                'id' => $allItem->id,
-                'name' => $allItem->name_fr,
-                'is_completed' => in_array($allItem->id, $characterIds),
-                'source' => $allItem->source ?? null,
-                'wowhead_id' => $wowheadId,
-                'icon_url' => $allItem->icon_url ?? null,
+                'id' => $decor->id,
+                'name' => $decor->name_fr,
+                'is_completed' => in_array($decor->id, $characterDecorIds),
+                'item_id' => $decor->item_id,
+                'icon_url' => $decor->icon_url,
+                'category' => $decor->category,
+                'source' => $decor->source,
             ];
         }
 

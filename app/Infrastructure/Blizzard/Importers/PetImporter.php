@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowPet;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
-class PetImporter
+final class PetImporter
 {
-    use ImportsFromBlizzardApi;
-
     /**
      * French spell name prefixes to strip when deriving pet names.
+     *
+     * @var list<string>
      */
     private const SPELL_NAME_PREFIXES = [
         'Invocation : ',
@@ -27,50 +27,57 @@ class PetImporter
         'Invoque des ',
     ];
 
-    public function __construct(
-        private readonly BlizzardApiClient $blizzardApiClient,
-    ) {}
-
     /**
      * @param  array<int, string>  $spellNameMap  [spell_id => spell_name]
      */
     public function import(array $spellNameMap = []): void
     {
-        $this->info('Loading pets from DB2 CSV data...');
-
-        $pets = $this->parsePetCsv($spellNameMap);
-        if ($pets === []) {
-            $this->info('ERROR: battle_pet_species.csv not found or empty.');
-
+        $saPets = $this->loadSimpleArmoryData();
+        if ($saPets === []) {
             return;
         }
 
-        $this->info(sprintf('Found %d pets in CSV.', count($pets)));
+        $frenchNames = $this->loadFrenchNames($spellNameMap);
+        $rows = $this->buildRows($saPets, $frenchNames);
 
-        $count = 0;
-        foreach ($pets as $pet) {
-            WowPet::query()->updateOrCreate(['id' => $pet['id']], [
-                'name_fr' => $pet['name_fr'],
-                'creature_id' => $pet['creature_id'] > 0 ? $pet['creature_id'] : null,
-                'is_active' => true,
-            ]);
-            $count++;
-            if ($count % 500 === 0) {
-                $this->info(sprintf('  Saved %d...', $count));
-            }
-        }
-
-        $this->info(sprintf('Pet import complete: %d pets.', $count));
+        $this->saveRows($rows);
     }
 
     /**
-     * @param  array<int, string>  $spellNameMap
-     * @return list<array{id: int, name_fr: string, creature_id: int}>
+     * @return array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>
      */
-    private function parsePetCsv(array $spellNameMap): array
+    private function loadSimpleArmoryData(): array
     {
+        $this->info('Parsing SimpleArmory pets.json...');
+
+        $pets = SimpleArmoryParser::parseCollection('pets.json');
+        if ($pets === []) {
+            $this->info('ERROR: Could not parse pets.json.');
+
+            return [];
+        }
+
+        $factionCount = count(array_filter($pets, static fn (array $p): bool => $p['faction'] !== null));
+        $this->info(sprintf('  Found %d pets (%d faction-specific).', count($pets), $factionCount));
+
+        return $pets;
+    }
+
+    /**
+     * Build French name map from battle_pet_species.csv (pet_id => french_name).
+     * Pet names come from the SummonSpellID's spell name, cleaned of invocation prefixes.
+     *
+     * @param  array<int, string>  $spellNameMap
+     * @return array<int, string>
+     */
+    private function loadFrenchNames(array $spellNameMap): array
+    {
+        $this->info('Loading French pet names from battle_pet_species.csv + spell names...');
+
         $csvPath = storage_path('app/blizzard/battle_pet_species.csv');
         if (! File::exists($csvPath)) {
+            $this->info('  WARNING: battle_pet_species.csv not found.');
+
             return [];
         }
 
@@ -87,48 +94,100 @@ class PetImporter
         }
 
         $idIdx = (int) array_search('ID', $headers, true);
-        $creatureIdx = (int) array_search('CreatureID', $headers, true);
         $spellIdx = (int) array_search('SummonSpellID', $headers, true);
 
-        $pets = [];
-        $noName = 0;
-
+        $names = [];
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
             $id = (int) $row[$idIdx];
-            $creatureId = (int) $row[$creatureIdx];
             $spellId = (int) ($row[$spellIdx] ?? 0);
-
-            // Derive name from spell name
-            $name = '';
-            if ($spellId > 0 && isset($spellNameMap[$spellId])) {
-                $name = $this->cleanPetName($spellNameMap[$spellId]);
-            }
-
-            if ($name === '') {
-                $noName++;
-
+            if ($id <= 0) {
                 continue;
             }
 
-            $pets[] = [
-                'id' => $id,
-                'name_fr' => $name,
-                'creature_id' => $creatureId,
-            ];
+            if ($spellId <= 0) {
+                continue;
+            }
+
+            if (! isset($spellNameMap[$spellId])) {
+                continue;
+            }
+
+            $name = $this->cleanPetName($spellNameMap[$spellId]);
+            if ($name !== '') {
+                $names[$id] = $name;
+            }
         }
 
         fclose($handle);
 
-        if ($noName > 0) {
-            $this->info(sprintf('  Skipped %d pets without resolvable name.', $noName));
-        }
+        $this->info(sprintf('  Found %d French pet names.', count($names)));
 
-        return $pets;
+        return $names;
     }
 
     /**
-     * Strip French invocation prefixes from spell names to get the pet name.
+     * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saPets
+     * @param  array<int, string>  $frenchNames
+     * @return list<array{id: int, name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>
      */
+    private function buildRows(array $saPets, array $frenchNames): array
+    {
+        $rows = [];
+        $matched = 0;
+        $fallbacks = 0;
+        $withIcons = 0;
+
+        foreach ($saPets as $id => $pet) {
+            $nameFr = $frenchNames[$id] ?? null;
+            if ($nameFr !== null) {
+                $matched++;
+            } else {
+                $fallbacks++;
+            }
+
+            $iconUrl = $pet['icon'] !== null ? SimpleArmoryParser::buildIconUrl($pet['icon']) : null;
+            if ($iconUrl !== null) {
+                $withIcons++;
+            }
+
+            $rows[] = [
+                'id' => $id,
+                'name_fr' => $nameFr ?? sprintf('[EN] Pet #%d', $id),
+                'category' => $pet['category'] !== '' ? $pet['category'] : null,
+                'source' => $pet['source'] !== '' ? $pet['source'] : null,
+                'creature_id' => $pet['creatureId'] > 0 ? $pet['creatureId'] : null,
+                'icon_url' => $iconUrl,
+                'is_active' => true,
+            ];
+        }
+
+        $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
+        $this->info(sprintf('  %d with icon URL.', $withIcons));
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array{id: int, name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>  $rows
+     */
+    private function saveRows(array $rows): void
+    {
+        $this->info(sprintf('Saving %d pets...', count($rows)));
+
+        $count = 0;
+        foreach (array_chunk($rows, 500) as $chunk) {
+            WowPet::query()->upsert(
+                $chunk,
+                uniqueBy: ['id'],
+                update: ['name_fr', 'category', 'source', 'creature_id', 'icon_url', 'is_active'],
+            );
+            $count += count($chunk);
+            $this->info(sprintf('  Saved %d...', $count));
+        }
+
+        $this->info(sprintf('Pet import complete: %d items.', $count));
+    }
+
     private function cleanPetName(string $spellName): string
     {
         foreach (self::SPELL_NAME_PREFIXES as $prefix) {
@@ -140,36 +199,12 @@ class PetImporter
         return $spellName;
     }
 
-    public function importIcons(): void
+    private function info(string $message): void
     {
-        $this->info('Fetching pet icons...');
-
-        /** @var \Illuminate\Database\Eloquent\Collection<int, WowPet> $pets */
-        $pets = WowPet::query()->whereNull('icon_url')->get();
-        $this->info(sprintf('  %d pets need icons.', $pets->count()));
-        $count = 0;
-
-        foreach ($pets as $pet) {
-            $this->delayIconRequest();
-
-            $media = $this->fetchWithRetry('data/wow/media/pet/'.$pet->id);
-            if (! $media) {
-                continue;
-            }
-
-            /** @var list<array{key: string, value: string}> $assets */
-            $assets = $media['assets'] ?? [];
-            $iconUrl = $assets[0]['value'] ?? null;
-            if ($iconUrl) {
-                $pet->update(['icon_url' => $iconUrl]);
-                $count++;
-            }
-
-            if ($count % 100 === 0 && $count > 0) {
-                $this->info(sprintf('  Icons fetched: %d...', $count));
-            }
+        if (app()->runningInConsole()) {
+            echo $message.PHP_EOL;
         }
 
-        $this->info(sprintf('Pet icon import complete: %d icons.', $count));
+        Log::info($message);
     }
 }

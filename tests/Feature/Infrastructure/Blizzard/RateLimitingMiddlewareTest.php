@@ -8,15 +8,15 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\RateLimiter;
 
-test('middleware passes request through rate limiter and returns response', function (): void {
+test('middleware passes request through when rate limit not exceeded', function (): void {
     RateLimiter::shouldReceive('attempt')
         ->once()
         ->withArgs(fn (string $key, int $maxAttempts, callable $callback, int $perSeconds): bool => $key === 'blizzard-api' && $maxAttempts === 100 && $perSeconds === 1)
-        ->andReturnUsing(fn (string $key, int $maxAttempts, callable $callback) => $callback());
+        ->andReturn(true);
 
     $middleware = new RateLimitingMiddleware;
 
-    $handler = (fn ($request, $options): \GuzzleHttp\Promise\FulfilledPromise => new FulfilledPromise(new Response(200, [], '{"ok":true}')));
+    $handler = fn ($request, $options): FulfilledPromise => new FulfilledPromise(new Response(200, [], '{"ok":true}'));
 
     $wrappedHandler = $middleware($handler);
     $request = new Request('GET', 'https://eu.api.blizzard.com/data/wow/quest/1');
@@ -38,11 +38,11 @@ test('middleware uses blizzard-api key with 100 requests per second limit', func
 
             return true;
         })
-        ->andReturnUsing(fn (string $key, int $maxAttempts, callable $callback) => $callback());
+        ->andReturn(true);
 
     $middleware = new RateLimitingMiddleware;
 
-    $handler = fn ($request, $options): \GuzzleHttp\Promise\FulfilledPromise => new FulfilledPromise(new Response(200));
+    $handler = fn ($request, $options): FulfilledPromise => new FulfilledPromise(new Response(200));
 
     $wrappedHandler = $middleware($handler);
     $request = new Request('GET', 'https://eu.api.blizzard.com/test');
@@ -52,12 +52,12 @@ test('middleware uses blizzard-api key with 100 requests per second limit', func
 test('middleware resolves promise with original response', function (): void {
     RateLimiter::shouldReceive('attempt')
         ->once()
-        ->andReturnUsing(fn (string $key, int $maxAttempts, callable $callback) => $callback());
+        ->andReturn(true);
 
     $middleware = new RateLimitingMiddleware;
     $originalResponse = new Response(404, ['X-Custom' => 'test'], 'Not Found');
 
-    $handler = fn ($request, $options): \GuzzleHttp\Promise\FulfilledPromise => new FulfilledPromise($originalResponse);
+    $handler = fn ($request, $options): FulfilledPromise => new FulfilledPromise($originalResponse);
 
     $wrappedHandler = $middleware($handler);
     $request = new Request('GET', 'https://eu.api.blizzard.com/missing');

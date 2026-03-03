@@ -11,6 +11,8 @@ use App\Models\WowPet;
 use App\Models\WowProfession;
 use App\Models\WowQuest;
 use App\Models\WowRecipe;
+use GuzzleHttp\Promise\Create;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
@@ -24,7 +26,8 @@ beforeEach(function (): void {
     // Back up real files to avoid interference with test data
     $this->testFiles = [
         'mount.csv', 'battle_pet_species.csv', 'skill_line_ability.csv',
-        'achievement.csv', 'achievement_category.csv',
+        'achievement.csv', 'achievements.json', 'mounts.json', 'pets.json',
+        'decors.json', 'housetdecor.csv',
         'quest_v2_cli_task.csv', 'skill_line.csv', 'trade_skill_category.csv',
     ];
     $this->backups = [];
@@ -56,111 +59,162 @@ afterEach(function (): void {
 
 // ─── Quest Import ───────────────────────────────────────────
 
-test('importQuests creates quests from CSV with expansion and zone maps', function (): void {
-    $this->mock(BlizzardApiClient::class);
+test('importQuests creates quests with expansion and zone maps', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    bbiWriteQuestCsv([
-        ['100', 'Quête de Durotar'],
-        ['101', 'Quête de Nagrand'],
-        ['200', 'Quête sans zone'],
-    ]);
+    // Area index with 2 areas
+    $mock->shouldReceive('get')
+        ->with('data/wow/quest/area/index', \Mockery::any())
+        ->andReturn(['areas' => [
+            ['id' => 10, 'name' => 'Durotar'],
+            ['id' => 20, 'name' => 'Nagrand'],
+        ]]);
 
-    $questExpansionMap = [100 => 0, 101 => 1];
-    $questZoneMap = [100 => 'Durotar', 101 => 'Nagrand'];
+    // Area 10: Durotar with 1 quest
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/area/10', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'area' => ['name' => 'Durotar'],
+            'quests' => [['id' => 100, 'name' => 'Quête de Durotar']],
+        ]))));
+
+    // Area 20: Nagrand with 2 quests
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/area/20', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'area' => ['name' => 'Nagrand'],
+            'quests' => [
+                ['id' => 101, 'name' => 'Quête de Nagrand'],
+                ['id' => 200, 'name' => 'Quête sans expansion'],
+            ],
+        ]))));
+
+    $areaExpansionMap = [10 => 0, 20 => 1];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap);
+    $blizzardBatchImporter->importQuests($areaExpansionMap);
 
     expect(WowQuest::query()->count())->toBe(3);
     expect(WowQuest::query()->find(100)->expansion_id)->toBe(0);
     expect(WowQuest::query()->find(100)->zone_name)->toBe('Durotar');
     expect(WowQuest::query()->find(101)->expansion_id)->toBe(1);
     expect(WowQuest::query()->find(101)->zone_name)->toBe('Nagrand');
-    expect(WowQuest::query()->find(200)->expansion_id)->toBe(0);
-    expect(WowQuest::query()->find(200)->zone_name)->toBeNull();
+    expect(WowQuest::query()->find(200)->expansion_id)->toBe(1); // fallback to area expansion
+    expect(WowQuest::query()->find(200)->zone_name)->toBe('Nagrand');
 });
 
-test('importQuests uses expansion map for quest expansion', function (): void {
-    $this->mock(BlizzardApiClient::class);
+test('importQuests uses ContentTuning expansion over area expansion', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    bbiWriteQuestCsv([
-        ['500', 'Quête TWW'],
-        ['501', 'Quête Midnight'],
-    ]);
+    $mock->shouldReceive('get')
+        ->with('data/wow/quest/area/index', \Mockery::any())
+        ->andReturn(['areas' => [['id' => 10, 'name' => 'Zone']]]);
 
-    $questExpansionMap = [500 => 10, 501 => 11];
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/area/10', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'area' => ['name' => 'Durotar'],
+            'quests' => [
+                ['id' => 500, 'name' => 'Quête TWW'],
+                ['id' => 501, 'name' => 'Quête Midnight'],
+            ],
+        ]))));
+
+    $areaExpansionMap = [10 => 0]; // area says Classic
+    $questExpansionMap = [500 => 10, 501 => 11]; // ContentTuning says TWW/Midnight
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests($questExpansionMap);
+    $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap);
 
-    expect(WowQuest::query()->find(500)->expansion_id)->toBe(10);
-    expect(WowQuest::query()->find(501)->expansion_id)->toBe(11);
+    expect(WowQuest::query()->find(500)->expansion_id)->toBe(10); // CT wins
+    expect(WowQuest::query()->find(501)->expansion_id)->toBe(11); // CT wins
 });
 
-test('importQuests assigns faction from quest faction map', function (): void {
-    $this->mock(BlizzardApiClient::class);
+test('importQuests assigns faction from quest and zone faction maps', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    bbiWriteQuestCsv([
-        ['100', 'Quête Alliance'],
-        ['101', 'Quête neutre'],
-    ]);
+    $mock->shouldReceive('get')
+        ->with('data/wow/quest/area/index', \Mockery::any())
+        ->andReturn(['areas' => [['id' => 10, 'name' => 'Zone']]]);
+
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/area/10', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'area' => ['name' => 'Hurlevent'],
+            'quests' => [
+                ['id' => 100, 'name' => 'Quête Alliance'],
+                ['id' => 101, 'name' => 'Quête zone'],
+            ],
+        ]))));
 
     $questFactionMap = [100 => 'Alliance'];
+    $zoneFactionMap = [10 => 'Alliance'];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests([], [], $questFactionMap);
+    $blizzardBatchImporter->importQuests([], [], $questFactionMap, $zoneFactionMap);
 
-    expect(WowQuest::query()->find(100)->faction)->toBe('Alliance');
-    expect(WowQuest::query()->find(101)->faction)->toBeNull();
+    expect(WowQuest::query()->find(100)->faction)->toBe('Alliance'); // from questFactionMap
+    expect(WowQuest::query()->find(101)->faction)->toBe('Alliance'); // from zoneFactionMap
 });
 
-test('importQuests skips quests with empty names', function (): void {
-    $this->mock(BlizzardApiClient::class);
+test('importQuests handles empty area index', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    bbiWriteQuestCsv([
-        ['100', ''],
-        ['101', 'Quête valide'],
-    ]);
+    $mock->shouldReceive('get')
+        ->with('data/wow/quest/area/index', \Mockery::any())
+        ->andReturn(['areas' => []]);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests([]);
-
-    expect(WowQuest::query()->count())->toBe(1);
-    expect(WowQuest::query()->first()->id)->toBe(101);
-});
-
-test('importQuests defaults unmapped quests to expansion 0', function (): void {
-    $this->mock(BlizzardApiClient::class);
-
-    bbiWriteQuestCsv([
-        ['100', 'Quête orpheline'],
-    ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importQuests([]); // empty map
-
-    expect(WowQuest::query()->find(100)->expansion_id)->toBe(0);
-});
-
-test('importQuests handles missing CSV gracefully', function (): void {
-    $this->mock(BlizzardApiClient::class);
-
-    // No CSV file written
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importQuests([]);
 
     expect(WowQuest::query()->count())->toBe(0);
 });
 
+test('importQuests defaults unmapped areas to expansion 0', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
+
+    $mock->shouldReceive('get')
+        ->with('data/wow/quest/area/index', \Mockery::any())
+        ->andReturn(['areas' => [['id' => 99, 'name' => 'Unknown']]]);
+
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/area/99', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'area' => ['name' => 'Unknown Zone'],
+            'quests' => [['id' => 100, 'name' => 'Quête orpheline']],
+        ]))));
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importQuests([]); // no area expansion map
+
+    expect(WowQuest::query()->find(100)->expansion_id)->toBe(0);
+});
+
 // ─── Achievement Import ─────────────────────────────────────
 
-test('importAchievements creates achievements from CSV data', function (): void {
-    bbiWriteAchievementCategoryCsv([
-        ['1', 'Général', '-1'],
+test('importAchievements creates achievements from SimpleArmory data', function (): void {
+    bbiWriteAchievementsJson([
+        [
+            'name' => 'General',
+            'cats' => [
+                [
+                    'name' => 'Classic',
+                    'subcats' => [
+                        [
+                            'name' => 'Exploration',
+                            'items' => [
+                                ['id' => 10, 'icon' => 'spell_nature_healingtouch', 'points' => 10],
+                                ['id' => 11, 'icon' => 'spell_holy_light', 'points' => 5],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
     ]);
-    bbiWriteAchievementCsv([
-        ['10', 'Bienvenue !', '1'],
-        ['11', 'Niveau 10', '1'],
+    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
+        [10, 'Bienvenue !'],
+        [11, 'Niveau 10'],
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -168,93 +222,178 @@ test('importAchievements creates achievements from CSV data', function (): void 
 
     expect(WowAchievement::query()->count())->toBe(2);
     expect(WowAchievement::query()->find(10)->name_fr)->toBe('Bienvenue !');
-    expect(WowAchievement::query()->find(10)->category_name)->toBe('Général');
+    expect(WowAchievement::query()->find(10)->category_name)->toBe('General');
     expect(WowAchievement::query()->find(10)->expansion_id)->toBe(0);
+    expect(WowAchievement::query()->find(10)->points)->toBe(10);
+    expect(WowAchievement::query()->find(10)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/spell_nature_healingtouch.jpg');
+    expect(WowAchievement::query()->find(11)->points)->toBe(5);
 });
 
-test('importAchievements uses expansion map when available', function (): void {
-    bbiWriteAchievementCategoryCsv([
-        ['1', 'Général', '-1'],
+test('importAchievements assigns expansion from category name', function (): void {
+    bbiWriteAchievementsJson([
+        [
+            'name' => 'Quests',
+            'cats' => [
+                [
+                    'name' => 'The War Within',
+                    'subcats' => [
+                        [
+                            'name' => 'Khaz Algar',
+                            'items' => [
+                                ['id' => 20, 'icon' => 'inv_misc_map01', 'points' => 10],
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'name' => 'Battle for Azeroth',
+                    'subcats' => [
+                        [
+                            'name' => 'Zandalar',
+                            'items' => [
+                                ['id' => 21, 'icon' => 'inv_misc_map02', 'points' => 10],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
     ]);
-    bbiWriteAchievementCsv([
-        ['10', 'Achievement X', '1'],
-        ['11', 'Achievement Y', '1'],
+    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
+        [20, 'Quêtes de Khaz Algar'],
+        [21, 'Quêtes de Zandalar'],
     ]);
-
-    $addonMap = [10 => 7]; // Achievement 10 mapped to BfA
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements($addonMap);
+    $blizzardBatchImporter->importAchievements();
 
-    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(7); // From map
-    expect(WowAchievement::query()->find(11)->expansion_id)->toBe(0); // Default
+    expect(WowAchievement::query()->find(20)->expansion_id)->toBe(10); // The War Within
+    expect(WowAchievement::query()->find(21)->expansion_id)->toBe(7); // Battle for Azeroth
 });
 
-test('importAchievements resolves root category from hierarchy', function (): void {
-    bbiWriteAchievementCategoryCsv([
-        ['1', 'Quêtes', '-1'],
-        ['2', 'Norfendre', '1'],
+test('importAchievements skips notReleased items', function (): void {
+    bbiWriteAchievementsJson([
+        [
+            'name' => 'General',
+            'cats' => [
+                [
+                    'name' => 'Classic',
+                    'subcats' => [
+                        [
+                            'name' => 'Exploration',
+                            'items' => [
+                                ['id' => 10, 'icon' => 'spell_holy_light', 'points' => 10],
+                                ['id' => 11, 'icon' => 'spell_fire_fireball', 'points' => 5, 'notReleased' => true],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
     ]);
-    bbiWriteAchievementCsv([
-        ['20', 'Quêtes du Norfendre', '2'],
+    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
+        [10, 'Achievement actif'],
+        [11, 'Achievement futur'],
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements();
 
     expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(20)->category_name)->toBe('Quêtes');
+    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Achievement actif');
+});
+
+test('importAchievements handles missing JSON file gracefully', function (): void {
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importAchievements();
+
+    expect(WowAchievement::query()->count())->toBe(0);
+});
+
+test('importAchievements uses English fallback when French name missing', function (): void {
+    bbiWriteAchievementsJson([
+        [
+            'name' => 'General',
+            'cats' => [
+                [
+                    'name' => 'Classic',
+                    'subcats' => [
+                        [
+                            'name' => 'Going Down!',
+                            'items' => [
+                                ['id' => 10, 'icon' => 'spell_holy_light', 'points' => 10],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', []);
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importAchievements();
+
+    expect(WowAchievement::query()->count())->toBe(1);
+    expect(WowAchievement::query()->find(10)->name_fr)->toBe('[EN] Going Down!');
 });
 
 // ─── Mount Import ───────────────────────────────────────────
 
-test('importMounts creates mounts from CSV', function (): void {
-    $this->mock(BlizzardApiClient::class);
-
-    file_put_contents(storage_path('app/blizzard/mount.csv'), implode("\n", [
-        'Name_lang,SourceText_lang,Description_lang,ID,MountTypeID,Flags,SourceTypeEnum,SourceSpellID',
-        '"Loup noir",,,"1",0,0,0,"12345"',
-        '"Destrier squelette",,,"2",0,0,0,"0"',
-        ',,,"3",0,0,0,"0"',
-    ]));
+test('importMounts creates mounts from SimpleArmory data', function (): void {
+    bbiWriteCollectionJson('mounts.json', [
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Reputation',
+                    'items' => [
+                        ['ID' => 1, 'icon' => 'ability_mount_drake_blue', 'spellid' => 12345, 'creatureId' => 0],
+                        ['ID' => 2, 'icon' => 'ability_mount_horse', 'spellid' => 0, 'creatureId' => 0],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+    bbiWriteFrenchNamesCsv('mount.csv', 'ID', 'Name_lang', [
+        [1, 'Loup noir'],
+        [2, 'Destrier squelette'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importMounts();
 
     expect(WowMount::query()->count())->toBe(2);
     expect(WowMount::query()->find(1)->name_fr)->toBe('Loup noir');
-    expect(WowMount::query()->find(1)->source_spell_id)->toBe(12345);
-    expect(WowMount::query()->find(2)->name_fr)->toBe('Destrier squelette');
-});
-
-test('importMountCategories enriches mounts with category and source', function (): void {
-    WowMount::factory()->create(['id' => 1, 'name_fr' => 'Loup noir']);
-    WowMount::factory()->create(['id' => 2, 'name_fr' => 'Destrier']);
-
-    $categoryMap = [
-        1 => ['category' => 'Classic', 'source' => 'Reputation'],
-        2 => ['category' => 'The War Within', 'source' => 'Achievement'],
-    ];
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importMountCategories($categoryMap);
-
     expect(WowMount::query()->find(1)->category)->toBe('Classic');
     expect(WowMount::query()->find(1)->source)->toBe('Reputation');
-    expect(WowMount::query()->find(2)->category)->toBe('The War Within');
-    expect(WowMount::query()->find(2)->source)->toBe('Achievement');
+    expect(WowMount::query()->find(1)->source_spell_id)->toBe(12345);
+    expect(WowMount::query()->find(1)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/ability_mount_drake_blue.jpg');
+    expect(WowMount::query()->find(2)->name_fr)->toBe('Destrier squelette');
 });
 
 // ─── Pet Import ─────────────────────────────────────────────
 
-test('importPets creates pets from CSV with spell name map', function (): void {
-    $this->mock(BlizzardApiClient::class);
+test('importPets creates pets from SimpleArmory data with spell name map', function (): void {
+    bbiWriteCollectionJson('pets.json', [
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Drop',
+                    'items' => [
+                        ['ID' => 1, 'icon' => 'spell_nature_pet', 'spellid' => 50001, 'creatureId' => 9999],
+                        ['ID' => 2, 'icon' => 'spell_shadow_pet', 'spellid' => 50002, 'creatureId' => 8888],
+                    ],
+                ],
+            ],
+        ],
+    ]);
 
     file_put_contents(storage_path('app/blizzard/battle_pet_species.csv'), implode("\n", [
         'Description_lang,SourceText_lang,ID,CreatureID,SummonSpellID,IconFileDataID',
         ',,"1","9999","50001",0',
         ',,"2","8888","50002",0',
-        ',,"3","7777","0",0',
     ]));
 
     $spellNameMap = [
@@ -268,47 +407,81 @@ test('importPets creates pets from CSV with spell name map', function (): void {
     expect(WowPet::query()->count())->toBe(2);
     expect(WowPet::query()->find(1)->name_fr)->toBe('Dragonnet');
     expect(WowPet::query()->find(1)->creature_id)->toBe(9999);
+    expect(WowPet::query()->find(1)->category)->toBe('Classic');
+    expect(WowPet::query()->find(1)->source)->toBe('Drop');
+    expect(WowPet::query()->find(1)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/spell_nature_pet.jpg');
     expect(WowPet::query()->find(2)->name_fr)->toBe('Petit chat');
 });
 
 // ─── Decor Import ───────────────────────────────────────────
 
-test('importDecor creates decor items from index', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/decor/index', \Mockery::any())
-        ->andReturn([
-            'decor_items' => [
-                ['id' => 1, 'name' => 'Foyer orné'],
-                ['id' => 2, 'name' => 'Tapis elfique'],
-                ['id' => 3, 'name' => ''],
+test('importDecor creates decor items from SimpleArmory data', function (): void {
+    bbiWriteCollectionJson('decors.json', [
+        [
+            'name' => 'The War Within',
+            'subcats' => [
+                [
+                    'name' => 'Quest',
+                    'items' => [
+                        ['ID' => 1, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245000'],
+                        ['ID' => 2, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245001'],
+                    ],
+                ],
             ],
-        ]);
+        ],
+    ]);
+    bbiWriteFrenchNamesCsv('housetdecor.csv', 'ID', 'Name_lang', [
+        [1, 'Foyer orné'],
+        [2, 'Tapis elfique'],
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importDecor();
 
     expect(WowDecor::query()->count())->toBe(2);
     expect(WowDecor::query()->find(1)->name_fr)->toBe('Foyer orné');
-});
-
-test('importDecorCategories enriches decor items with category and source', function (): void {
-    WowDecor::factory()->create(['id' => 1, 'name_fr' => 'Foyer orné']);
-    WowDecor::factory()->create(['id' => 2, 'name_fr' => 'Tapis elfique']);
-
-    $categoryMap = [
-        1 => ['category' => 'The War Within', 'source' => 'Quest'],
-        2 => ['category' => 'Midnight', 'source' => 'Achievement'],
-    ];
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importDecorCategories($categoryMap);
-
     expect(WowDecor::query()->find(1)->category)->toBe('The War Within');
     expect(WowDecor::query()->find(1)->source)->toBe('Quest');
-    expect(WowDecor::query()->find(2)->category)->toBe('Midnight');
-    expect(WowDecor::query()->find(2)->source)->toBe('Achievement');
+    expect(WowDecor::query()->find(1)->item_id)->toBe(245000);
+});
+
+test('importDecor marks notObtainable items as inactive', function (): void {
+    bbiWriteCollectionJson('decors.json', [
+        [
+            'name' => 'Undiscovered',
+            'subcats' => [
+                [
+                    'name' => 'Undiscovered Sources',
+                    'items' => [
+                        ['ID' => 10, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '300000', 'notObtainable' => true],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'name' => 'The War Within',
+            'subcats' => [
+                [
+                    'name' => 'Quest',
+                    'items' => [
+                        ['ID' => 1, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245000'],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+    bbiWriteFrenchNamesCsv('housetdecor.csv', 'ID', 'Name_lang', [
+        [1, 'Foyer orné'],
+        [10, 'Décor caché'],
+    ]);
+
+    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
+    $blizzardBatchImporter->importDecor();
+
+    expect(WowDecor::query()->count())->toBe(2);
+    expect(WowDecor::query()->find(1)->is_active)->toBeTrue();
+    expect(WowDecor::query()->find(10)->is_active)->toBeFalse();
+    expect(WowDecor::query()->find(10)->category)->toBe('Undiscovered');
 });
 
 // ─── Profession Import ──────────────────────────────────────
@@ -388,15 +561,22 @@ test('tagMirrorQuestFactions tags mirror quest pairs via API reputation', functi
     $mock = $this->mock(BlizzardApiClient::class);
 
     // Quest 100 returns a Horde reputation
-    $mock->shouldReceive('get')
+    $mock->shouldReceive('getAsync')
         ->with('data/wow/quest/100', \Mockery::any())
-        ->andReturn([
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
             'rewards' => [
                 'reputations' => [
                     ['reward' => ['id' => 2103]], // Zandalari
                 ],
             ],
-        ]);
+        ]))));
+
+    // Quest 101 returns no faction reputation
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/quest/101', \Mockery::any())
+        ->andReturn(Create::promiseFor(new Response(200, [], json_encode([
+            'rewards' => [],
+        ]))));
 
     $reputationFactionMap = [2103 => 'Horde'];
 
@@ -435,150 +615,44 @@ test('tagMirrorRecipeFactions tags untagged recipe in mirror pair', function ():
     expect(WowRecipe::query()->find(5002)->faction)->toBe('Horde');
 });
 
-// ─── Mount Icons ────────────────────────────────────────────
+// ─── SA JSON + CSV helpers ──────────────────────────────────
 
-test('importMountIcons fetches and stores icon URLs', function (): void {
-    WowMount::factory()->create([
-        'id' => 1,
-        'name_fr' => 'Loup noir',
-        'icon_url' => null,
-    ]);
-
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/mount/1', \Mockery::any())
-        ->andReturn([
-            'creature_displays' => [['id' => 555]],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/media/creature-display/555', \Mockery::any())
-        ->andReturn([
-            'assets' => [['key' => 'zoom', 'value' => 'https://render.com/mount.jpg']],
-        ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importMountIcons();
-
-    expect(WowMount::query()->find(1)->icon_url)->toBe('https://render.com/mount.jpg');
-});
-
-// ─── Pet Icons ──────────────────────────────────────────────
-
-test('importPetIcons fetches and stores icon URLs', function (): void {
-    WowPet::factory()->create([
-        'id' => 1,
-        'name_fr' => 'Dragonnet',
-        'icon_url' => null,
-    ]);
-
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/media/pet/1', \Mockery::any())
-        ->andReturn([
-            'assets' => [['key' => 'icon', 'value' => 'https://render.com/pet.jpg']],
-        ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importPetIcons();
-
-    expect(WowPet::query()->find(1)->icon_url)->toBe('https://render.com/pet.jpg');
-});
-
-// ─── Decor Icons ────────────────────────────────────────────
-
-test('importDecorIcons fetches item_id and icon URLs', function (): void {
-    WowDecor::factory()->create([
-        'id' => 1,
-        'name_fr' => 'Foyer orné',
-        'icon_url' => null,
-        'item_id' => null,
-    ]);
-
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/decor/1', \Mockery::any())
-        ->andReturn([
-            'items' => ['id' => 245000],
-        ]);
-
-    $mock->shouldReceive('get')
-        ->with('data/wow/media/item/245000', \Mockery::any())
-        ->andReturn([
-            'assets' => [['key' => 'icon', 'value' => 'https://render.com/decor.jpg']],
-        ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importDecorIcons();
-
-    expect(WowDecor::query()->find(1)->item_id)->toBe(245000);
-    expect(WowDecor::query()->find(1)->icon_url)->toBe('https://render.com/decor.jpg');
-});
-
-// ─── Edge Cases ─────────────────────────────────────────────
-
-test('importAchievements handles missing CSV files gracefully', function (): void {
-    // No CSV files written — should produce 0 achievements
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
-
-    expect(WowAchievement::query()->count())->toBe(0);
-});
-
-test('importAchievements skips achievements with empty or hidden names', function (): void {
-    bbiWriteAchievementCategoryCsv([
-        ['1', 'Général', '-1'],
-    ]);
-    bbiWriteAchievementCsv([
-        ['10', 'Valid Achievement', '1'],
-        ['11', '', '1'],
-        ['12', '<Hidden> Debug Achievement', '1'],
-    ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
-
-    expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Valid Achievement');
-});
-
-// ─── CSV helpers ────────────────────────────────────────────
-
-function bbiWriteQuestCsv(array $rows): void
+/**
+ * Write a SimpleArmory achievements.json file with supercats structure.
+ *
+ * @param  list<array<string, mixed>>  $supercats
+ */
+function bbiWriteAchievementsJson(array $supercats): void
 {
-    $lines = ['ID,QuestTitle_lang,ContentTuningID,FiltRaces'];
-    foreach ($rows as $row) {
-        $title = str_replace('"', '""', $row[1]);
-        $lines[] = sprintf('"%s","%s","0","-1"', $row[0], $title);
-    }
-
-    file_put_contents(storage_path('app/blizzard/quest_v2_cli_task.csv'), implode("\n", $lines));
+    $json = json_encode(['supercats' => $supercats], JSON_THROW_ON_ERROR);
+    file_put_contents(storage_path('app/blizzard/achievements.json'), $json);
 }
 
-function bbiWriteAchievementCsv(array $rows): void
+/**
+ * Write a SimpleArmory collection JSON file (mounts.json, pets.json, decors.json).
+ *
+ * @param  list<array<string, mixed>>  $categories
+ */
+function bbiWriteCollectionJson(string $filename, array $categories): void
 {
-    $lines = ['Description_lang,Title_lang,Reward_lang,ID,Instance_ID,Faction,Supercedes,Category,Minimum_criteria,Points,Flags,Ui_order,IconFileID,RewardItemID,Criteria_tree,Shares_criteria,CovenantID,HiddenBeforeDisplaySeason,LegacyAfterTimeEvent'];
-    foreach ($rows as $row) {
-        // $row = [ID, Title, Category]
-        $title = str_replace('"', '""', $row[1]);
-        $lines[] = sprintf(',"%s",,"%s","0","-1","0","%s","0","0","0","0","0","0","0","0","0","0","0"', $title, $row[0], $row[2]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/achievement.csv'), implode("\n", $lines));
+    $json = json_encode($categories, JSON_THROW_ON_ERROR);
+    file_put_contents(storage_path('app/blizzard/'.$filename), $json);
 }
 
-function bbiWriteAchievementCategoryCsv(array $rows): void
+/**
+ * Write a simple 2-column CSV for French names (ID → Name).
+ *
+ * @param  list<array{0: int, 1: string}>  $rows
+ */
+function bbiWriteFrenchNamesCsv(string $filename, string $idHeader, string $nameHeader, array $rows): void
 {
-    $lines = ['Name_lang,ID,Parent,Ui_order'];
+    $lines = [$idHeader.','.$nameHeader];
     foreach ($rows as $row) {
-        // $row = [ID, Name, Parent]
-        $lines[] = sprintf('"%s","%s","%s","0"', $row[1], $row[0], $row[2]);
+        $name = str_replace('"', '""', (string) $row[1]);
+        $lines[] = sprintf('"%d","%s"', $row[0], $name);
     }
 
-    file_put_contents(storage_path('app/blizzard/achievement_category.csv'), implode("\n", $lines));
+    file_put_contents(storage_path('app/blizzard/'.$filename), implode("\n", $lines));
 }
 
 function bbiWriteSkillLineCsv(array $rows): void

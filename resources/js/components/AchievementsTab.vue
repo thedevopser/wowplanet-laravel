@@ -76,11 +76,12 @@
                         <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
                             <div class="h-full bg-amber-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
                         </div>
-                        <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
-                            <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex justify-between items-center text-[10px] sm:text-xs py-1">
-                                <a :href="`https://www.wowhead.com/fr/achievement=${item.id}`" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-amber-400 font-medium' : 'text-slate-500', 'hover:underline']">{{ item.name }}</a>
-                                <span v-if="item.is_completed" class="text-green-500 font-bold">&check;</span>
-                                <span v-else class="text-slate-800">&cir;</span>
+                        <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-96 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
+                            <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex items-center gap-3 text-xs sm:text-sm py-1.5">
+                                <CollectionIcon :src="item.icon_url" :alt="item.name" fallback="A" size="sm" class="text-amber-500" />
+                                <a :href="`https://www.wowhead.com/fr/achievement=${item.id}`" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-amber-400 font-medium' : 'text-slate-500', 'hover:underline flex-1 truncate']">{{ item.name }}</a>
+                                <span v-if="item.is_completed" class="text-green-500 font-bold shrink-0">&check;</span>
+                                <span v-else class="text-slate-800 shrink-0">&cir;</span>
                             </div>
                         </div>
                     </div>
@@ -98,6 +99,7 @@ import { ref, computed, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import ExpansionSelector from './ExpansionSelector.vue';
 import SearchFilter from './SearchFilter.vue';
+import CollectionIcon from './CollectionIcon.vue';
 
 const store = useCharacterStore();
 

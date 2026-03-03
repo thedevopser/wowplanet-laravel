@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Parsers\DecorCategoryMapper;
 use App\Infrastructure\Parsers\LuaAddonParser;
-use App\Infrastructure\Parsers\MountCategoryMapper;
 use App\Models\WowAchievement;
 use App\Models\WowDecor;
 use App\Models\WowMount;
@@ -21,10 +19,12 @@ class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all}';
 
-    protected $description = 'Import WoW data from DB2 CSVs and Blizzard API (icons, decor, mirror factions)';
+    protected $description = 'Import WoW data from SimpleArmory JSON + DB2 CSVs (and Blizzard API for quest mirrors)';
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
+        ini_set('memory_limit', '512M');
+
         /** @var string $type */
         $type = $this->option('type');
 
@@ -35,40 +35,39 @@ class WowDataImportCommand extends Command
         $spellNameMap = null;
 
         if ($type === 'all' || $type === 'achievements') {
-            $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
-            $this->info(sprintf('Importing Achievements from DB2 CSV (expansion map: %d IDs)...', count($achievementExpansionMap)));
-            $blizzardBatchImporter->importAchievements($achievementExpansionMap);
+            $this->info('Importing Achievements from SimpleArmory + DB2...');
+            $blizzardBatchImporter->importAchievements();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
+            $this->info('Building area→expansion map from DB2 data...');
+            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
-            $questZoneMap = $luaAddonParser->getQuestZoneMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
+            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
             $this->info(sprintf(
-                'Importing Quests from DB2 CSV (expansion: %d, zones: %d, factions: %d)...',
+                'Importing Quests from API (areas: %d, quest CT overrides: %d, faction quests: %d, faction zones: %d)...',
+                count($areaExpansionMap),
                 count($questExpansionMap),
-                count($questZoneMap),
                 count($questFactionMap),
+                count($zoneFactionMap),
             ));
-            $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap, $questFactionMap);
+            $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
             $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
             $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'mounts') {
-            $this->info('Importing Mounts from DB2 CSV...');
+            $this->info('Importing Mounts from SimpleArmory + DB2...');
             $blizzardBatchImporter->importMounts();
-            $mountCategoryMap = MountCategoryMapper::build();
-            $this->info(sprintf('Mount category map: %d IDs', count($mountCategoryMap)));
-            $blizzardBatchImporter->importMountCategories($mountCategoryMap);
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
             $spellNameMap ??= $luaAddonParser->getSpellNameMap();
-            $this->info(sprintf('Importing Pets from DB2 CSV (spell names: %d)...', count($spellNameMap)));
+            $this->info(sprintf('Importing Pets from SimpleArmory + DB2 (spell names: %d)...', count($spellNameMap)));
             $blizzardBatchImporter->importPets($spellNameMap);
             $this->newLine();
         }
@@ -86,30 +85,9 @@ class WowDataImportCommand extends Command
             $this->newLine();
         }
 
-        if ($type === 'icons' || $type === 'mount-icons') {
-            $this->info('Fetching Mount Icons...');
-            $blizzardBatchImporter->importMountIcons();
-            $this->newLine();
-        }
-
-        if ($type === 'icons' || $type === 'pet-icons') {
-            $this->info('Fetching Pet Icons...');
-            $blizzardBatchImporter->importPetIcons();
-            $this->newLine();
-        }
-
         if ($type === 'all' || $type === 'decor') {
-            $this->info('Importing Decor...');
+            $this->info('Importing Decor from SimpleArmory + DB2...');
             $blizzardBatchImporter->importDecor();
-            $decorCategoryMap = DecorCategoryMapper::build();
-            $this->info(sprintf('Decor category map: %d IDs', count($decorCategoryMap)));
-            $blizzardBatchImporter->importDecorCategories($decorCategoryMap);
-            $this->newLine();
-        }
-
-        if ($type === 'icons' || $type === 'decor-icons') {
-            $this->info('Fetching Decor Icons...');
-            $blizzardBatchImporter->importDecorIcons();
             $this->newLine();
         }
 
@@ -121,15 +99,15 @@ class WowDataImportCommand extends Command
     {
         $this->newLine();
         $this->table(
-            ['Type', 'Count'],
+            ['Type', 'Total', 'Active', 'With Icon'],
             [
-                ['Quests', WowQuest::query()->count()],
-                ['Achievements', WowAchievement::query()->count()],
-                ['Mounts', WowMount::query()->count()],
-                ['Pets', WowPet::query()->count()],
-                ['Professions', WowProfession::query()->count()],
-                ['Recipes', WowRecipe::query()->count()],
-                ['Decor', WowDecor::query()->count()],
+                ['Quests', WowQuest::query()->count(), WowQuest::query()->where('is_active', true)->count(), '—'],
+                ['Achievements', WowAchievement::query()->count(), WowAchievement::query()->where('is_active', true)->count(), WowAchievement::query()->whereNotNull('icon_url')->count()],
+                ['Mounts', WowMount::query()->count(), WowMount::query()->where('is_active', true)->count(), WowMount::query()->whereNotNull('icon_url')->count()],
+                ['Pets', WowPet::query()->count(), WowPet::query()->where('is_active', true)->count(), WowPet::query()->whereNotNull('icon_url')->count()],
+                ['Professions', WowProfession::query()->count(), WowProfession::query()->where('is_active', true)->count(), '—'],
+                ['Recipes', WowRecipe::query()->count(), WowRecipe::query()->where('is_active', true)->count(), '—'],
+                ['Decor', WowDecor::query()->count(), WowDecor::query()->where('is_active', true)->count(), WowDecor::query()->whereNotNull('icon_url')->count()],
             ]
         );
     }

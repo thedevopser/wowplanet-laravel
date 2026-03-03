@@ -6,30 +6,28 @@ namespace App\Infrastructure\Blizzard;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Sleep;
 use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
 
 class RateLimitingMiddleware
 {
+    private const MAX_REQUESTS = 100;
+
+    private const DECAY_SECONDS = 1;
+
+    private const BACKOFF_US = 50_000; // 50ms
+
     public function __invoke(callable $handler): callable
     {
         return function (RequestInterface $request, array $options) use ($handler): PromiseInterface {
-            /** @var PromiseInterface $result */
-            $result = RateLimiter::attempt(
-                'blizzard-api',
-                100, // Max requests
-                function () use ($handler, $request, $options): PromiseInterface {
-                    /** @var PromiseInterface $promise */
-                    $promise = $handler($request, $options);
+            while (! RateLimiter::attempt('blizzard-api', self::MAX_REQUESTS, fn (): true => true, self::DECAY_SECONDS)) {
+                Sleep::usleep(self::BACKOFF_US);
+            }
 
-                    return $promise->then(
-                        fn (ResponseInterface $response): ResponseInterface => $response
-                    );
-                },
-                1 // Per second
-            );
+            /** @var PromiseInterface $promise */
+            $promise = $handler($request, $options);
 
-            return $result;
+            return $promise;
         };
     }
 }

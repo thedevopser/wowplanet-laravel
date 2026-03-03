@@ -10,7 +10,6 @@ class LuaAddonParser
 {
     public function __construct(
         private readonly Db2AreaExpansionMapper $db2AreaExpansionMapper,
-        private readonly Db2AchievementExpansionMapper $db2AchievementExpansionMapper,
         private readonly AddonDataParser $addonDataParser,
     ) {}
 
@@ -33,14 +32,6 @@ class LuaAddonParser
     public function buildAreaExpansionMap(): array
     {
         return $this->db2AreaExpansionMapper->build();
-    }
-
-    /**
-     * @return array<int, int> [achievement_id => expansion_id]
-     */
-    public function getAchievementExpansionMap(): array
-    {
-        return $this->db2AchievementExpansionMapper->build();
     }
 
     /**

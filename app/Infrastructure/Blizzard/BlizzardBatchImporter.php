@@ -22,25 +22,24 @@ class BlizzardBatchImporter
         private readonly ProfessionImporter $professionImporter,
     ) {}
 
-    /**
-     * @param  array<int, int>  $addonExpansionMap
-     */
-    public function importAchievements(array $addonExpansionMap = []): void
+    public function importAchievements(): void
     {
-        $this->achievementImporter->import($addonExpansionMap);
+        $this->achievementImporter->import();
     }
 
     /**
+     * @param  array<int, int>  $areaExpansionMap
      * @param  array<int, int>  $questExpansionMap
-     * @param  array<int, string>  $questZoneMap
      * @param  array<int, string>  $questFactionMap
+     * @param  array<int, string>  $zoneFactionMap
      */
     public function importQuests(
-        array $questExpansionMap,
-        array $questZoneMap = [],
+        array $areaExpansionMap,
+        array $questExpansionMap = [],
         array $questFactionMap = [],
+        array $zoneFactionMap = [],
     ): void {
-        $this->questImporter->import($questExpansionMap, $questZoneMap, $questFactionMap);
+        $this->questImporter->import($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
     }
 
     public function importMounts(): void
@@ -56,40 +55,9 @@ class BlizzardBatchImporter
         $this->petImporter->import($spellNameMap);
     }
 
-    /**
-     * @param  array<int, array{category: string, source: string}>  $categoryMap
-     */
-    public function importMountCategories(array $categoryMap): void
-    {
-        $this->mountImporter->importCategories($categoryMap);
-    }
-
-    public function importMountIcons(): void
-    {
-        $this->mountImporter->importIcons();
-    }
-
-    public function importPetIcons(): void
-    {
-        $this->petImporter->importIcons();
-    }
-
     public function importDecor(): void
     {
         $this->decorImporter->import();
-    }
-
-    /**
-     * @param  array<int, array{category: string, source: string}>  $categoryMap
-     */
-    public function importDecorCategories(array $categoryMap): void
-    {
-        $this->decorImporter->importCategories($categoryMap);
-    }
-
-    public function importDecorIcons(): void
-    {
-        $this->decorImporter->importIcons();
     }
 
     /**

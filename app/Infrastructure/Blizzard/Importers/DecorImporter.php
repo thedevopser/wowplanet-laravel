@@ -4,133 +4,128 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowDecor;
+use Illuminate\Support\Facades\Log;
 
-class DecorImporter
+final class DecorImporter
 {
-    use ImportsFromBlizzardApi;
-
-    public function __construct(
-        private readonly BlizzardApiClient $blizzardApiClient,
-    ) {}
-
     public function import(): void
     {
-        $this->info('Fetching Decor Index...');
-        $response = $this->fetchWithRetry('data/wow/decor/index');
-        if (! $response) {
-            $this->info('ERROR: Could not fetch decor index.');
-
+        $saDecors = $this->loadSimpleArmoryData();
+        if ($saDecors === []) {
             return;
         }
 
-        /** @var list<array{id: int, name: string|null}> $decors */
-        $decors = $response['decor_items'] ?? [];
-        $this->info('Found '.count($decors).' decor items.');
+        $frenchNames = $this->loadFrenchNames();
+        $rows = $this->buildRows($saDecors, $frenchNames);
 
-        $skipped = 0;
-        $count = 0;
-        foreach ($decors as $decor) {
-            $decorName = $decor['name'] ?? '';
-            if ($decorName === '') {
-                $skipped++;
-
-                continue;
-            }
-
-            WowDecor::query()->updateOrCreate(['id' => $decor['id']], [
-                'name_fr' => $decorName,
-                'is_active' => true,
-            ]);
-            $count++;
-        }
-
-        if ($skipped > 0) {
-            $this->info(sprintf('  Skipped %d decor items with empty names.', $skipped));
-        }
-
-        $this->info(sprintf('Decor import complete: %d items.', $count));
+        $this->saveRows($rows);
     }
 
     /**
-     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     * @return array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null, notObtainable: bool}>
      */
-    public function importCategories(array $categoryMap): void
+    private function loadSimpleArmoryData(): array
     {
-        $this->info('Enriching decor with categories...');
+        $this->info('Parsing SimpleArmory decors.json...');
 
-        $updated = 0;
-        $unmatched = 0;
+        $decors = SimpleArmoryParser::parseCollection('decors.json');
+        if ($decors === []) {
+            $this->info('ERROR: Could not parse decors.json.');
 
-        foreach (WowDecor::all() as $decor) {
-            if (isset($categoryMap[$decor->id])) {
-                $decor->update([
-                    'category' => $categoryMap[$decor->id]['category'],
-                    'source' => $categoryMap[$decor->id]['source'],
-                ]);
-                $updated++;
-            } else {
-                $unmatched++;
-            }
+            return [];
         }
 
-        $this->info(sprintf('Decor categories: %d updated, %d unmatched.', $updated, $unmatched));
+        $this->info(sprintf('  Found %d decors.', count($decors)));
+
+        return $decors;
     }
 
-    public function importIcons(): void
+    /**
+     * @return array<int, string>
+     */
+    private function loadFrenchNames(): array
     {
-        $this->info('Fetching decor icons...');
+        $this->info('Loading French names from housetdecor.csv...');
 
-        /** @var \Illuminate\Database\Eloquent\Collection<int, WowDecor> $decors */
-        $decors = WowDecor::query()->whereNull('icon_url')->get();
-        $this->info(sprintf('  %d decor items need icons.', $decors->count()));
-        $count = 0;
-        $skipped = 0;
+        $names = Db2CsvLoader::loadStringMapByHeaders('housetdecor.csv', 'ID', 'Name_lang');
+        $this->info(sprintf('  Found %d French names.', count($names)));
 
-        foreach ($decors as $decor) {
-            $this->delayIconRequest();
+        return $names;
+    }
 
-            $detail = $this->fetchWithRetry('data/wow/decor/'.$decor->id);
-            if (! $detail) {
-                $skipped++;
+    /**
+     * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null, notObtainable: bool}>  $saDecors
+     * @param  array<int, string>  $frenchNames
+     * @return list<array{id: int, name_fr: string, category: string|null, source: string|null, item_id: int|null, icon_url: string|null, is_active: bool}>
+     */
+    private function buildRows(array $saDecors, array $frenchNames): array
+    {
+        $rows = [];
+        $matched = 0;
+        $fallbacks = 0;
+        $inactive = 0;
 
-                continue;
+        foreach ($saDecors as $id => $decor) {
+            $nameFr = $frenchNames[$id] ?? null;
+            if ($nameFr !== null) {
+                $matched++;
+            } else {
+                $fallbacks++;
             }
 
-            /** @var array{id?: int} $items */
-            $items = $detail['items'] ?? [];
-            $itemId = $items['id'] ?? null;
-            if ($itemId === null) {
-                $skipped++;
-
-                continue;
+            $isActive = ! $decor['notObtainable'];
+            if (! $isActive) {
+                $inactive++;
             }
 
-            $decor->update(['item_id' => $itemId]);
+            $iconUrl = $decor['icon'] !== null ? SimpleArmoryParser::buildIconUrl($decor['icon']) : null;
 
-            $this->delayIconRequest();
-            $media = $this->fetchWithRetry('data/wow/media/item/'.$itemId);
-            if (! $media) {
-                $skipped++;
-
-                continue;
-            }
-
-            /** @var list<array{key: string, value: string}> $assets */
-            $assets = $media['assets'] ?? [];
-            $iconUrl = $assets[0]['value'] ?? null;
-            if ($iconUrl) {
-                $decor->update(['icon_url' => $iconUrl]);
-                $count++;
-            }
-
-            if ($count % 100 === 0 && $count > 0) {
-                $this->info(sprintf('  Icons fetched: %d / skipped: %d...', $count, $skipped));
-            }
+            $rows[] = [
+                'id' => $id,
+                'name_fr' => $nameFr ?? sprintf('[EN] Decor #%d', $id),
+                'category' => $decor['category'] !== '' ? $decor['category'] : null,
+                'source' => $decor['source'] !== '' ? $decor['source'] : null,
+                'item_id' => $decor['itemId'],
+                'icon_url' => $iconUrl,
+                'is_active' => $isActive,
+            ];
         }
 
-        $this->info(sprintf('Decor icon import complete: %d icons, %d skipped.', $count, $skipped));
+        $this->info(sprintf('  %d matched with French name, %d using English fallback, %d not obtainable.', $matched, $fallbacks, $inactive));
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array{id: int, name_fr: string, category: string|null, source: string|null, item_id: int|null, icon_url: string|null, is_active: bool}>  $rows
+     */
+    private function saveRows(array $rows): void
+    {
+        $this->info(sprintf('Saving %d decors...', count($rows)));
+
+        $count = 0;
+        foreach (array_chunk($rows, 500) as $chunk) {
+            WowDecor::query()->upsert(
+                $chunk,
+                uniqueBy: ['id'],
+                update: ['name_fr', 'category', 'source', 'item_id', 'icon_url', 'is_active'],
+            );
+            $count += count($chunk);
+            $this->info(sprintf('  Saved %d...', $count));
+        }
+
+        $this->info(sprintf('Decor import complete: %d items (%d active).', $count, count(array_filter($rows, fn (array $r): bool => $r['is_active']))));
+    }
+
+    private function info(string $message): void
+    {
+        if (app()->runningInConsole()) {
+            echo $message.PHP_EOL;
+        }
+
+        Log::info($message);
     }
 }

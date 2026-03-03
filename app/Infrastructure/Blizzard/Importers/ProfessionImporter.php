@@ -39,31 +39,39 @@ class ProfessionImporter
 
         $this->info(sprintf('Found %d professions, %d recipes.', count($data['professions']), count($data['recipes'])));
 
-        // Save professions
-        foreach ($data['professions'] as $profession) {
-            WowProfession::query()->updateOrCreate(['id' => $profession['id']], [
-                'name_fr' => $profession['name_fr'],
-                'type' => $profession['type'],
-                'max_skill_levels' => [],
+        // Save professions (bulk upsert)
+        WowProfession::query()->upsert(
+            array_map(fn (array $p): array => [
+                'id' => $p['id'],
+                'name_fr' => $p['name_fr'],
+                'type' => $p['type'],
+                'max_skill_levels' => json_encode([]),
                 'is_active' => true,
-            ]);
-        }
+            ], $data['professions']),
+            uniqueBy: ['id'],
+            update: ['name_fr', 'type', 'is_active'],
+        );
 
         $this->info(sprintf('Saved %d professions.', count($data['professions'])));
 
-        // Save recipes
+        // Save recipes (bulk upsert in chunks)
         $count = 0;
-        foreach ($data['recipes'] as $recipe) {
-            WowRecipe::query()->updateOrCreate(['id' => $recipe['id']], [
-                'name_fr' => $recipe['name_fr'],
-                'profession_id' => $recipe['profession_id'],
-                'expansion_id' => $recipe['expansion_id'],
-                'category_name' => $recipe['category_name'],
-                'faction' => $recipeFactionMap[$recipe['id']] ?? null,
-                'wowhead_spell_id' => $recipe['wowhead_spell_id'],
-                'is_active' => true,
-            ]);
-            $count++;
+        foreach (array_chunk($data['recipes'], 500) as $chunk) {
+            WowRecipe::query()->upsert(
+                array_map(fn (array $r): array => [
+                    'id' => $r['id'],
+                    'name_fr' => $r['name_fr'],
+                    'profession_id' => $r['profession_id'],
+                    'expansion_id' => $r['expansion_id'],
+                    'category_name' => $r['category_name'],
+                    'faction' => $recipeFactionMap[$r['id']] ?? null,
+                    'wowhead_spell_id' => $r['wowhead_spell_id'],
+                    'is_active' => true,
+                ], $chunk),
+                uniqueBy: ['id'],
+                update: ['name_fr', 'profession_id', 'expansion_id', 'category_name', 'faction', 'wowhead_spell_id', 'is_active'],
+            );
+            $count += count($chunk);
             if ($count % 2000 === 0) {
                 $this->info(sprintf('  Saved %d recipes...', $count));
             }
@@ -76,16 +84,11 @@ class ProfessionImporter
     {
         $this->info('Tagging mirror recipe pairs...');
 
-        /** @var \Illuminate\Support\Collection<int, WowRecipe> $allRecipes */
-        $allRecipes = WowRecipe::query()
-            ->where('is_active', true)
-            ->get(['id', 'name_fr', 'profession_id', 'expansion_id', 'faction']);
-
         /** @var array<string, list<array{id: int, faction: string|null}>> $groups */
         $groups = [];
-        foreach ($allRecipes as $allRecipe) {
-            $key = $allRecipe->name_fr.'|||'.$allRecipe->profession_id.'|||'.$allRecipe->expansion_id;
-            $groups[$key][] = ['id' => $allRecipe->id, 'faction' => $allRecipe->faction];
+        foreach (WowRecipe::query()->where('is_active', true)->lazy() as $lazyCollection) {
+            $key = $lazyCollection->name_fr.'|||'.$lazyCollection->profession_id.'|||'.$lazyCollection->expansion_id;
+            $groups[$key][] = ['id' => $lazyCollection->id, 'faction' => $lazyCollection->faction];
         }
 
         $tagged = 0;

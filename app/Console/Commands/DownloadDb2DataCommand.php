@@ -14,6 +14,18 @@ class DownloadDb2DataCommand extends Command
     protected $description = 'Download DB2 CSV data from wago.tools for WoW data import';
 
     /**
+     * SimpleArmory JSON files to download: [url => local_filename].
+     *
+     * @var array<string, string>
+     */
+    private const SIMPLEARMORY_FILES = [
+        'https://simplearmory.com/data/achievements.json' => 'achievements.json',
+        'https://simplearmory.com/data/mounts.json' => 'mounts.json',
+        'https://simplearmory.com/data/pets.json' => 'pets.json',
+        'https://simplearmory.com/data/decors.json' => 'decors.json',
+    ];
+
+    /**
      * DB2 tables to download: [wago_table_name => [local_filename, locale]].
      *
      * @var array<string, array{0: string, 1: string|null}>
@@ -28,8 +40,7 @@ class DownloadDb2DataCommand extends Command
         'Mount' => ['mount.csv', 'frFR'],
         'BattlePetSpecies' => ['battle_pet_species.csv', 'frFR'],
         'Achievement' => ['achievement.csv', 'frFR'],
-        'Achievement_Category' => ['achievement_category.csv', 'frFR'],
-        'CriteriaTree' => ['criteria_tree.csv', 'frFR'],
+        'HouseDecor' => ['housetdecor.csv', 'frFR'],
         'QuestPOIBlob' => ['quest_poi_blob.csv', null],
         'UiMap' => ['ui_map.csv', 'frFR'],
         'SpellName' => ['spell_name.csv', 'frFR'],
@@ -93,26 +104,15 @@ class DownloadDb2DataCommand extends Command
         $this->newLine();
 
         if ($singleTable === null) {
-            $this->info('Downloading decor categories from SimpleArmory...');
-            $decorResult = $this->downloadExtraFile(
-                'https://simplearmory.com/data/decors.json',
-                'decors_categories.json',
-            );
-            if ($decorResult) {
-                $success++;
-            } else {
-                $failed++;
-            }
+            $this->info('Downloading SimpleArmory JSON data...');
 
-            $this->info('Downloading mount categories from SimpleArmory...');
-            $mountResult = $this->downloadExtraFile(
-                'https://simplearmory.com/data/mounts.json',
-                'mounts_categories.json',
-            );
-            if ($mountResult) {
-                $success++;
-            } else {
-                $failed++;
+            foreach (self::SIMPLEARMORY_FILES as $url => $localFilename) {
+                $result = $this->downloadExtraFile($url, $localFilename);
+                if ($result) {
+                    $success++;
+                } else {
+                    $failed++;
+                }
             }
 
             $this->newLine();

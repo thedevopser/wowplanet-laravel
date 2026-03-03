@@ -20,6 +20,8 @@ class WowDataRefreshCommand extends Command
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
+        ini_set('memory_limit', '512M');
+
         /** @var string $type */
         $type = $this->option('type');
 
@@ -33,26 +35,28 @@ class WowDataRefreshCommand extends Command
         $this->newLine();
 
         if ($type === 'all' || $type === 'achievements') {
-            $achievementExpansionMap = $luaAddonParser->getAchievementExpansionMap();
             $this->info('Truncating wow_achievements...');
             WowAchievement::query()->truncate();
-            $blizzardBatchImporter->importAchievements($achievementExpansionMap);
+            $blizzardBatchImporter->importAchievements();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
+            $this->info('Building area→expansion map from DB2 data...');
+            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
-            $questZoneMap = $luaAddonParser->getQuestZoneMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
+            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
             $this->info('Truncating wow_quests...');
             WowQuest::query()->truncate();
             $this->info(sprintf(
-                'Importing Quests from DB2 CSV (expansion: %d, zones: %d, factions: %d)...',
+                'Importing Quests from API (areas: %d, quest CT overrides: %d, faction quests: %d, faction zones: %d)...',
+                count($areaExpansionMap),
                 count($questExpansionMap),
-                count($questZoneMap),
                 count($questFactionMap),
+                count($zoneFactionMap),
             ));
-            $blizzardBatchImporter->importQuests($questExpansionMap, $questZoneMap, $questFactionMap);
+            $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
             $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
             $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
             $this->newLine();

@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $name_fr
  * @property int $expansion_id
  * @property string $category_name
+ * @property string|null $icon_url
+ * @property int $points
+ * @property string|null $faction
  * @property bool $is_active
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
@@ -36,6 +39,9 @@ class WowAchievement extends Model
         'name_fr',
         'expansion_id',
         'category_name',
+        'icon_url',
+        'points',
+        'faction',
         'is_active',
     ];
 
@@ -45,6 +51,7 @@ class WowAchievement extends Model
     {
         return [
             'expansion_id' => 'integer',
+            'points' => 'integer',
             'is_active' => 'boolean',
         ];
     }

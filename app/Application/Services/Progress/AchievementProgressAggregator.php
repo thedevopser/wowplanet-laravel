@@ -74,6 +74,7 @@ class AchievementProgressAggregator
             $items[] = [
                 'id' => $categoryAchievement->id,
                 'name' => $categoryAchievement->name_fr,
+                'icon_url' => $categoryAchievement->icon_url,
                 'is_completed' => $isCompleted,
             ];
             if ($isCompleted) {

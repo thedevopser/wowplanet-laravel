@@ -18,29 +18,114 @@ class AddonDataParser
         self::HORDE_BITMASK => 'Horde',
     ];
 
+    /**
+     * Known Alliance race IDs (bitmask positions).
+     * Human=1, Dwarf=3, NightElf=4, Gnome=7, Draenei=11, Worgen=22, Pandaren(A)=25,
+     * VoidElf=29, LightforgedDraenei=30, DarkIronDwarf=34, KulTiran=36, Mechagnome=37.
+     *
+     * @var list<int>
+     */
+    private const ALLIANCE_RACE_IDS = [1, 3, 4, 7, 11, 22, 25, 29, 30, 34, 36, 37];
+
+    /**
+     * Known Horde race IDs (bitmask positions).
+     * Orc=2, Undead=5, Tauren=6, Troll=8, BloodElf=10, Goblin=9, Pandaren(H)=26,
+     * Nightborne=27, HighmountainTauren=28, MagharOrc=35, ZandalariTroll=31, Vulpera=33.
+     *
+     * @var list<int>
+     */
+    private const HORDE_RACE_IDS = [2, 5, 6, 8, 9, 10, 26, 27, 28, 31, 33, 35];
+
     private const STORMWIND_FACTION_ID = 72;
 
     /**
+     * Cache for single-pass quest CSV parsing.
+     *
+     * @var array{quests: list<array{id: int, name_fr: string}>, expansionMap: array<int, int>, factionMap: array<int, string>}|null
+     */
+    private ?array $questCsvCache = null;
+
+    /**
+     * Parse quest_v2_cli_task.csv in a single pass, extracting quests, expansion map,
+     * and faction map simultaneously.
+     *
+     * @return array{quests: list<array{id: int, name_fr: string}>, expansionMap: array<int, int>, factionMap: array<int, string>}
+     */
+    public function parseQuestCsvFull(): array
+    {
+        if ($this->questCsvCache !== null) {
+            return $this->questCsvCache;
+        }
+
+        $csvPath = storage_path('app/blizzard/quest_v2_cli_task.csv');
+        if (! File::exists($csvPath)) {
+            return $this->questCsvCache = ['quests' => [], 'expansionMap' => [], 'factionMap' => []];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return $this->questCsvCache = ['quests' => [], 'expansionMap' => [], 'factionMap' => []];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return $this->questCsvCache = ['quests' => [], 'expansionMap' => [], 'factionMap' => []];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $nameIdx = (int) array_search('QuestTitle_lang', $headers, true);
+        $ctIdx = (int) array_search('ContentTuningID', $headers, true);
+        $racesIdx = (int) array_search('FiltRaces', $headers, true);
+
+        $contentTuningMap = Db2CsvLoader::loadMapByHeaders('content_tuning.csv', 'ID', 'ExpansionID');
+
+        $quests = [];
+        $expansionMap = [];
+        $factionMap = [];
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $id = (int) $row[$idIdx];
+            $name = trim($row[$nameIdx] ?? '');
+
+            if ($name === '') {
+                continue;
+            }
+
+            $quests[] = ['id' => $id, 'name_fr' => $name];
+
+            // Expansion from ContentTuning
+            $ctId = (int) ($row[$ctIdx] ?? 0);
+            if ($ctId > 0 && isset($contentTuningMap[$ctId])) {
+                $expansionMap[$id] = $contentTuningMap[$ctId];
+            }
+
+            // Faction from FiltRaces bitmask
+            $racesMask = trim($row[$racesIdx] ?? '');
+            $faction = self::FACTION_BITMASK_MAP[$racesMask] ?? $this->detectFactionFromRaceBitmask($racesMask);
+            if ($faction !== null) {
+                $factionMap[$id] = $faction;
+            }
+        }
+
+        fclose($handle);
+
+        return $this->questCsvCache = [
+            'quests' => $quests,
+            'expansionMap' => $expansionMap,
+            'factionMap' => $factionMap,
+        ];
+    }
+
+    /**
      * Build quest_id → expansion_id map from ContentTuning for ALL expansions.
-     * Uses DB2 QuestV2CliTask.ContentTuningID + ContentTuning.ExpansionID.
      *
      * @return array<int, int>
      */
     public function getQuestExpansionMap(): array
     {
-        $contentTuningMap = Db2CsvLoader::loadMapByHeaders('content_tuning.csv', 'ID', 'ExpansionID');
-        $questContentTuning = $this->parseQuestV2CliTaskContentTuning();
-
-        $map = [];
-        foreach ($questContentTuning as $questId => $contentTuningId) {
-            if (! isset($contentTuningMap[$contentTuningId])) {
-                continue;
-            }
-
-            $map[$questId] = $contentTuningMap[$contentTuningId];
-        }
-
-        return $map;
+        return $this->parseQuestCsvFull()['expansionMap'];
     }
 
     /**
@@ -50,7 +135,17 @@ class AddonDataParser
      */
     public function getQuestFactionMap(): array
     {
-        return $this->parseFactionBitmask('quest_v2_cli_task.csv', 'ID', 'FiltRaces');
+        return $this->parseQuestCsvFull()['factionMap'];
+    }
+
+    /**
+     * Get parsed quest list from CSV (single pass).
+     *
+     * @return list<array{id: int, name_fr: string}>
+     */
+    public function getQuestList(): array
+    {
+        return $this->parseQuestCsvFull()['quests'];
     }
 
     /**
@@ -108,11 +203,6 @@ class AddonDataParser
 
     /**
      * Build reputation_faction_id → 'Alliance'|'Horde' map from Faction.csv.
-     *
-     * Exclusive factions are detected by ReputationMax_1 < 0 (one group of races
-     * can never gain reputation). Alliance/Horde is determined by comparing each
-     * faction's ReputationRaceMask_0 against Stormwind's (ID 72) — if the masks
-     * overlap, group 0 contains Alliance races.
      *
      * @return array<int, string>
      */
@@ -192,6 +282,48 @@ class AddonDataParser
     }
 
     /**
+     * Detect faction from a non-standard race bitmask by checking if all
+     * set race bits belong to one faction.
+     */
+    private function detectFactionFromRaceBitmask(string $bitmaskStr): ?string
+    {
+        if (in_array($bitmaskStr, ['', '-1', '0'], true)) {
+            return null;
+        }
+
+        // For small positive bitmasks, check if all set bits are one faction
+        $mask = (int) $bitmaskStr;
+        if ($mask <= 0) {
+            return null;
+        }
+
+        $hasAlliance = false;
+        $hasHorde = false;
+
+        foreach (self::ALLIANCE_RACE_IDS as $raceId) {
+            if (($mask & (1 << ($raceId - 1))) !== 0) {
+                $hasAlliance = true;
+            }
+        }
+
+        foreach (self::HORDE_RACE_IDS as $raceId) {
+            if (($mask & (1 << ($raceId - 1))) !== 0) {
+                $hasHorde = true;
+            }
+        }
+
+        if ($hasAlliance && ! $hasHorde) {
+            return 'Alliance';
+        }
+
+        if ($hasHorde && ! $hasAlliance) {
+            return 'Horde';
+        }
+
+        return null;
+    }
+
+    /**
      * Parse a CSV file and extract faction from a bitmask column.
      *
      * @return array<int, string>
@@ -220,52 +352,11 @@ class AddonDataParser
 
         $map = [];
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $faction = self::FACTION_BITMASK_MAP[trim((string) $row[$bitmaskIdx])] ?? null;
+            $bitmask = trim((string) $row[$bitmaskIdx]);
+            $faction = self::FACTION_BITMASK_MAP[$bitmask] ?? $this->detectFactionFromRaceBitmask($bitmask);
             if ($faction !== null) {
                 $map[(int) $row[$idIdx]] = $faction;
             }
-        }
-
-        fclose($handle);
-
-        return $map;
-    }
-
-    /**
-     * Parse QuestV2CliTask CSV for quest_id → contentTuningID.
-     *
-     * @return array<int, int>
-     */
-    private function parseQuestV2CliTaskContentTuning(): array
-    {
-        $csvPath = storage_path('app/blizzard/quest_v2_cli_task.csv');
-        if (! File::exists($csvPath)) {
-            return [];
-        }
-
-        $handle = fopen($csvPath, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
-
-            return [];
-        }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $ctIdx = (int) array_search('ContentTuningID', $headers, true);
-
-        $map = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $ctId = (int) $row[$ctIdx];
-            if ($ctId <= 0) {
-                continue;
-            }
-
-            $map[(int) $row[$idIdx]] = $ctId;
         }
 
         fclose($handle);

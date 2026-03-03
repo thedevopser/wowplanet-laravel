@@ -6,6 +6,7 @@ namespace App\Infrastructure\Blizzard;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -103,6 +104,23 @@ class BlizzardApiClient
         $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
 
         return $decoded;
+    }
+
+    /**
+     * @param  array<string, mixed>  $query
+     */
+    public function getAsync(string $endpoint, array $query = []): PromiseInterface
+    {
+        $accessToken = $this->getAccessToken();
+        $namespace = is_string($query['namespace'] ?? null) ? $query['namespace'] : $this->namespace;
+
+        return $this->client->getAsync($endpoint, [
+            'headers' => [
+                'Authorization' => 'Bearer '.$accessToken,
+                'Battlenet-Namespace' => $namespace,
+            ],
+            'query' => array_merge(['locale' => 'fr_FR'], $query),
+        ]);
     }
 
     public function getClient(): Client

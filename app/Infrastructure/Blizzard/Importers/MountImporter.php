@@ -4,176 +4,128 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowMount;
-use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
-class MountImporter
+final class MountImporter
 {
-    use ImportsFromBlizzardApi;
-
-    public function __construct(
-        private readonly BlizzardApiClient $blizzardApiClient,
-    ) {}
-
     public function import(): void
     {
-        $this->info('Loading mounts from DB2 CSV data...');
-
-        $mounts = $this->parseMountCsv();
-        if ($mounts === []) {
-            $this->info('ERROR: mount.csv not found or empty.');
-
+        $saMounts = $this->loadSimpleArmoryData();
+        if ($saMounts === []) {
             return;
         }
 
-        $this->info(sprintf('Found %d mounts in CSV.', count($mounts)));
+        $frenchNames = $this->loadFrenchNames();
+        $rows = $this->buildRows($saMounts, $frenchNames);
 
-        $count = 0;
-        foreach ($mounts as $mount) {
-            WowMount::query()->updateOrCreate(['id' => $mount['id']], [
-                'name_fr' => $mount['name_fr'],
-                'source_spell_id' => $mount['source_spell_id'] > 0 ? $mount['source_spell_id'] : null,
-                'is_active' => true,
-            ]);
-            $count++;
-            if ($count % 500 === 0) {
-                $this->info(sprintf('  Saved %d...', $count));
-            }
-        }
-
-        $this->info(sprintf('Mount import complete: %d mounts.', $count));
+        $this->saveRows($rows);
     }
 
     /**
-     * @return list<array{id: int, name_fr: string, source_spell_id: int}>
+     * @return array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>
      */
-    private function parseMountCsv(): array
+    private function loadSimpleArmoryData(): array
     {
-        $csvPath = storage_path('app/blizzard/mount.csv');
-        if (! File::exists($csvPath)) {
-            return [];
-        }
+        $this->info('Parsing SimpleArmory mounts.json...');
 
-        $handle = fopen($csvPath, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
+        $mounts = SimpleArmoryParser::parseCollection('mounts.json');
+        if ($mounts === []) {
+            $this->info('ERROR: Could not parse mounts.json.');
 
             return [];
         }
 
-        $nameIdx = (int) array_search('Name_lang', $headers, true);
-        $idIdx = (int) array_search('ID', $headers, true);
-        $spellIdx = (int) array_search('SourceSpellID', $headers, true);
-
-        $mounts = [];
-        $skipped = 0;
-
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $name = trim($row[$nameIdx] ?? '');
-            if ($name === '') {
-                $skipped++;
-
-                continue;
-            }
-
-            $mounts[] = [
-                'id' => (int) $row[$idIdx],
-                'name_fr' => $name,
-                'source_spell_id' => (int) ($row[$spellIdx] ?? 0),
-            ];
-        }
-
-        fclose($handle);
-
-        if ($skipped > 0) {
-            $this->info(sprintf('  Skipped %d mounts with empty names.', $skipped));
-        }
+        $factionCount = count(array_filter($mounts, static fn (array $m): bool => $m['faction'] !== null));
+        $this->info(sprintf('  Found %d mounts (%d faction-specific).', count($mounts), $factionCount));
 
         return $mounts;
     }
 
     /**
-     * @param  array<int, array{category: string, source: string}>  $categoryMap
+     * @return array<int, string>
      */
-    public function importCategories(array $categoryMap): void
+    private function loadFrenchNames(): array
     {
-        $this->info('Enriching mounts with categories...');
+        $this->info('Loading French names from mount.csv...');
 
-        $updated = 0;
-        $unmatched = 0;
+        $names = Db2CsvLoader::loadStringMapByHeaders('mount.csv', 'ID', 'Name_lang');
+        $this->info(sprintf('  Found %d French names.', count($names)));
 
-        foreach (WowMount::all() as $mount) {
-            if (isset($categoryMap[$mount->id])) {
-                $mount->update([
-                    'category' => $categoryMap[$mount->id]['category'],
-                    'source' => $categoryMap[$mount->id]['source'],
-                ]);
-                $updated++;
-            } else {
-                $unmatched++;
-            }
-        }
-
-        $this->info(sprintf('Mount categories: %d updated, %d unmatched.', $updated, $unmatched));
+        return $names;
     }
 
-    public function importIcons(): void
+    /**
+     * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saMounts
+     * @param  array<int, string>  $frenchNames
+     * @return list<array{id: int, name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>
+     */
+    private function buildRows(array $saMounts, array $frenchNames): array
     {
-        $this->info('Fetching mount icons...');
+        $rows = [];
+        $matched = 0;
+        $fallbacks = 0;
+        $withIcons = 0;
 
-        /** @var \Illuminate\Database\Eloquent\Collection<int, WowMount> $mounts */
-        $mounts = WowMount::query()->whereNull('icon_url')->get();
-        $this->info(sprintf('  %d mounts need icons.', $mounts->count()));
-        $count = 0;
-        $skipped = 0;
-
-        foreach ($mounts as $mount) {
-            $this->delayIconRequest();
-
-            $detail = $this->fetchWithRetry('data/wow/mount/'.$mount->id);
-            if (! $detail) {
-                $skipped++;
-
-                continue;
+        foreach ($saMounts as $id => $mount) {
+            $nameFr = $frenchNames[$id] ?? null;
+            if ($nameFr !== null) {
+                $matched++;
+            } else {
+                $fallbacks++;
             }
 
-            /** @var list<array{id: int}> $displays */
-            $displays = $detail['creature_displays'] ?? [];
-            $displayId = $displays[0]['id'] ?? null;
-            if ($displayId === null) {
-                $skipped++;
-
-                continue;
+            $iconUrl = $mount['icon'] !== null ? SimpleArmoryParser::buildIconUrl($mount['icon']) : null;
+            if ($iconUrl !== null) {
+                $withIcons++;
             }
 
-            $this->delayIconRequest();
-            $media = $this->fetchWithRetry('data/wow/media/creature-display/'.$displayId);
-            if (! $media) {
-                $skipped++;
-
-                continue;
-            }
-
-            /** @var list<array{key: string, value: string}> $assets */
-            $assets = $media['assets'] ?? [];
-            $iconUrl = $assets[0]['value'] ?? null;
-            if ($iconUrl) {
-                $mount->update(['icon_url' => $iconUrl]);
-                $count++;
-            }
-
-            if ($count % 100 === 0 && $count > 0) {
-                $this->info(sprintf('  Icons fetched: %d / skipped: %d...', $count, $skipped));
-            }
+            $rows[] = [
+                'id' => $id,
+                'name_fr' => $nameFr ?? sprintf('[EN] Mount #%d', $id),
+                'source' => $mount['source'] !== '' ? $mount['source'] : null,
+                'category' => $mount['category'] !== '' ? $mount['category'] : null,
+                'source_spell_id' => $mount['spellid'] > 0 ? $mount['spellid'] : null,
+                'icon_url' => $iconUrl,
+                'is_active' => true,
+            ];
         }
 
-        $this->info(sprintf('Mount icon import complete: %d icons, %d skipped.', $count, $skipped));
+        $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
+        $this->info(sprintf('  %d with icon URL.', $withIcons));
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<array{id: int, name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>  $rows
+     */
+    private function saveRows(array $rows): void
+    {
+        $this->info(sprintf('Saving %d mounts...', count($rows)));
+
+        $count = 0;
+        foreach (array_chunk($rows, 500) as $chunk) {
+            WowMount::query()->upsert(
+                $chunk,
+                uniqueBy: ['id'],
+                update: ['name_fr', 'source', 'category', 'source_spell_id', 'icon_url', 'is_active'],
+            );
+            $count += count($chunk);
+            $this->info(sprintf('  Saved %d...', $count));
+        }
+
+        $this->info(sprintf('Mount import complete: %d items.', $count));
+    }
+
+    private function info(string $message): void
+    {
+        if (app()->runningInConsole()) {
+            echo $message.PHP_EOL;
+        }
+
+        Log::info($message);
     }
 }

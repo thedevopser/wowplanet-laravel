@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * @property int $id
  * @property string $name_fr
+ * @property string|null $category
  * @property string|null $source
  * @property int|null $creature_id
  * @property string|null $icon_url
@@ -36,6 +37,7 @@ class WowPet extends Model
     protected $fillable = [
         'id',
         'name_fr',
+        'category',
         'source',
         'creature_id',
         'icon_url',

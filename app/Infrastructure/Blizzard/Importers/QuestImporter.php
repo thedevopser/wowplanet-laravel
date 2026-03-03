@@ -7,8 +7,6 @@ namespace App\Infrastructure\Blizzard\Importers;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Models\WowQuest;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Sleep;
 
 class QuestImporter
 {
@@ -19,123 +17,170 @@ class QuestImporter
     ) {}
 
     /**
-     * @param  array<int, int>  $questExpansionMap  [questId => expansionId]
-     * @param  array<int, string>  $questZoneMap  [questId => zoneName]
+     * @param  array<int, int>  $areaExpansionMap  [areaId => expansionId]
+     * @param  array<int, int>  $questExpansionMap  [questId => expansionId] from ContentTuning
      * @param  array<int, string>  $questFactionMap  [questId => 'Alliance'|'Horde']
+     * @param  array<int, string>  $zoneFactionMap  [areaId => 'Alliance'|'Horde']
      */
     public function import(
-        array $questExpansionMap,
-        array $questZoneMap = [],
+        array $areaExpansionMap,
+        array $questExpansionMap = [],
         array $questFactionMap = [],
+        array $zoneFactionMap = [],
     ): void {
-        $this->info('Loading quests from DB2 CSV data...');
-        $this->info(sprintf('  Expansion map: %d entries', count($questExpansionMap)));
-        $this->info(sprintf('  Zone map: %d entries', count($questZoneMap)));
-        $this->info(sprintf('  Faction map: %d entries', count($questFactionMap)));
+        $this->info('Fetching quest area index from Blizzard API...');
+        $this->info(sprintf('  Area expansion map: %d entries', count($areaExpansionMap)));
+        $this->info(sprintf('  Quest expansion map (ContentTuning): %d entries', count($questExpansionMap)));
+        $this->info(sprintf('  Quest faction map: %d entries', count($questFactionMap)));
+        $this->info(sprintf('  Zone faction map: %d entries', count($zoneFactionMap)));
 
-        $quests = $this->parseQuestCsv();
-        if ($quests === []) {
-            $this->info('ERROR: quest_v2_cli_task.csv not found or empty.');
+        $index = $this->fetchWithRetry('data/wow/quest/area/index');
+        if ($index === null) {
+            $this->info('ERROR: Could not fetch quest area index.');
 
             return;
         }
 
-        $this->info(sprintf('Found %d quests in CSV.', count($quests)));
+        /** @var list<array{id: int, name: string}> $areas */
+        $areas = $index['areas'] ?? [];
+        $this->info(sprintf('Found %d quest areas. Fetching details concurrently...', count($areas)));
 
-        $count = 0;
-        $mapped = 0;
-        $withZone = 0;
+        $areaDetails = $this->fetchAreaDetailsConcurrently($areas);
+        $this->info(sprintf('Fetched %d area details. Building quest rows...', count(array_filter($areaDetails))));
 
-        foreach ($quests as $quest) {
-            $questId = $quest['id'];
-            $expansionId = $questExpansionMap[$questId] ?? 0;
-            $zoneName = $questZoneMap[$questId] ?? null;
-            $faction = $questFactionMap[$questId] ?? null;
+        $rows = $this->buildQuestRows($areas, $areaDetails, $areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
+        $this->info(sprintf('Built %d quest rows. Saving to database...', count($rows)));
 
-            if ($expansionId > 0) {
-                $mapped++;
-            }
-
-            if ($zoneName !== null) {
-                $withZone++;
-            }
-
-            WowQuest::query()->updateOrCreate(['id' => $questId], [
-                'name_fr' => $quest['name_fr'],
-                'expansion_id' => $expansionId,
-                'zone_name' => $zoneName,
-                'faction' => $faction,
-                'is_active' => true,
-            ]);
-            $count++;
-            if ($count % 2000 === 0) {
-                $this->info(sprintf('  Saved %d...', $count));
-            }
-        }
-
-        $this->info(sprintf(
-            'Quest import complete: %d total (%d with expansion, %d with zone, %d without zone).',
-            $count,
-            $mapped,
-            $withZone,
-            $count - $withZone,
-        ));
+        $this->saveQuests($rows);
     }
 
     /**
-     * @return list<array{id: int, name_fr: string}>
+     * @param  list<array{id: int, name: string}>  $areas
+     * @return array<int|string, array<string, mixed>|null>
      */
-    private function parseQuestCsv(): array
+    private function fetchAreaDetailsConcurrently(array $areas): array
     {
-        $csvPath = storage_path('app/blizzard/quest_v2_cli_task.csv');
-        if (! File::exists($csvPath)) {
-            return [];
+        $endpoints = [];
+        foreach ($areas as $area) {
+            $endpoints[$area['id']] = 'data/wow/quest/area/'.$area['id'];
         }
 
-        $handle = fopen($csvPath, 'r');
-        if ($handle === false) {
-            return [];
+        return $this->fetchBatchAsync($endpoints);
+    }
+
+    /**
+     * @param  list<array{id: int, name: string}>  $areas
+     * @param  array<int|string, array<string, mixed>|null>  $areaDetails
+     * @param  array<int, int>  $areaExpansionMap
+     * @param  array<int, int>  $questExpansionMap
+     * @param  array<int, string>  $questFactionMap
+     * @param  array<int, string>  $zoneFactionMap
+     * @return list<array{id: int, name_fr: string, expansion_id: int, zone_name: string|null, faction: string|null}>
+     */
+    private function buildQuestRows(
+        array $areas,
+        array $areaDetails,
+        array $areaExpansionMap,
+        array $questExpansionMap,
+        array $questFactionMap,
+        array $zoneFactionMap,
+    ): array {
+        /** @var array<string, string> $areaNameFallback */
+        $areaNameFallback = [];
+        foreach ($areas as $area) {
+            $areaNameFallback[$area['id']] = $area['name'];
         }
 
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
+        $rows = [];
+        $mapped = 0;
+        $withZone = 0;
 
-            return [];
-        }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $nameIdx = (int) array_search('QuestTitle_lang', $headers, true);
-
-        $quests = [];
-        $skipped = 0;
-
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $name = trim($row[$nameIdx] ?? '');
-            if ($name === '') {
-                $skipped++;
-
+        foreach ($areaDetails as $areaId => $detail) {
+            if ($detail === null) {
                 continue;
             }
 
-            $quests[] = [
-                'id' => (int) $row[$idIdx],
-                'name_fr' => $name,
-            ];
+            $areaName = $this->resolveAreaName($detail, $areaNameFallback[$areaId] ?? '');
+            $areaExpansionId = $areaExpansionMap[$areaId] ?? 0;
+
+            /** @var list<array{id: int, name?: string}> $quests */
+            $quests = $detail['quests'] ?? [];
+
+            foreach ($quests as $quest) {
+                $questName = $quest['name'] ?? '';
+                if ($questName === '') {
+                    continue;
+                }
+
+                $questId = $quest['id'];
+                $expansionId = $questExpansionMap[$questId] ?? $areaExpansionId;
+                $faction = $questFactionMap[$questId] ?? $zoneFactionMap[$areaId] ?? null;
+
+                if ($expansionId > 0) {
+                    $mapped++;
+                }
+
+                if ($areaName !== '') {
+                    $withZone++;
+                }
+
+                $rows[] = [
+                    'id' => $questId,
+                    'name_fr' => $questName,
+                    'expansion_id' => $expansionId,
+                    'zone_name' => $areaName !== '' ? $areaName : null,
+                    'faction' => $faction,
+                ];
+            }
         }
 
-        fclose($handle);
+        $this->info(sprintf('  %d with expansion, %d with zone.', $mapped, $withZone));
 
-        if ($skipped > 0) {
-            $this->info(sprintf('  Skipped %d quests with empty names.', $skipped));
-        }
-
-        return $quests;
+        return $rows;
     }
 
-    private const BATCH_SIZE = 50;
+    /**
+     * @param  list<array{id: int, name_fr: string, expansion_id: int, zone_name: string|null, faction: string|null}>  $rows
+     */
+    private function saveQuests(array $rows): void
+    {
+        $count = 0;
 
-    private const BATCH_PAUSE_S = 3;
+        foreach (array_chunk($rows, 500) as $chunk) {
+            $upsertData = array_map(fn (array $row): array => [
+                'id' => $row['id'],
+                'name_fr' => $row['name_fr'],
+                'expansion_id' => $row['expansion_id'],
+                'zone_name' => $row['zone_name'],
+                'faction' => $row['faction'],
+                'is_active' => true,
+            ], $chunk);
+
+            WowQuest::query()->upsert($upsertData, uniqueBy: ['id'], update: [
+                'name_fr', 'expansion_id', 'zone_name', 'faction', 'is_active',
+            ]);
+
+            $count += count($chunk);
+            $this->info(sprintf('  Saved %d/%d...', $count, count($rows)));
+        }
+
+        $this->info(sprintf('Quest import complete: %d quests.', $count));
+    }
+
+    /**
+     * @param  array<string, mixed>  $areaDetail
+     */
+    private function resolveAreaName(array $areaDetail, string $fallbackName): string
+    {
+        /** @var string|array{name?: string}|null $areaField */
+        $areaField = $areaDetail['area'] ?? null;
+
+        return match (true) {
+            is_string($areaField) => $areaField,
+            is_array($areaField) => (string) ($areaField['name'] ?? $fallbackName),
+            default => $fallbackName,
+        };
+    }
 
     /**
      * @param  array<int, string>  $reputationFactionMap
@@ -152,81 +197,61 @@ class QuestImporter
             return;
         }
 
-        $questDetails = $this->fetchQuestDetailsInBatches($pairs);
+        $questDetails = $this->fetchQuestDetailsConcurrently($pairs);
         $this->resolvePairsFromCache($pairs, $questDetails, $reputationFactionMap);
     }
 
     /**
      * @param  list<array{id_a: int, id_b: int, name: string, zone: string}>  $pairs
-     * @return array<int, array<string, mixed>|null>
+     * @return array<int|string, array<string, mixed>|null>
      */
-    private function fetchQuestDetailsInBatches(array $pairs): array
+    private function fetchQuestDetailsConcurrently(array $pairs): array
     {
-        $questIds = [];
+        $endpoints = [];
         foreach ($pairs as $pair) {
-            $questIds[$pair['id_a']] = true;
-            $questIds[$pair['id_b']] = true;
+            $endpoints[$pair['id_a']] = 'data/wow/quest/'.$pair['id_a'];
+            $endpoints[$pair['id_b']] = 'data/wow/quest/'.$pair['id_b'];
         }
 
-        $questIds = array_keys($questIds);
+        $this->info(sprintf('  Fetching %d unique quest details concurrently (batches of %d)...', count($endpoints), self::CONCURRENT_BATCH_SIZE));
 
-        $this->info(sprintf('  Fetching %d unique quest details in batches of %d...', count($questIds), self::BATCH_SIZE));
-
-        $details = [];
-        $batches = array_chunk($questIds, self::BATCH_SIZE);
-
-        foreach ($batches as $batchIndex => $batch) {
-            if ($batchIndex > 0) {
-                $this->info(sprintf('  Batch pause (%ds)...', self::BATCH_PAUSE_S));
-                Sleep::sleep(self::BATCH_PAUSE_S);
-            }
-
-            foreach ($batch as $questId) {
-                $this->delayRequest();
-                $details[$questId] = $this->fetchWithRetry('data/wow/quest/'.$questId);
-            }
-
-            $this->info(sprintf('  Batch %d/%d complete (%d quests fetched).', $batchIndex + 1, count($batches), count($batch)));
-        }
-
-        return $details;
+        return $this->fetchBatchAsync($endpoints);
     }
 
     /**
      * @param  list<array{id_a: int, id_b: int, name: string, zone: string}>  $pairs
-     * @param  array<int, array<string, mixed>|null>  $questDetails
+     * @param  array<int|string, array<string, mixed>|null>  $questDetails
      * @param  array<int, string>  $reputationFactionMap
      */
     private function resolvePairsFromCache(array $pairs, array $questDetails, array $reputationFactionMap): void
     {
         $tagged = 0;
         $skipped = 0;
-        $errors = 0;
+        $notFound = 0;
 
         foreach ($pairs as $pair) {
             $detailA = $questDetails[$pair['id_a']] ?? null;
             $detailB = $questDetails[$pair['id_b']] ?? null;
 
-            $factionFromA = ($detailA !== null) ? $this->detectFactionFromReputations($detailA, $reputationFactionMap) : null;
-            $factionFromB = ($detailB !== null) ? $this->detectFactionFromReputations($detailB, $reputationFactionMap) : null;
-
-            if ($factionFromA !== null) {
-                $factionA = $factionFromA;
-                $factionB = $factionFromA === 'Alliance' ? 'Horde' : 'Alliance';
-            } elseif ($factionFromB !== null) {
-                $factionB = $factionFromB;
-                $factionA = $factionFromB === 'Alliance' ? 'Horde' : 'Alliance';
-            } elseif ($detailA === null && $detailB === null) {
-                $errors++;
-                $this->info(sprintf('  [ERR] %s (IDs: %d, %d) — API error.', $pair['name'], $pair['id_a'], $pair['id_b']));
-
-                continue;
-            } else {
-                $skipped++;
-                $this->info(sprintf('  [SKIP] %s (IDs: %d, %d) — no faction reputation.', $pair['name'], $pair['id_a'], $pair['id_b']));
+            if ($detailA === null && $detailB === null) {
+                $notFound++;
 
                 continue;
             }
+
+            $factionFromA = ($detailA !== null) ? $this->detectFactionFromReputations($detailA, $reputationFactionMap) : null;
+            $factionFromB = ($detailB !== null) ? $this->detectFactionFromReputations($detailB, $reputationFactionMap) : null;
+            $resolvedFaction = $factionFromA ?? $factionFromB;
+
+            if ($resolvedFaction === null) {
+                $skipped++;
+
+                continue;
+            }
+
+            $mirrorFaction = $resolvedFaction === 'Alliance' ? 'Horde' : 'Alliance';
+            $factionA = $factionFromA ?? $mirrorFaction;
+            $factionB = $factionFromB ?? $mirrorFaction;
 
             $this->info(sprintf('  [TAG] %s → %d=%s, %d=%s', $pair['name'], $pair['id_a'], $factionA, $pair['id_b'], $factionB));
             WowQuest::query()->where('id', $pair['id_a'])->update(['faction' => $factionA]);
@@ -234,7 +259,7 @@ class QuestImporter
             $tagged++;
         }
 
-        $this->info(sprintf('Mirror tagging complete: %d tagged, %d skipped, %d errors.', $tagged, $skipped, $errors));
+        $this->info(sprintf('Mirror tagging complete: %d tagged, %d no reputation data, %d not found in API.', $tagged, $skipped, $notFound));
     }
 
     /**
@@ -263,17 +288,12 @@ class QuestImporter
      */
     private function findMirrorPairs(): array
     {
-        /** @var \Illuminate\Support\Collection<int, WowQuest> $untagged */
-        $untagged = WowQuest::query()
-            ->where('is_active', true)
-            ->whereNull('faction')
-            ->get(['id', 'name_fr', 'zone_name']);
-
         /** @var array<string, list<int>> $groups */
         $groups = [];
-        foreach ($untagged as $quest) {
-            $key = $quest->name_fr.'|||'.$quest->zone_name;
-            $groups[$key][] = $quest->id;
+
+        foreach (WowQuest::query()->where('is_active', true)->whereNull('faction')->lazy() as $lazyCollection) {
+            $key = $lazyCollection->name_fr.'|||'.$lazyCollection->zone_name;
+            $groups[$key][] = $lazyCollection->id;
         }
 
         $pairs = [];

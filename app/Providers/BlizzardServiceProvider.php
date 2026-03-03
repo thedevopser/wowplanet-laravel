@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Domain\Services\ExpansionClassifier;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\RateLimitingMiddleware;
 use App\Infrastructure\Mappings\ExpansionMapping;
 use App\Infrastructure\Mappings\StaticExpansionMapping;
 use GuzzleHttp\Client;
@@ -29,6 +30,7 @@ class BlizzardServiceProvider extends ServiceProvider
         $this->app->singleton(
             function (): \App\Infrastructure\Blizzard\BlizzardApiClient {
                 $handlerStack = HandlerStack::create();
+                $handlerStack->push(new RateLimitingMiddleware, 'rate_limiter');
 
                 /** @var string $region */
                 $region = config('services.blizzard.region', 'eu');

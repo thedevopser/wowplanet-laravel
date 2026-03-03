@@ -91,10 +91,9 @@
                     <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
                         <div class="h-full bg-amber-600/80 transition-all duration-700" :style="{ width: (src.completed / src.total * 100) + '%' }"></div>
                     </div>
-                    <div v-if="expandedSource === src.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-64 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
-                        <div v-for="item in sortedItems(src.items)" :key="item.id" class="flex items-center gap-2 text-[10px] sm:text-xs py-1">
-                            <img v-if="item.icon_url" :src="item.icon_url" :alt="item.name" class="w-5 h-5 rounded border border-white/10 object-cover" loading="lazy" />
-                            <div v-else class="w-5 h-5 rounded bg-slate-800 flex items-center justify-center text-amber-500 text-[8px] font-bold border border-white/10">M</div>
+                    <div v-if="expandedSource === src.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-96 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
+                        <div v-for="item in sortedItems(src.items)" :key="item.id" class="flex items-center gap-3 text-xs sm:text-sm py-1.5">
+                            <CollectionIcon :src="item.icon_url" :alt="item.name" fallback="M" size="sm" class="text-amber-500" />
                             <a :href="item.wowhead_id ? `https://www.wowhead.com/fr/spell=${item.wowhead_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(item.name)}`" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-amber-400 font-medium' : 'text-slate-500', 'hover:underline flex-1 truncate']">{{ item.name }}</a>
                             <span v-if="item.is_completed" class="text-green-500 font-bold shrink-0">&check;</span>
                             <span v-else class="text-slate-800 shrink-0">&cir;</span>
@@ -112,8 +111,7 @@
             </h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <a v-for="item in uncategorizedItems" :key="item.id" :href="item.wowhead_id ? `https://www.wowhead.com/fr/spell=${item.wowhead_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(item.name)}`" target="_blank" rel="noopener" class="flex items-center gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
-                    <img v-if="item.icon_url" :src="item.icon_url" :alt="item.name" class="w-10 h-10 rounded-lg border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-amber-500/5 object-cover" loading="lazy" />
-                    <div v-else class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-amber-500 font-bold border border-white/10 group-hover:scale-110 transition-transform shadow-lg shadow-amber-500/5">M</div>
+                    <CollectionIcon :src="item.icon_url" :alt="item.name" fallback="M" size="lg" class="text-amber-500 group-hover:scale-110 transition-transform shadow-lg shadow-amber-500/5" />
                     <div class="flex-1 min-w-0">
                         <div class="text-sm md:text-base font-bold text-slate-200 group-hover:text-amber-400 transition-colors truncate">{{ item.name }}</div>
                         <div class="text-[10px] sm:text-xs text-slate-500 font-mono">ID: {{ item.id }}</div>
@@ -132,6 +130,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import SearchFilter from './SearchFilter.vue';
+import CollectionIcon from './CollectionIcon.vue';
 
 const props = defineProps({
     character: { type: Object, required: true },
