@@ -282,14 +282,15 @@ const selectedClassInfo = computed(() => {
 function toggleClass(classId) {
     if (selectedClassId.value === classId) {
         selectedClassId.value = null;
-    } else {
-        selectedClassId.value = classId;
-        nextTick(() => {
-            const panel = document.getElementById('class-detail-panel');
-            if (panel) {
-                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-        });
+        return;
     }
+
+    selectedClassId.value = classId;
+    nextTick(() => {
+        const panel = document.getElementById('class-detail-panel');
+        if (panel) {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    });
 }
 </script>

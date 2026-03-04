@@ -72,7 +72,7 @@
             <!-- ==================== STANDARD PROFESSION MODE ==================== -->
             <template v-else>
                 <!-- Tier NOT learned: simplified display -->
-                <template v-if="currentExpansionData && !currentExpansionData.has_tier && currentExpansionData.tier_exists">
+                <template v-if="currentExpansionData && !currentExpansionData.has_tier && (currentExpansionData.tier_exists || isGatheringProfession)">
                     <div class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden">
                         <div class="absolute top-0 right-0 w-32 h-32 bg-slate-600/5 blur-3xl -mr-16 -mt-16"></div>
                         <div class="relative z-10">
@@ -101,28 +101,29 @@
                             <div class="flex justify-between items-end mb-4 sm:mb-6">
                                 <div>
                                     <h3 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
-                                        <div class="w-2 h-6 sm:h-8 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50"></div>
+                                        <div :class="['w-2 h-6 sm:h-8 rounded-full shadow-lg', isGatheringProfession ? 'bg-cyan-500 shadow-cyan-500/50' : 'bg-emerald-500 shadow-emerald-500/50']"></div>
                                         {{ selectedProfession.profession_name }}
                                     </h3>
-                                    <p class="text-slate-500 text-xs sm:text-sm md:text-base mt-1">Recettes apprises par extension</p>
+                                    <p class="text-slate-500 text-xs sm:text-sm md:text-base mt-1">{{ isGatheringProfession ? 'Niveau de comp\u00e9tence' : 'Recettes apprises par extension' }}</p>
                                 </div>
                                 <div class="text-right">
-                                    <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
-                                        {{ Math.round(currentExpansionData.completed / (currentExpansionData.total || 1) * 100) }}%
+                                    <div :class="['text-2xl sm:text-3xl font-black font-mono', isGatheringProfession ? 'text-cyan-400' : 'text-emerald-400']">
+                                        {{ Math.round(progressPercent) }}%
                                     </div>
                                     <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">
-                                        {{ currentExpansionData.completed }} / {{ currentExpansionData.total }}
+                                        <template v-if="isGatheringProfession">{{ currentExpansionData.skill_points }} / {{ currentExpansionData.max_skill_points }} points</template>
+                                        <template v-else>{{ currentExpansionData.completed }} / {{ currentExpansionData.total }}</template>
                                     </div>
                                 </div>
                             </div>
-                            <!-- Recipe progress bar -->
+                            <!-- Progress bar -->
                             <div class="h-3 bg-slate-800 rounded-full overflow-hidden border border-white/5">
-                                <div class="h-full bg-linear-to-r from-emerald-700 via-emerald-500 to-emerald-400 transition-all duration-1000 relative shadow-[0_0_15px_rgba(16,185,129,0.3)]" :style="{ width: progressPercent + '%' }">
+                                <div :class="['h-full transition-all duration-1000 relative', isGatheringProfession ? 'bg-linear-to-r from-cyan-700 via-cyan-500 to-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-linear-to-r from-emerald-700 via-emerald-500 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]']" :style="{ width: progressPercent + '%' }">
                                     <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
                                 </div>
                             </div>
-                            <!-- Skill points bar -->
-                            <div v-if="currentExpansionData.max_skill_points > 0" class="mt-3 flex items-center gap-3">
+                            <!-- Skill points bar (only for crafting professions that also have skill points) -->
+                            <div v-if="!isGatheringProfession && currentExpansionData.max_skill_points > 0" class="mt-3 flex items-center gap-3">
                                 <span class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold shrink-0">Comp&eacute;tence</span>
                                 <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-white/5">
                                     <div
@@ -244,14 +245,12 @@ const archaeologyMaxPoints = computed(() => selectedProfession.value?.global_max
 const professionCollections = computed(() => {
     if (!selectedProfession.value) return {};
     const result = {};
+    const useSkillPoints = isArchaeology.value || isGatheringProfession.value;
     const expansions = selectedProfession.value.expansions;
     for (const [expId, data] of Object.entries(expansions)) {
-        if (isArchaeology.value) {
-            // Archaeology: show skill points in expansion badges
-            result[expId] = { recipes: { total: data.max_skill_points || 0, completed: data.skill_points || 0 } };
-        } else {
-            result[expId] = { recipes: { total: data.total, completed: data.completed } };
-        }
+        const total = useSkillPoints ? (data.max_skill_points || 0) : data.total;
+        const completed = useSkillPoints ? (data.skill_points || 0) : data.completed;
+        result[expId] = { recipes: { total, completed } };
     }
     return result;
 });
@@ -261,10 +260,18 @@ const currentExpansionData = computed(() => {
     return selectedProfession.value.expansions?.[activeExpansion.value] || null;
 });
 
+// Gathering profession = no recipes across ALL expansions (Herbalism, Mining, Skinning)
+const isGatheringProfession = computed(() => {
+    if (!selectedProfession.value) return false;
+    const expansions = selectedProfession.value.expansions;
+    return Object.values(expansions).every(data => data.total === 0);
+});
+
 const progressPercent = computed(() => {
     if (!currentExpansionData.value) return 0;
-    const { completed, total } = currentExpansionData.value;
-    return total > 0 ? completed / total * 100 : 0;
+    const { completed, total, skill_points, max_skill_points } = currentExpansionData.value;
+    if (total > 0) return completed / total * 100;
+    return max_skill_points > 0 ? skill_points / max_skill_points * 100 : 0;
 });
 
 const skillPointsPercent = computed(() => {

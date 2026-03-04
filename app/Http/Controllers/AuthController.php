@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 
@@ -57,33 +58,63 @@ class AuthController extends Controller
 
     public function callback(Request $request): RedirectResponse
     {
-        /** @var string $code */
-        $code = $request->get('code', '');
-        /** @var string $state */
-        $state = $request->get('state', '');
-        /** @var string $expectedState */
-        $expectedState = Session::pull('blizzard_oauth_state', '');
+        try {
+            /** @var string $code */
+            $code = $request->get('code', '');
+            /** @var string $state */
+            $state = $request->get('state', '');
+            /** @var string $expectedState */
+            $expectedState = Session::pull('blizzard_oauth_state', '');
 
-        if ($code === '' || $state === '' || $state !== $expectedState) {
-            return redirect('/')->with('error', 'Authorization failed');
-        }
+            if ($code === '' || $state === '' || $state !== $expectedState) {
+                Log::warning('Blizzard OAuth: state mismatch or missing params', [
+                    'has_code' => $code !== '',
+                    'has_state' => $state !== '',
+                    'state_matches' => $state === $expectedState,
+                ]);
 
-        $response = Http::asForm()
-            ->withBasicAuth($this->clientId, $this->clientSecret)
-            ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
-                'grant_type' => 'authorization_code',
-                'code' => $code,
-                'redirect_uri' => $this->redirectUri,
+                return redirect('/')->with('error', 'Authorization failed');
+            }
+
+            $response = Http::asForm()
+                ->timeout(10)
+                ->withBasicAuth($this->clientId, $this->clientSecret)
+                ->post(sprintf('https://%s.battle.net/oauth/token', $this->region), [
+                    'grant_type' => 'authorization_code',
+                    'code' => $code,
+                    'redirect_uri' => $this->redirectUri,
+                ]);
+
+            if ($response->failed()) {
+                Log::error('Blizzard OAuth: token exchange failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return redirect('/')->with('error', 'Token exchange failed');
+            }
+
+            /** @var array<string, mixed> $tokenData */
+            $tokenData = $response->json();
+
+            if (! isset($tokenData['access_token'])) {
+                Log::error('Blizzard OAuth: missing access_token in response', [
+                    'response_keys' => array_keys($tokenData),
+                ]);
+
+                return redirect('/')->with('error', 'Token exchange failed');
+            }
+
+            Session::put('blizzard_user_token', $tokenData['access_token']);
+
+            return redirect('/');
+        } catch (\Throwable $throwable) {
+            Log::error('Blizzard OAuth: unexpected error during callback', [
+                'message' => $throwable->getMessage(),
+                'trace' => $throwable->getTraceAsString(),
             ]);
 
-        if ($response->failed()) {
-            return redirect('/')->with('error', 'Token exchange failed');
+            return redirect('/')->with('error', 'Authentication error');
         }
-
-        /** @var array{access_token: string} $tokenData */
-        $tokenData = $response->json();
-        Session::put('blizzard_user_token', $tokenData['access_token']);
-
-        return redirect('/');
     }
 }
