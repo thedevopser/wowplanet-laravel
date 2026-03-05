@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage.vue';
 import CharacterPage from './pages/CharacterPage.vue';
 import MyCharactersPage from './pages/MyCharactersPage.vue';
 import ClassStatsPage from './pages/ClassStatsPage.vue';
+import AccountScorePage from './pages/AccountScorePage.vue';
 import PrivacyPage from './pages/PrivacyPage.vue';
 import CguPage from './pages/CguPage.vue';
 
@@ -30,6 +31,12 @@ const routes = [
         name: 'class-stats',
         component: ClassStatsPage,
         meta: { title: 'Mes classes - WowPlanet' },
+    },
+    {
+        path: '/my-score',
+        name: 'my-score',
+        component: AccountScorePage,
+        meta: { title: 'Mon score compte - WowPlanet' },
     },
     {
         path: '/privacy',

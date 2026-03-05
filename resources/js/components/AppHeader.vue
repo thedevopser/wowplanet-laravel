@@ -33,6 +33,17 @@
                         >
                             Mes classes
                         </router-link>
+                        <router-link
+                            to="/my-score"
+                            :class="[
+                                'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
+                                route.name === 'my-score'
+                                    ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
+                                    : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
+                            ]"
+                        >
+                            Mon score
+                        </router-link>
                         <button
                             @click="handleLogout"
                             class="px-2 md:px-3 py-1.5 rounded-md text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
@@ -107,6 +118,18 @@
                         ]"
                     >
                         Mes classes
+                    </router-link>
+                    <router-link
+                        to="/my-score"
+                        @click="mobileMenuOpen = false"
+                        :class="[
+                            'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
+                            route.name === 'my-score'
+                                ? 'bg-blue-600 border-blue-400 text-white'
+                                : 'bg-slate-800/80 border-white/5 text-slate-300'
+                        ]"
+                    >
+                        Mon score
                     </router-link>
                     <button
                         @click="handleLogout(); mobileMenuOpen = false"

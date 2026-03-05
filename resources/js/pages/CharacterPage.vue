@@ -22,6 +22,7 @@
                 </button>
             </div>
 
+            <ScoreTab v-if="activeTab === 'score'" />
             <QuestsTab v-if="activeTab === 'quests'" />
             <AchievementsTab v-if="activeTab === 'achievements'" />
             <ReputationsTab v-if="activeTab === 'reputations'" />
@@ -46,12 +47,14 @@ import MountsTab from '../components/MountsTab.vue';
 import PetsTab from '../components/PetsTab.vue';
 import ProfessionsTab from '../components/ProfessionsTab.vue';
 import DecorTab from '../components/DecorTab.vue';
+import ScoreTab from '../components/ScoreTab.vue';
 
 const route = useRoute();
 const store = useCharacterStore();
-const activeTab = ref('quests');
+const activeTab = ref('score');
 
 const contentTabs = computed(() => [
+    { id: 'score', label: 'Score', count: undefined },
     { id: 'quests', label: 'Quêtes', count: undefined },
     { id: 'achievements', label: 'Hauts-faits', count: undefined },
     { id: 'reputations', label: 'Réputations', count: undefined },
@@ -72,7 +75,7 @@ onMounted(loadCharacter);
 
 watch(() => route.params, (newParams, oldParams) => {
     if (newParams.realm !== oldParams?.realm || newParams.name !== oldParams?.name) {
-        activeTab.value = 'quests';
+        activeTab.value = 'score';
         loadCharacter();
     }
 });

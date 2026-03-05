@@ -25,7 +25,8 @@
                 </div>
             </div>
 
-            <div class="flex flex-wrap gap-2 sm:gap-3">
+            <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
+                <ScoreBadge v-if="score" :score="score.global" />
                 <div class="bg-slate-800/50 backdrop-blur px-3 sm:px-4 py-2 rounded-xl border border-white/5 text-center">
                     <div class="text-[10px] sm:text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Montures</div>
                     <div class="text-lg sm:text-xl font-black text-amber-400">{{ character.mountsCount }}</div>
@@ -54,6 +55,8 @@
 <script setup>
 import { computed } from 'vue';
 import { classColors } from '../utils/classColors';
+import { computeScore } from '../utils/scoreCalculator';
+import ScoreBadge from './ScoreBadge.vue';
 
 const props = defineProps({
     character: { type: Object, required: true },
@@ -61,4 +64,5 @@ const props = defineProps({
 
 const classColor = computed(() => classColors[props.character.classId] || '#FFFFFF');
 const factionColor = computed(() => props.character.faction === 'Alliance' ? '#3b82f6' : '#ef4444');
+const score = computed(() => computeScore(props.character));
 </script>
