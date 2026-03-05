@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Session;
 
 class AccountScoreService
 {
-    private const BATCH_SIZE = 2;
+    private const BATCH_SIZE = 1;
 
     private const CACHE_TTL = 86400;
 

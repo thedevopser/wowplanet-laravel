@@ -8,6 +8,8 @@ use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowQuest;
+use GuzzleHttp\Promise\FulfilledPromise;
+use GuzzleHttp\Psr7\Response;
 
 test('full character profile flow', function (): void {
     WowQuest::factory()->create([
@@ -38,55 +40,47 @@ test('full character profile flow', function (): void {
 
     $mock = $this->mock(BlizzardApiClient::class);
 
+    // Summary is fetched synchronously
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('get');
-    $exp->andReturnUsing(function (string $endpoint): array {
-        if (str_contains($endpoint, 'quests/completed')) {
-            return ['quests' => [['id' => 100]]];
-        }
+    $exp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 620,
+        'faction' => ['name' => 'Horde'],
+    ]);
 
-        if (str_contains($endpoint, 'achievements')) {
-            return ['achievements' => [['id' => 200, 'completed_timestamp' => 1700000000000]]];
-        }
-
-        if (str_contains($endpoint, 'collections/mounts')) {
-            return ['mounts' => [['mount' => ['id' => 300]]]];
-        }
-
-        if (str_contains($endpoint, 'collections/pets')) {
-            return ['pets' => [['species' => ['id' => 400]]]];
-        }
-
-        if (str_contains($endpoint, 'collections/decor')) {
-            return ['decor_collected' => [['decor' => ['id' => 500]]]];
-        }
-
-        if (str_contains($endpoint, 'character-media')) {
-            return [
+    // All other endpoints are fetched async
+    /** @var \Mockery\Expectation $asyncExp */
+    $asyncExp = $mock->shouldReceive('getAsync');
+    $asyncExp->andReturnUsing(function (string $endpoint): FulfilledPromise {
+        $responses = [
+            'quests/completed' => ['quests' => [['id' => 100]]],
+            'achievements' => ['achievements' => [['id' => 200, 'completed_timestamp' => 1700000000000]]],
+            'collections/mounts' => ['mounts' => [['mount' => ['id' => 300]]]],
+            'collections/pets' => ['pets' => [['species' => ['id' => 400]]]],
+            'collections/decor' => ['decor_collected' => [['decor' => ['id' => 500]]]],
+            'character-media' => [
                 'assets' => [
                     ['key' => 'avatar', 'value' => 'https://render.com/avatar.jpg'],
                     ['key' => 'inset', 'value' => 'https://render.com/inset.jpg'],
                 ],
-            ];
-        }
-
-        if (str_contains($endpoint, 'playable-class')) {
-            return ['assets' => [['key' => 'icon', 'value' => 'https://render.com/icon.jpg']]];
-        }
-
-        if (str_contains($endpoint, '/professions')) {
-            return ['primaries' => [], 'secondaries' => []];
-        }
-
-        return [
-            'name' => 'Thrall',
-            'realm' => ['name' => 'Hyjal'],
-            'race' => ['name' => 'Orc'],
-            'character_class' => ['id' => 7, 'name' => 'Chaman'],
-            'level' => 80,
-            'equipped_item_level' => 620,
-            'faction' => ['name' => 'Horde'],
+            ],
+            'playable-class' => ['assets' => [['key' => 'icon', 'value' => 'https://render.com/icon.jpg']]],
+            '/professions' => ['primaries' => [], 'secondaries' => []],
+            '/reputations' => ['reputations' => []],
         ];
+
+        foreach ($responses as $pattern => $data) {
+            if (str_contains($endpoint, $pattern)) {
+                return new FulfilledPromise(new Response(200, [], json_encode($data, JSON_THROW_ON_ERROR)));
+            }
+        }
+
+        return new FulfilledPromise(new Response(200, [], json_encode([], JSON_THROW_ON_ERROR)));
     });
 
     $testResponse = $this->getJson('/api/character/hyjal/thrall');

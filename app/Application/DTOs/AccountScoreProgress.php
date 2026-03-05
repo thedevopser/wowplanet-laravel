@@ -35,6 +35,12 @@ class AccountScoreProgress
     /** @var array<int, array<string, mixed>> */
     public array $professionMap = [];
 
+    /** @var list<int> */
+    public array $completedRecipeIds = [];
+
+    /** @var array<int, array<int, array{skill_points: int, max_skill_points: int}>> */
+    public array $bestSkillPoints = [];
+
     /**
      * @param  list<array{realmSlug: string, name: string}>  $characters
      */
@@ -76,12 +82,14 @@ class AccountScoreProgress
         $pets = $this->accountPets ?? [];
         $decor = $this->accountDecor ?? [];
 
+        $professions = $this->rebuildProfessions();
+
         return [
             'collections' => $collections,
             'mounts' => $mounts,
             'pets' => $pets,
             'decor' => $decor,
-            'professions' => array_values($this->professionMap),
+            'professions' => $professions,
             'mountsCount' => count(array_filter($mounts, fn (array $m): bool => ! empty($m['is_completed']))),
             'petsCount' => count(array_filter($pets, fn (array $p): bool => ! empty($p['is_completed']))),
             'decorCount' => count(array_filter($decor, fn (array $d): bool => ! empty($d['is_completed']))),
@@ -157,44 +165,118 @@ class AccountScoreProgress
 
             $pid = $prof['profession_id'];
 
+            // Store structure from first character with this profession
             if (! isset($this->professionMap[$pid])) {
                 $this->professionMap[$pid] = $prof;
-
-                continue;
             }
 
+            // Collect completed recipe IDs from all characters (union)
             /** @var array<int|string, array<string, mixed>> $expansions */
             $expansions = is_array($prof['expansions'] ?? null) ? $prof['expansions'] : [];
-            foreach ($expansions as $expId => $incoming) {
-                /** @var array<string, mixed> $incoming */
-                /** @var array<string, mixed> $profExpansions */
-                $profExpansions = is_array($this->professionMap[$pid]['expansions'] ?? null) ? $this->professionMap[$pid]['expansions'] : [];
-                if (! isset($profExpansions[$expId])) {
-                    $profExpansions[$expId] = $incoming;
-                } else {
-                    /** @var array<string, mixed> $existing */
-                    $existing = $profExpansions[$expId];
-                    $profExpansions[$expId] = array_merge($existing, [
-                        'completed' => max($this->safeInt($existing, 'completed'), $this->safeInt($incoming, 'completed')),
-                        'skill_points' => max($this->safeInt($existing, 'skill_points'), $this->safeInt($incoming, 'skill_points')),
-                        'total' => max($this->safeInt($existing, 'total'), $this->safeInt($incoming, 'total')),
-                        'max_skill_points' => max($this->safeInt($existing, 'max_skill_points'), $this->safeInt($incoming, 'max_skill_points')),
-                    ]);
+            foreach ($expansions as $expId => $expData) {
+                /** @var array<string, mixed> $expData */
+
+                // Union recipe IDs from categories
+                /** @var list<array<string, mixed>> $categories */
+                $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
+                foreach ($categories as $category) {
+                    /** @var list<array<string, mixed>> $items */
+                    $items = $category['items'] ?? [];
+                    foreach ($items as $item) {
+                        if (! empty($item['is_completed']) && is_int($item['id'] ?? null)) {
+                            $this->completedRecipeIds[] = $item['id'];
+                        }
+                    }
                 }
 
-                $this->professionMap[$pid]['expansions'] = $profExpansions;
+                // Best skill_points per profession per expansion
+                $sp = is_int($expData['skill_points'] ?? null) ? $expData['skill_points'] : 0;
+                $msp = is_int($expData['max_skill_points'] ?? null) ? $expData['max_skill_points'] : 0;
+                $intExpId = (int) $expId;
+
+                if (! isset($this->bestSkillPoints[$pid][$intExpId])
+                    || $sp > $this->bestSkillPoints[$pid][$intExpId]['skill_points']) {
+                    $this->bestSkillPoints[$pid][$intExpId] = [
+                        'skill_points' => $sp,
+                        'max_skill_points' => max($msp, $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'] ?? 0),
+                    ];
+                } else {
+                    $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'] = max(
+                        $msp,
+                        $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'],
+                    );
+                }
             }
         }
     }
 
     /**
-     * @param  array<string, mixed>  $data
+     * @return list<array<string, mixed>>
      */
-    private function safeInt(array $data, string $key): int
+    private function rebuildProfessions(): array
     {
-        $value = $data[$key] ?? 0;
+        $recipeIdSet = array_flip(array_unique($this->completedRecipeIds));
+        $result = [];
 
-        return is_int($value) ? $value : 0;
+        foreach ($this->professionMap as $pid => $prof) {
+            /** @var array<int|string, array<string, mixed>> $expansions */
+            $expansions = is_array($prof['expansions'] ?? null) ? $prof['expansions'] : [];
+            $rebuiltExpansions = [];
+
+            foreach ($expansions as $expId => $expData) {
+                /** @var array<string, mixed> $expData */
+                $intExpId = (int) $expId;
+
+                // Rebuild categories with union of completed recipe IDs
+                /** @var list<array<string, mixed>> $categories */
+                $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
+                $totalRecipes = 0;
+                $completedRecipes = 0;
+                $rebuiltCategories = [];
+
+                foreach ($categories as $category) {
+                    /** @var list<array<string, mixed>> $items */
+                    $items = $category['items'] ?? [];
+                    $catCompleted = 0;
+                    $rebuiltItems = [];
+
+                    foreach ($items as $item) {
+                        $id = is_int($item['id'] ?? null) ? $item['id'] : 0;
+                        $completed = isset($recipeIdSet[$id]);
+                        if ($completed) {
+                            $catCompleted++;
+                            $completedRecipes++;
+                        }
+
+                        $totalRecipes++;
+                        $rebuiltItems[] = array_merge($item, ['is_completed' => $completed]);
+                    }
+
+                    $rebuiltCategories[] = array_merge($category, [
+                        'items' => $rebuiltItems,
+                        'completed' => $catCompleted,
+                        'total' => count($rebuiltItems),
+                    ]);
+                }
+
+                // Use best skill points from any character
+                $bestSp = $this->bestSkillPoints[$pid][$intExpId] ?? null;
+                $skillPoints = $bestSp !== null ? $bestSp['skill_points'] : 0;
+                $maxSkillPoints = $bestSp !== null ? $bestSp['max_skill_points'] : 0;
+
+                $rebuiltExpansions[$intExpId] = array_merge($expData, [
+                    'total' => $totalRecipes,
+                    'completed' => $completedRecipes,
+                    'categories' => $rebuiltCategories,
+                    'skill_points' => $skillPoints,
+                    'max_skill_points' => $maxSkillPoints,
+                ]);
+            }
+
+            $result[] = array_merge($prof, ['expansions' => $rebuiltExpansions]);
+        }
+
+        return $result;
     }
 
     /**

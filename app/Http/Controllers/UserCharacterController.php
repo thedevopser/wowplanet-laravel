@@ -58,6 +58,8 @@ class UserCharacterController extends Controller
 
     public function accountScore(): JsonResponse
     {
+        set_time_limit(120);
+
         try {
             $result = $this->accountScoreService->getOrCompute();
 

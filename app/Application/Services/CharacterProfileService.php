@@ -11,6 +11,9 @@ use App\Application\Services\Progress\ProfessionProgressAggregator;
 use App\Application\Services\Progress\QuestProgressAggregator;
 use App\Application\Services\Progress\ReputationProgressAggregator;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Promise\Utils;
+use Illuminate\Support\Facades\Log;
 
 class CharacterProfileService
 {
@@ -63,6 +66,10 @@ class CharacterProfileService
         return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions);
     }
 
+    private const MAX_ASYNC_RETRIES = 2;
+
+    private const RETRY_DELAY_S = 3;
+
     /**
      * @return array<string, mixed>
      */
@@ -70,8 +77,8 @@ class CharacterProfileService
     {
         $base = sprintf('profile/wow/character/%s/%s', $realm, $name);
 
+        // Step 1: Summary must be fetched first (we need classId for class media)
         $summary = $this->blizzardApiClient->get($base);
-        $media = $this->blizzardApiClient->get($base.'/character-media');
 
         /** @var array{id?: int, name?: string} $charClass */
         $charClass = $summary['character_class'] ?? [];
@@ -79,24 +86,40 @@ class CharacterProfileService
 
         /** @var string $region */
         $region = config('services.blizzard.region', 'eu');
-        $classMedia = $this->blizzardApiClient->get(
-            'data/wow/media/playable-class/'.$classId,
-            ['namespace' => 'static-'.$region],
-        );
 
-        $questsResponse = $this->blizzardApiClient->get($base.'/quests/completed');
-        $achievementsResponse = $this->blizzardApiClient->get($base.'/achievements');
-        $mountsResponse = $this->blizzardApiClient->get($base.'/collections/mounts');
-        $petsResponse = $this->blizzardApiClient->get($base.'/collections/pets');
-        $professionsResponse = $this->blizzardApiClient->get($base.'/professions');
-        $reputationsResponse = $this->blizzardApiClient->get($base.'/reputations');
+        // Step 2: All other endpoints in parallel
+        $endpoints = [
+            'media' => ['endpoint' => $base.'/character-media', 'query' => []],
+            'classMedia' => ['endpoint' => 'data/wow/media/playable-class/'.$classId, 'query' => ['namespace' => 'static-'.$region]],
+            'quests' => ['endpoint' => $base.'/quests/completed', 'query' => []],
+            'achievements' => ['endpoint' => $base.'/achievements', 'query' => []],
+            'mounts' => ['endpoint' => $base.'/collections/mounts', 'query' => []],
+            'pets' => ['endpoint' => $base.'/collections/pets', 'query' => []],
+            'professions' => ['endpoint' => $base.'/professions', 'query' => []],
+            'reputations' => ['endpoint' => $base.'/reputations', 'query' => []],
+            'decor' => ['endpoint' => $base.'/collections/decor', 'query' => []],
+        ];
 
-        $decorResponse = [];
-        try {
-            $decorResponse = $this->blizzardApiClient->get($base.'/collections/decor');
-        } catch (\Exception) {
-            // Character may not have housing unlocked
-        }
+        $responses = $this->fetchAsync($endpoints);
+
+        /** @var array<string, mixed> $media */
+        $media = $responses['media'] ?? [];
+        /** @var array<string, mixed> $classMedia */
+        $classMedia = $responses['classMedia'] ?? [];
+        /** @var array<string, mixed> $questsResponse */
+        $questsResponse = $responses['quests'] ?? [];
+        /** @var array<string, mixed> $achievementsResponse */
+        $achievementsResponse = $responses['achievements'] ?? [];
+        /** @var array<string, mixed> $mountsResponse */
+        $mountsResponse = $responses['mounts'] ?? [];
+        /** @var array<string, mixed> $petsResponse */
+        $petsResponse = $responses['pets'] ?? [];
+        /** @var array<string, mixed> $professionsResponse */
+        $professionsResponse = $responses['professions'] ?? [];
+        /** @var array<string, mixed> $reputationsResponse */
+        $reputationsResponse = $responses['reputations'] ?? [];
+        /** @var array<string, mixed> $decorResponse */
+        $decorResponse = $responses['decor'] ?? [];
 
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
@@ -126,6 +149,95 @@ class CharacterProfileService
             'professionsResponse' => $professionsResponse,
             'reputationsResponse' => $reputationsResponse,
         ];
+    }
+
+    /**
+     * @param  array<string, array{endpoint: string, query: array<string, mixed>}>  $endpoints
+     * @return array<string, array<string, mixed>>
+     */
+    private function fetchAsync(array $endpoints): array
+    {
+        $results = [];
+        /** @var array<string, array{endpoint: string, query: array<string, mixed>}> $pending */
+        $pending = $endpoints;
+
+        for ($attempt = 0; $attempt <= self::MAX_ASYNC_RETRIES; $attempt++) {
+            if ($attempt > 0 && $pending !== []) {
+                Log::info(sprintf('Profile API: retrying %d failed requests (attempt %d/%d)', count($pending), $attempt, self::MAX_ASYNC_RETRIES));
+                \Illuminate\Support\Sleep::usleep(self::RETRY_DELAY_S * 1_000_000);
+            }
+
+            $promises = [];
+            foreach ($pending as $key => $config) {
+                $promises[$key] = $this->blizzardApiClient->getAsync($config['endpoint'], $config['query']);
+            }
+
+            /** @var array<string, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
+            $settled = Utils::settle($promises)->wait();
+
+            $failed = [];
+            foreach ($settled as $key => $result) {
+                if ($result['state'] === 'fulfilled' && isset($result['value'])) {
+                    /** @var array<string, mixed> $decoded */
+                    $decoded = json_decode($result['value']->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+                    $results[$key] = $decoded;
+
+                    continue;
+                }
+
+                $reason = $result['reason'] ?? null;
+
+                // 404 = not found (e.g. decor not unlocked), treat as empty
+                if ($reason instanceof RequestException
+                    && $reason->getResponse() instanceof \Psr\Http\Message\ResponseInterface
+                    && $reason->getResponse()->getStatusCode() === 404) {
+                    $results[$key] = [];
+
+                    continue;
+                }
+
+                // Retryable: timeout, 500, 504, rate limit
+                if ($this->isRetryableError($reason)) {
+                    $failed[$key] = $pending[$key];
+                    Log::debug(sprintf('Profile API async error [%s]: %s', $pending[$key]['endpoint'], $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
+
+                    continue;
+                }
+
+                // Non-retryable error, treat as empty
+                Log::warning(sprintf('Profile API non-retryable error [%s]: %s', $pending[$key]['endpoint'], $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
+                $results[$key] = [];
+            }
+
+            $pending = $failed;
+
+            if ($pending === []) {
+                break;
+            }
+        }
+
+        // Any remaining failures after retries → empty
+        foreach (array_keys($pending) as $key) {
+            Log::warning(sprintf('Profile API gave up on [%s] after %d retries', $pending[$key]['endpoint'], self::MAX_ASYNC_RETRIES));
+            $results[$key] = [];
+        }
+
+        return $results;
+    }
+
+    private function isRetryableError(mixed $reason): bool
+    {
+        if (! $reason instanceof \Throwable) {
+            return false;
+        }
+
+        $message = $reason->getMessage();
+
+        return str_contains($message, '429')
+            || str_contains($message, '500')
+            || str_contains($message, '504')
+            || str_contains($message, 'timed out')
+            || str_contains($message, 'cURL error');
     }
 
     /**

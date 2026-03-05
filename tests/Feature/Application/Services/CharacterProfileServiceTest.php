@@ -8,6 +8,31 @@ use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowQuest;
+use GuzzleHttp\Promise\FulfilledPromise;
+use GuzzleHttp\Psr7\Response;
+
+function asyncResponse(array $data): FulfilledPromise
+{
+    return new FulfilledPromise(new Response(200, [], json_encode($data, JSON_THROW_ON_ERROR)));
+}
+
+/**
+ * @param  array<string, array<string, mixed>>  $endpointResponses
+ */
+function mockAsyncEndpoints(\Mockery\MockInterface $mock, array $endpointResponses): void
+{
+    /** @var \Mockery\Expectation $exp */
+    $exp = $mock->shouldReceive('getAsync');
+    $exp->andReturnUsing(function (string $endpoint) use ($endpointResponses): FulfilledPromise {
+        foreach ($endpointResponses as $pattern => $data) {
+            if (str_contains($endpoint, $pattern)) {
+                return asyncResponse($data);
+            }
+        }
+
+        return asyncResponse([]);
+    });
+}
 
 test('get profile returns correct dto', function (): void {
     WowQuest::factory()->create([
@@ -39,6 +64,7 @@ test('get profile returns correct dto', function (): void {
 
     $mock = $this->mock(BlizzardApiClient::class);
 
+    // Summary is fetched synchronously
     /** @var \Mockery\Expectation $profileExp */
     $profileExp = $mock->shouldReceive('get');
     $profileExp->with('profile/wow/character/hyjal/thrall')
@@ -52,74 +78,27 @@ test('get profile returns correct dto', function (): void {
             'faction' => ['name' => 'Horde'],
         ]);
 
-    /** @var \Mockery\Expectation $mediaExp */
-    $mediaExp = $mock->shouldReceive('get');
-    $mediaExp->with('profile/wow/character/hyjal/thrall/character-media')
-        ->andReturn([
+    // All other endpoints are fetched async
+    mockAsyncEndpoints($mock, [
+        'character-media' => [
             'assets' => [
                 ['key' => 'avatar', 'value' => 'https://render.com/avatar.jpg'],
                 ['key' => 'inset', 'value' => 'https://render.com/inset.jpg'],
             ],
-        ]);
-
-    /** @var \Mockery\Expectation $classMediaExp */
-    $classMediaExp = $mock->shouldReceive('get');
-    $classMediaExp->withArgs(fn (string $endpoint): bool => str_contains($endpoint, 'media/playable-class'))
-        ->andReturn([
+        ],
+        'playable-class' => [
             'assets' => [
                 ['key' => 'icon', 'value' => 'https://render.com/class-icon.jpg'],
             ],
-        ]);
-
-    /** @var \Mockery\Expectation $questsExp */
-    $questsExp = $mock->shouldReceive('get');
-    $questsExp->with('profile/wow/character/hyjal/thrall/quests/completed')
-        ->andReturn([
-            'quests' => [['id' => 100]],
-        ]);
-
-    /** @var \Mockery\Expectation $achievementsExp */
-    $achievementsExp = $mock->shouldReceive('get');
-    $achievementsExp->with('profile/wow/character/hyjal/thrall/achievements')
-        ->andReturn([
-            'achievements' => [],
-        ]);
-
-    /** @var \Mockery\Expectation $mountsExp */
-    $mountsExp = $mock->shouldReceive('get');
-    $mountsExp->with('profile/wow/character/hyjal/thrall/collections/mounts')
-        ->andReturn([
-            'mounts' => [['mount' => ['id' => 200]]],
-        ]);
-
-    /** @var \Mockery\Expectation $petsExp */
-    $petsExp = $mock->shouldReceive('get');
-    $petsExp->with('profile/wow/character/hyjal/thrall/collections/pets')
-        ->andReturn([
-            'pets' => [['species' => ['id' => 300]]],
-        ]);
-
-    /** @var \Mockery\Expectation $professionsExp */
-    $professionsExp = $mock->shouldReceive('get');
-    $professionsExp->with('profile/wow/character/hyjal/thrall/professions')
-        ->andReturn([
-            'primaries' => [],
-            'secondaries' => [],
-        ]);
-
-    /** @var \Mockery\Expectation $reputationsExp */
-    $reputationsExp = $mock->shouldReceive('get');
-    $reputationsExp->with('profile/wow/character/hyjal/thrall/reputations')
-        ->andReturn([
-            'reputations' => [],
-        ]);
-
-    /** @var \Mockery\Expectation $decorExp */
-    $decorExp = $mock->shouldReceive('get');
-    $decorExp->with('profile/wow/character/hyjal/thrall/collections/decor')
-        ->andReturn([
-            'decor_collected' => [['decor' => ['id' => 500]]],
-        ]);
+        ],
+        'quests/completed' => ['quests' => [['id' => 100]]],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => [['mount' => ['id' => 200]]]],
+        'collections/pets' => ['pets' => [['species' => ['id' => 300]]]],
+        'collections/decor' => ['decor_collected' => [['decor' => ['id' => 500]]]],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+    ]);
 
     $characterProfileService = resolve(CharacterProfileService::class);
     $characterProfileDTO = $characterProfileService->getProfile('Hyjal', 'Thrall');
@@ -166,53 +145,27 @@ test('aggregate progress groups by expansion and zone', function (): void {
 
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('get');
-    $exp->andReturnUsing(function (string $endpoint): array {
-        if (str_contains($endpoint, 'quests/completed')) {
-            return ['quests' => [['id' => 1]]];
-        }
+    $exp->andReturn([
+        'name' => 'Test',
+        'realm' => ['name' => 'Test'],
+        'race' => ['name' => 'Human'],
+        'character_class' => ['id' => 1, 'name' => 'Warrior'],
+        'level' => 80,
+        'equipped_item_level' => 600,
+        'faction' => ['name' => 'Alliance'],
+    ]);
 
-        if (str_contains($endpoint, 'achievements')) {
-            return ['achievements' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/mounts')) {
-            return ['mounts' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/pets')) {
-            return ['pets' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/decor')) {
-            return ['decor_collected' => []];
-        }
-
-        if (str_contains($endpoint, 'character-media')) {
-            return ['assets' => [['key' => 'avatar', 'value' => '']]];
-        }
-
-        if (str_contains($endpoint, 'playable-class')) {
-            return ['assets' => []];
-        }
-
-        if (str_contains($endpoint, '/professions')) {
-            return ['primaries' => [], 'secondaries' => []];
-        }
-
-        if (str_contains($endpoint, '/reputations')) {
-            return ['reputations' => []];
-        }
-
-        return [
-            'name' => 'Test',
-            'realm' => ['name' => 'Test'],
-            'race' => ['name' => 'Human'],
-            'character_class' => ['id' => 1, 'name' => 'Warrior'],
-            'level' => 80,
-            'equipped_item_level' => 600,
-            'faction' => ['name' => 'Alliance'],
-        ];
-    });
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'playable-class' => ['assets' => []],
+        'quests/completed' => ['quests' => [['id' => 1]]],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+    ]);
 
     $characterProfileService = resolve(CharacterProfileService::class);
     $characterProfileDTO = $characterProfileService->getProfile('test', 'test');
@@ -258,53 +211,27 @@ test('aggregate progress filters quests by character faction', function (): void
 
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('get');
-    $exp->andReturnUsing(function (string $endpoint): array {
-        if (str_contains($endpoint, 'quests/completed')) {
-            return ['quests' => [['id' => 1], ['id' => 2]]];
-        }
+    $exp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 600,
+        'faction' => ['name' => 'Horde'],
+    ]);
 
-        if (str_contains($endpoint, 'achievements')) {
-            return ['achievements' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/mounts')) {
-            return ['mounts' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/pets')) {
-            return ['pets' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/decor')) {
-            return ['decor_collected' => []];
-        }
-
-        if (str_contains($endpoint, 'character-media')) {
-            return ['assets' => [['key' => 'avatar', 'value' => '']]];
-        }
-
-        if (str_contains($endpoint, 'playable-class')) {
-            return ['assets' => []];
-        }
-
-        if (str_contains($endpoint, '/professions')) {
-            return ['primaries' => [], 'secondaries' => []];
-        }
-
-        if (str_contains($endpoint, '/reputations')) {
-            return ['reputations' => []];
-        }
-
-        return [
-            'name' => 'Thrall',
-            'realm' => ['name' => 'Hyjal'],
-            'race' => ['name' => 'Orc'],
-            'character_class' => ['id' => 7, 'name' => 'Chaman'],
-            'level' => 80,
-            'equipped_item_level' => 600,
-            'faction' => ['name' => 'Horde'],
-        ];
-    });
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'playable-class' => ['assets' => []],
+        'quests/completed' => ['quests' => [['id' => 1], ['id' => 2]]],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+    ]);
 
     $characterProfileService = resolve(CharacterProfileService::class);
     $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
@@ -327,50 +254,45 @@ test('get profile handles decor api 404 gracefully', function (): void {
 
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('get');
-    $exp->andReturnUsing(function (string $endpoint): array {
-        throw_if(str_contains($endpoint, 'collections/decor'), Exception::class, '404 Not Found');
+    $exp->andReturn([
+        'name' => 'Test',
+        'realm' => ['name' => 'Test'],
+        'race' => ['name' => 'Human'],
+        'character_class' => ['id' => 1, 'name' => 'Warrior'],
+        'level' => 80,
+        'equipped_item_level' => 600,
+        'faction' => ['name' => 'Alliance'],
+    ]);
 
-        if (str_contains($endpoint, 'quests/completed')) {
-            return ['quests' => []];
+    // Mock async - decor returns 404 (empty), others return normally
+    /** @var \Mockery\Expectation $asyncExp */
+    $asyncExp = $mock->shouldReceive('getAsync');
+    $asyncExp->andReturnUsing(function (string $endpoint): FulfilledPromise {
+        if (str_contains($endpoint, 'collections/decor')) {
+            // Simulate 404 → async resolves with empty body (handled as empty in fetchAsync)
+            return new FulfilledPromise(
+                new \GuzzleHttp\Psr7\Response(404, [], json_encode([], JSON_THROW_ON_ERROR)),
+            );
         }
 
-        if (str_contains($endpoint, 'achievements')) {
-            return ['achievements' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/mounts')) {
-            return ['mounts' => []];
-        }
-
-        if (str_contains($endpoint, 'collections/pets')) {
-            return ['pets' => []];
-        }
-
-        if (str_contains($endpoint, 'character-media')) {
-            return ['assets' => [['key' => 'avatar', 'value' => '']]];
-        }
-
-        if (str_contains($endpoint, 'playable-class')) {
-            return ['assets' => []];
-        }
-
-        if (str_contains($endpoint, '/professions')) {
-            return ['primaries' => [], 'secondaries' => []];
-        }
-
-        if (str_contains($endpoint, '/reputations')) {
-            return ['reputations' => []];
-        }
-
-        return [
-            'name' => 'Test',
-            'realm' => ['name' => 'Test'],
-            'race' => ['name' => 'Human'],
-            'character_class' => ['id' => 1, 'name' => 'Warrior'],
-            'level' => 80,
-            'equipped_item_level' => 600,
-            'faction' => ['name' => 'Alliance'],
+        $responses = [
+            'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+            'playable-class' => ['assets' => []],
+            'quests/completed' => ['quests' => []],
+            'achievements' => ['achievements' => []],
+            'collections/mounts' => ['mounts' => []],
+            'collections/pets' => ['pets' => []],
+            '/professions' => ['primaries' => [], 'secondaries' => []],
+            '/reputations' => ['reputations' => []],
         ];
+
+        foreach ($responses as $pattern => $data) {
+            if (str_contains($endpoint, $pattern)) {
+                return asyncResponse($data);
+            }
+        }
+
+        return asyncResponse([]);
     });
 
     $characterProfileService = resolve(CharacterProfileService::class);
