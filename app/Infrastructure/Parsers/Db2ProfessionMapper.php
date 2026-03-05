@@ -28,53 +28,47 @@ class Db2ProfessionMapper
         }
 
         // Identify root professions (CategoryID=11, ParentSkillLineID=0)
+        /** @var array<int, array{id: int, name_fr: string, type: string}> $professions */
         $professions = [];
+        /** @var array<int, true> $professionIds */
+        $professionIds = [];
         foreach ($skillLines as $id => $line) {
-            if ($line['parent'] === 0 && $line['category'] === 11) {
+            if ($line['parent'] === 0 && ($line['category'] === 11 || in_array($id, self::SECONDARY_PROFESSION_IDS, true))) {
                 $professions[$id] = [
                     'id' => $id,
                     'name_fr' => $line['name'],
                     'type' => in_array($id, self::SECONDARY_PROFESSION_IDS, true) ? 'secondary' : 'primary',
                 ];
-            }
-        }
-
-        // Identify skill tiers (children of professions)
-        /** @var array<int, array{profession_id: int, expansion_id: int}> $tiers */
-        $tiers = [];
-        foreach ($skillLines as $id => $line) {
-            if (isset($professions[$line['parent']])) {
-                $tiers[$id] = [
-                    'profession_id' => $line['parent'],
-                    'expansion_id' => ExpansionTierMatcher::match($line['name']) ?? 0,
-                ];
+                $professionIds[$id] = true;
             }
         }
 
         // Parse recipe-related CSVs
         $abilities = self::parseSkillLineAbilityCsv();
-        $categories = self::parseTradeSkillCategoryCsv();
+        $categories = self::parseTradeSkillCategoryTree();
 
-        // Build recipes from SkillLineAbility entries that belong to known tiers
+        // Build recipes from SkillLineAbility entries that belong to known professions
         $recipes = [];
         foreach ($abilities as $ability) {
-            $tierId = $ability['skill_line'];
-            if (! isset($tiers[$tierId])) {
+            $professionId = $ability['skill_line'];
+            if (! isset($professionIds[$professionId])) {
                 continue;
             }
 
-            $tier = $tiers[$tierId];
             $recipeName = $spellNameMap[$ability['spell']] ?? '';
             if ($recipeName === '') {
                 continue;
             }
 
+            $catId = $ability['trade_skill_category_id'];
+            $catInfo = self::resolveCategoryExpansion($catId, $categories);
+
             $recipes[] = [
                 'id' => $ability['id'],
                 'name_fr' => $recipeName,
-                'profession_id' => $tier['profession_id'],
-                'expansion_id' => $tier['expansion_id'],
-                'category_name' => $categories[$ability['trade_skill_category_id']] ?? '',
+                'profession_id' => $professionId,
+                'expansion_id' => $catInfo['expansion_id'],
+                'category_name' => $catInfo['category_name'],
                 'wowhead_spell_id' => $ability['spell'],
             ];
         }
@@ -83,6 +77,48 @@ class Db2ProfessionMapper
             'professions' => array_values($professions),
             'recipes' => $recipes,
         ];
+    }
+
+    /**
+     * Walk up the TradeSkillCategory hierarchy to find the expansion and category name.
+     *
+     * Hierarchy is typically: Root Title (parent=0) → Collection → Specific Category
+     * The expansion is deduced from the root title's name.
+     * The category name is the recipe's direct category.
+     *
+     * @param  array<int, array{name: string, parent: int}>  $categories
+     * @return array{expansion_id: int, category_name: string}
+     */
+    private static function resolveCategoryExpansion(int $catId, array $categories): array
+    {
+        if ($catId === 0 || ! isset($categories[$catId])) {
+            return ['expansion_id' => 0, 'category_name' => ''];
+        }
+
+        $categoryName = $categories[$catId]['name'];
+
+        // Walk up to root to find expansion
+        $current = $catId;
+        $maxDepth = 10;
+        while ($maxDepth-- > 0) {
+            $cat = $categories[$current] ?? null;
+            if ($cat === null) {
+                break;
+            }
+
+            $expansion = ExpansionTierMatcher::match($cat['name']);
+            if ($expansion !== null) {
+                return ['expansion_id' => $expansion, 'category_name' => $categoryName];
+            }
+
+            if ($cat['parent'] === 0) {
+                break;
+            }
+
+            $current = $cat['parent'];
+        }
+
+        return ['expansion_id' => 0, 'category_name' => $categoryName];
     }
 
     /**
@@ -174,9 +210,9 @@ class Db2ProfessionMapper
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int, array{name: string, parent: int}>
      */
-    private static function parseTradeSkillCategoryCsv(): array
+    private static function parseTradeSkillCategoryTree(): array
     {
         $csvPath = storage_path('app/blizzard/trade_skill_category.csv');
         if (! File::exists($csvPath)) {
@@ -197,13 +233,14 @@ class Db2ProfessionMapper
 
         $idIdx = (int) array_search('ID', $headers, true);
         $nameIdx = (int) array_search('Name_lang', $headers, true);
+        $parentIdx = (int) array_search('ParentTradeSkillCategoryID', $headers, true);
 
         $map = [];
         while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $name = trim($row[$nameIdx] ?? '');
-            if ($name !== '') {
-                $map[(int) $row[$idIdx]] = $name;
-            }
+            $map[(int) $row[$idIdx]] = [
+                'name' => trim($row[$nameIdx] ?? ''),
+                'parent' => (int) ($row[$parentIdx] ?? 0),
+            ];
         }
 
         fclose($handle);

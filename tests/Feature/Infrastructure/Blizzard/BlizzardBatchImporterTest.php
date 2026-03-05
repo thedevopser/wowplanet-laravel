@@ -489,14 +489,17 @@ test('importDecor marks notObtainable items as inactive', function (): void {
 test('importProfessions creates professions and recipes from CSV', function (): void {
     bbiWriteSkillLineCsv([
         ['171', 'Alchimie', '11', '0'],
-        ['2499', 'Alchimie de Khaz Algar', '11', '171'],
     ]);
+    // SkillLine now references root profession (171), not tier
     bbiWriteSkillLineAbilityCsv([
-        ['5001', '2499', '80001', '100'],
-        ['5002', '2499', '80002', '0'],
+        ['5001', '171', '80001', '100'],
+        ['5002', '171', '80002', '200'],
     ]);
+    // Category hierarchy: 300 (root, Khaz Algar) → 200 (collection) → 100 (Potions)
     bbiWriteTradeSkillCategoryCsv([
-        ['100', 'Potions'],
+        ['300', 'Alchimie de Khaz Algar – Titre', '0'],
+        ['200', 'Recettes de Khaz Algar', '300'],
+        ['100', 'Potions', '200'],
     ]);
 
     $spellNameMap = [
@@ -521,12 +524,13 @@ test('importProfessions creates professions and recipes from CSV', function (): 
 test('importProfessions assigns recipe factions from faction map', function (): void {
     bbiWriteSkillLineCsv([
         ['171', 'Alchimie', '11', '0'],
-        ['2499', 'Alchimie Classique', '11', '171'],
     ]);
     bbiWriteSkillLineAbilityCsv([
-        ['5001', '2499', '80001', '0'],
+        ['5001', '171', '80001', '100'],
     ]);
-    bbiWriteTradeSkillCategoryCsv([]);
+    bbiWriteTradeSkillCategoryCsv([
+        ['100', 'Potions classiques', '0'],
+    ]);
 
     $spellNameMap = [80001 => 'Potion Alliance'];
     $recipeFactionMap = [5001 => 'Alliance'];
@@ -677,9 +681,10 @@ function bbiWriteSkillLineAbilityCsv(array $rows): void
 
 function bbiWriteTradeSkillCategoryCsv(array $rows): void
 {
-    $lines = ['ID,Name_lang'];
+    $lines = ['ID,Name_lang,ParentTradeSkillCategoryID'];
     foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s"', $row[0], $row[1]);
+        $parent = $row[2] ?? '0';
+        $lines[] = sprintf('"%s","%s","%s"', $row[0], $row[1], $parent);
     }
 
     file_put_contents(storage_path('app/blizzard/trade_skill_category.csv'), implode("\n", $lines));
