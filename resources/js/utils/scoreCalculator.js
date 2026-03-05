@@ -111,6 +111,14 @@ export function getScoreColor(score) {
     return '#ef4444';
 }
 
+export function getRankColorHex(score) {
+    if (score >= 90) return '#f97316';
+    if (score >= 75) return '#a855f7';
+    if (score >= 50) return '#3b82f6';
+    if (score >= 25) return '#22c55e';
+    return '#94a3b8';
+}
+
 export function getScoreTailwindColor(score) {
     if (score >= 75) return 'text-green-400';
     if (score >= 50) return 'text-yellow-400';

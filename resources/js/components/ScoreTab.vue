@@ -23,11 +23,11 @@
                             {{ rank }}
                         </div>
                         <button
-                            @click="shareScore"
+                            @click="showShareModal = true"
                             class="mt-3 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-2 border border-indigo-400/30"
                         >
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                            {{ copied ? 'Lien copié !' : 'Partager mon score' }}
+                            Partager mon score
                         </button>
                     </div>
                 </div>
@@ -124,6 +124,7 @@
                 </div>
             </div>
         </section>
+        <ShareScoreModal :show="showShareModal" variant="personal" :score-data="shareData" @close="showShareModal = false" />
     </div>
 </template>
 
@@ -132,10 +133,11 @@ import { ref, computed } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import { computeScore, getScoreColor, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS } from '../utils/scoreCalculator';
 import ScoreRadar from './ScoreRadar.vue';
+import ShareScoreModal from './ShareScoreModal.vue';
 
 const store = useCharacterStore();
 const expandedRec = ref(null);
-const copied = ref(false);
+const showShareModal = ref(false);
 
 const score = computed(() => computeScore(store.character));
 const globalColor = computed(() => getScoreColor(score.value?.global || 0));
@@ -294,45 +296,20 @@ const toggleRec = (key) => {
     expandedRec.value = expandedRec.value === key ? null : key;
 };
 
-function buildShareText() {
+const shareData = computed(() => {
     const char = store.character;
-    if (!char || !score.value) return '';
-
-    const dims = score.value.dimensions;
-    const bar = (pct) => {
-        const filled = Math.round(pct / 10);
-        return '\u2588'.repeat(filled) + '\u2591'.repeat(10 - filled);
+    if (!char || !score.value) return {};
+    return {
+        variant: 'personal',
+        characterName: char.name,
+        characterRealm: char.realm,
+        characterClass: char.class,
+        characterRace: char.race,
+        characterLevel: char.level,
+        classId: char.classId,
+        globalScore: score.value.global,
+        rank: rank.value,
+        dimensions: score.value.dimensions,
     };
-
-    return [
-        `\u2694\uFE0F **${char.name}** \u2014 ${char.race} ${char.class} ${char.level} | ${char.realm}`,
-        `\u{1F3C6} **Score WowPlanet : ${score.value.global} / 100** (${rank.value})`,
-        '',
-        `\u{1F5E1}\uFE0F Qu\u00EAtes      ${bar(dims.quests.score)} ${Math.round(dims.quests.score)}%`,
-        `\u2B50 Hauts-faits ${bar(dims.achievements.score)} ${Math.round(dims.achievements.score)}%`,
-        `\u{1F91D} R\u00E9putations ${bar(dims.reputations.score)} ${Math.round(dims.reputations.score)}%`,
-        `\u{1F40E} Montures    ${bar(dims.mounts.score)} ${Math.round(dims.mounts.score)}%`,
-        `\u{1F43E} Mascottes   ${bar(dims.pets.score)} ${Math.round(dims.pets.score)}%`,
-        `\u{1F3E0} D\u00E9corations ${bar(dims.decor.score)} ${Math.round(dims.decor.score)}%`,
-        `\u{1F527} M\u00E9tiers     ${bar(dims.professions.score)} ${Math.round(dims.professions.score)}%`,
-        '',
-        `\u{1F517} ${window.location.href}`,
-    ].join('\n');
-}
-
-const shareScore = async () => {
-    const text = buildShareText();
-    try {
-        await navigator.clipboard.writeText(text);
-    } catch {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-    }
-    copied.value = true;
-    setTimeout(() => { copied.value = false; }, 2500);
-};
+});
 </script>
