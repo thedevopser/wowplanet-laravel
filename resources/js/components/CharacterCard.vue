@@ -47,6 +47,10 @@
                     <div class="text-[10px] sm:text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Hauts-faits</div>
                     <div class="text-lg sm:text-xl font-black text-amber-400">{{ character.achievementPoints }}</div>
                 </div>
+                <div v-if="character.mythicKeystone?.rating" class="bg-slate-800/50 backdrop-blur px-3 sm:px-4 py-2 rounded-xl border border-white/5 text-center">
+                    <div class="text-[10px] sm:text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">M+ Score</div>
+                    <div class="text-lg sm:text-xl font-black" :style="{ color: mythicRatingColor }">{{ Math.round(character.mythicKeystone.rating) }}</div>
+                </div>
             </div>
         </div>
     </div>
@@ -65,4 +69,8 @@ const props = defineProps({
 const classColor = computed(() => classColors[props.character.classId] || '#FFFFFF');
 const factionColor = computed(() => props.character.faction === 'Alliance' ? '#3b82f6' : '#ef4444');
 const score = computed(() => computeScore(props.character));
+const mythicRatingColor = computed(() => {
+    const c = props.character.mythicKeystone?.rating_color;
+    return c ? `rgb(${c.r}, ${c.g}, ${c.b})` : '#f43f5e';
+});
 </script>

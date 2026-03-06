@@ -98,6 +98,7 @@ class CharacterProfileService
             'professions' => ['endpoint' => $base.'/professions', 'query' => []],
             'reputations' => ['endpoint' => $base.'/reputations', 'query' => []],
             'decor' => ['endpoint' => $base.'/collections/decor', 'query' => []],
+            'mythicKeystone' => ['endpoint' => $base.'/mythic-keystone-profile', 'query' => []],
         ];
 
         $responses = $this->fetchAsync($endpoints);
@@ -132,6 +133,11 @@ class CharacterProfileService
         /** @var list<array{decor: array{id: int}}> $decorList */
         $decorList = $decorResponse['decor_collected'] ?? [];
 
+        /** @var array<string, mixed> $mythicKeystoneProfile */
+        $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
+
+        $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base, $mythicKeystoneProfile);
+
         return [
             'summary' => $summary,
             'media' => $media,
@@ -148,6 +154,8 @@ class CharacterProfileService
                 ? $achievementsResponse['total_points'] : 0,
             'professionsResponse' => $professionsResponse,
             'reputationsResponse' => $reputationsResponse,
+            'mythicKeystoneProfile' => $mythicKeystoneProfile,
+            'mythicKeystoneSeasonData' => $mythicKeystoneSeasonData,
         ];
     }
 
@@ -288,6 +296,110 @@ class CharacterProfileService
     }
 
     /**
+     * @param  array<string, mixed>  $mythicKeystoneProfile
+     * @return array<string, mixed>
+     */
+    private function fetchCurrentMythicSeason(string $base, array $mythicKeystoneProfile): array
+    {
+        /** @var list<array<string, mixed>> $seasons */
+        $seasons = $mythicKeystoneProfile['seasons'] ?? [];
+
+        if ($seasons === []) {
+            return [];
+        }
+
+        /** @var list<int> $seasonIds */
+        $seasonIds = array_values(array_filter(
+            array_map(fn (array $s): int => is_int($s['id'] ?? null) ? $s['id'] : 0, $seasons),
+            fn (int $id): bool => $id > 0,
+        ));
+
+        if ($seasonIds === []) {
+            return [];
+        }
+
+        $maxSeasonId = max($seasonIds);
+
+        try {
+            /** @var array<string, mixed> $seasonData */
+            $seasonData = $this->blizzardApiClient->get(
+                $base.'/mythic-keystone-profile/season/'.$maxSeasonId,
+            );
+
+            return $seasonData;
+        } catch (\Throwable $throwable) {
+            Log::debug('M+ season fetch failed: '.$throwable->getMessage());
+
+            return [];
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $profile
+     * @param  array<string, mixed>  $seasonData
+     * @return array<string, mixed>|null
+     */
+    private function buildMythicKeystoneData(array $profile, array $seasonData): ?array
+    {
+        if ($profile === [] || $seasonData === []) {
+            return null;
+        }
+
+        /** @var array{rating?: float, color?: array{r: int, g: int, b: int, a: float}} $mythicRating */
+        $mythicRating = $seasonData['mythic_rating'] ?? [];
+
+        /** @var list<array<string, mixed>> $bestRuns */
+        $bestRuns = $seasonData['best_runs'] ?? [];
+
+        $runs = [];
+        foreach ($bestRuns as $bestRun) {
+            /** @var array{name?: string, id?: int} $dungeon */
+            $dungeon = $bestRun['dungeon'] ?? [];
+            /** @var array{rating?: float, color?: array{r: int, g: int, b: int, a: float}} $runRating */
+            $runRating = $bestRun['mythic_rating'] ?? [];
+            /** @var array{rating?: float, color?: array{r: int, g: int, b: int, a: float}} $mapRating */
+            $mapRating = $bestRun['map_rating'] ?? [];
+            /** @var list<array{character?: array{name?: string, realm?: array{name?: string}}, specialization?: array{name?: string}, equipped_item_level?: int}> $members */
+            $members = $bestRun['members'] ?? [];
+
+            $keystoneLevel = is_int($bestRun['keystone_level'] ?? null) ? $bestRun['keystone_level'] : 0;
+            $duration = is_int($bestRun['duration'] ?? null) ? $bestRun['duration'] : 0;
+            $completedTimestamp = is_int($bestRun['completed_timestamp'] ?? null) ? $bestRun['completed_timestamp'] : 0;
+
+            $runs[] = [
+                'dungeon_name' => (string) ($dungeon['name'] ?? ''),
+                'dungeon_id' => (int) ($dungeon['id'] ?? 0),
+                'level' => $keystoneLevel,
+                'duration_ms' => $duration,
+                'completed_at' => $completedTimestamp,
+                'is_timed' => (bool) ($bestRun['is_completed_within_time'] ?? false),
+                'score' => round((float) ($runRating['rating'] ?? 0), 1),
+                'score_color' => $runRating['color'] ?? null,
+                'map_score' => round((float) ($mapRating['rating'] ?? 0), 1),
+                'map_score_color' => $mapRating['color'] ?? null,
+                'members' => array_map(fn (array $m): array => [
+                    'name' => $m['character']['name'] ?? '',
+                    'realm' => $m['character']['realm']['name'] ?? '',
+                    'spec' => $m['specialization']['name'] ?? '',
+                    'ilvl' => $m['equipped_item_level'] ?? 0,
+                ], $members),
+            ];
+        }
+
+        usort($runs, fn (array $a, array $b): int => $b['map_score'] <=> $a['map_score']);
+
+        /** @var array{id?: int} $season */
+        $season = $seasonData['season'] ?? [];
+
+        return [
+            'rating' => isset($mythicRating['rating']) ? round($mythicRating['rating'], 1) : null,
+            'rating_color' => $mythicRating['color'] ?? null,
+            'season_id' => (int) ($season['id'] ?? 0),
+            'best_runs' => $runs,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $apiData
      * @param  array<int, array<string, mixed>>  $collections
      * @param  list<array<string, mixed>>  $mounts
@@ -333,6 +445,11 @@ class CharacterProfileService
         /** @var array{name?: string} $guildData */
         $guildData = $summary['guild'] ?? [];
 
+        /** @var array<string, mixed> $mythicProfile */
+        $mythicProfile = $apiData['mythicKeystoneProfile'] ?? [];
+        /** @var array<string, mixed> $mythicSeason */
+        $mythicSeason = $apiData['mythicKeystoneSeasonData'] ?? [];
+
         return new CharacterProfileDTO(
             name: is_string($summary['name'] ?? null) ? $summary['name'] : '',
             realm: (string) ($realmData['name'] ?? ''),
@@ -355,6 +472,7 @@ class CharacterProfileService
             decorCount: count($decorIds),
             decor: $decor,
             exaltedCount: $this->countExalted($collections),
+            mythicKeystone: $this->buildMythicKeystoneData($mythicProfile, $mythicSeason),
         );
     }
 }

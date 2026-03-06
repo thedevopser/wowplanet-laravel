@@ -1,0 +1,138 @@
+<template>
+    <div class="space-y-6">
+        <!-- Empty state -->
+        <div v-if="!mythicData" class="card-glass rounded-2xl sm:rounded-3xl border p-8 text-center">
+            <p class="text-slate-500 text-sm">Aucune donn&eacute;e Mythique+ pour la saison en cours.</p>
+        </div>
+
+        <template v-else>
+            <!-- Rating Header -->
+            <div class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-rose-600/5 blur-3xl -mr-16 -mt-16"></div>
+                <div class="relative z-10">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <h3 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
+                                <div class="w-2 h-6 sm:h-8 bg-rose-500 rounded-full shadow-lg shadow-rose-500/50"></div>
+                                Score Mythique+
+                            </h3>
+                            <p class="text-slate-500 text-xs sm:text-sm mt-1">Saison {{ mythicData.season_id }}</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-3xl sm:text-4xl font-black font-mono" :style="{ color: ratingColorCss }">
+                                {{ Math.round(mythicData.rating) }}
+                            </div>
+                            <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">
+                                {{ mythicData.best_runs.length }} donjon{{ mythicData.best_runs.length > 1 ? 's' : '' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- No runs state -->
+            <div v-if="!mythicData.best_runs.length" class="card-glass rounded-2xl sm:rounded-3xl border p-8 text-center">
+                <p class="text-slate-500 text-sm">Aucune course enregistr&eacute;e cette saison.</p>
+            </div>
+
+            <!-- Dungeon Cards Grid -->
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div
+                    v-for="run in mythicData.best_runs"
+                    :key="run.dungeon_id"
+                    class="card-glass rounded-2xl border p-4 sm:p-6 relative overflow-hidden group hover:border-white/10 transition-all"
+                >
+                    <div class="absolute top-0 right-0 w-20 h-20 blur-2xl -mr-8 -mt-8" :class="run.is_timed ? 'bg-emerald-600/10' : 'bg-orange-600/10'"></div>
+                    <div class="relative z-10 space-y-3">
+                        <!-- Dungeon header -->
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="min-w-0">
+                                <h4 class="text-sm sm:text-base font-bold text-white truncate">{{ run.dungeon_name }}</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-[10px] sm:text-xs text-slate-500">{{ formatDate(run.completed_at) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <!-- Key level badge -->
+                                <span class="px-2 py-1 rounded-lg text-xs sm:text-sm font-black bg-slate-700/80 border border-white/10 text-white">
+                                    +{{ run.level }}
+                                </span>
+                                <!-- Timed indicator -->
+                                <span :class="run.is_timed ? 'text-emerald-400' : 'text-orange-400'" class="text-lg">
+                                    {{ run.is_timed ? '\u2713' : '\u2717' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Score and duration -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div>
+                                    <div class="text-[10px] text-slate-500 uppercase font-bold">Score</div>
+                                    <div class="text-sm sm:text-base font-black font-mono" :style="{ color: toColorCss(run.map_score_color) }">
+                                        {{ Math.round(run.map_score) }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[10px] text-slate-500 uppercase font-bold">Dur&eacute;e</div>
+                                <div class="text-sm sm:text-base font-mono text-slate-300">{{ formatDuration(run.duration_ms) }}</div>
+                            </div>
+                        </div>
+
+                        <!-- Group composition (expandable) -->
+                        <details class="group/details">
+                            <summary class="cursor-pointer text-[10px] sm:text-xs text-slate-500 hover:text-slate-300 transition-colors uppercase font-bold tracking-wider">
+                                Composition du groupe
+                            </summary>
+                            <div class="mt-2 space-y-1">
+                                <div
+                                    v-for="(member, idx) in run.members"
+                                    :key="idx"
+                                    class="flex items-center justify-between text-xs text-slate-400 py-1 border-b border-white/5 last:border-0"
+                                >
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="text-white font-medium truncate">{{ member.name }}</span>
+                                        <span class="text-slate-600 hidden sm:inline">{{ member.realm }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-slate-500">{{ member.spec }}</span>
+                                        <span class="font-mono text-slate-600">{{ member.ilvl }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</template>
+
+<script setup>
+import { computed } from 'vue';
+import { useCharacterStore } from '../stores/character';
+
+const store = useCharacterStore();
+
+const mythicData = computed(() => store.character?.mythicKeystone ?? null);
+
+const ratingColorCss = computed(() => toColorCss(mythicData.value?.rating_color));
+
+function toColorCss(color) {
+    if (!color) return '#e2e8f0';
+    return `rgb(${color.r}, ${color.g}, ${color.b})`;
+}
+
+function formatDuration(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function formatDate(timestampMs) {
+    if (!timestampMs) return '';
+    return new Date(timestampMs).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+</script>

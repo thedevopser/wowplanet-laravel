@@ -12,6 +12,7 @@ readonly class CharacterProfileDTO
      * @param  array<int, array<string, mixed>>  $pets
      * @param  list<array<string, mixed>>  $professions
      * @param  list<array<string, mixed>>  $decor
+     * @param  array<string, mixed>|null  $mythicKeystone
      */
     public function __construct(
         public string $name,
@@ -35,5 +36,6 @@ readonly class CharacterProfileDTO
         public int $decorCount = 0,
         public array $decor = [],
         public int $exaltedCount = 0,
+        public ?array $mythicKeystone = null,
     ) {}
 }
