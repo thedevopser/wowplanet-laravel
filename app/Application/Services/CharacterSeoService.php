@@ -9,6 +9,7 @@ use App\Models\CharacterVisit;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Spatie\Sitemap\Sitemap;
+use Spatie\Sitemap\SitemapIndex;
 use Spatie\Sitemap\Tags\Url;
 
 class CharacterSeoService
@@ -27,11 +28,11 @@ class CharacterSeoService
         $appUrl = rtrim($configUrl, '/');
 
         return [
-            'title' => 'WowPlanet - Suivi de progression World of Warcraft',
-            'description' => 'Analysez votre personnage World of Warcraft : quêtes, hauts-faits, montures et mascottes.'
-                .' Comparez votre progression avec la base de données complète du jeu.',
-            'ogTitle' => 'WowPlanet - Suivi de progression World of Warcraft',
-            'ogDescription' => 'Suivez la progression de vos personnages WoW.'
+            'title' => 'WowPlanet - Suivi de progression World of Warcraft en français',
+            'description' => 'Analysez votre personnage World of Warcraft en français : quêtes, hauts-faits, montures, mascottes, décorations et professions.'
+                .' Comparez votre progression avec la base de données complète du jeu. Le site francophone de référence pour les joueurs WoW.',
+            'ogTitle' => 'WowPlanet - Suivi de progression World of Warcraft en français',
+            'ogDescription' => 'Suivez la progression de vos personnages WoW en français.'
                 .' Plus de 21 000 quêtes, 8 600 hauts-faits, 1 569 montures et 2 117 mascottes référencées.',
             'ogImage' => $appUrl.'/images/og-default.png',
             'ogUrl' => $appUrl,
@@ -169,15 +170,40 @@ class CharacterSeoService
         ];
     }
 
-    public function generateSitemap(): string
+    public function generateSitemapIndex(): string
     {
         /** @var string $xml */
-        $xml = Cache::remember('sitemap_xml', 3600, fn (): string => $this->buildSitemap()->render());
+        $xml = Cache::remember('sitemap_index_xml', 3600, function (): string {
+            /** @var string $configUrl */
+            $configUrl = config('app.url', '');
+            $appUrl = rtrim($configUrl, '/');
+
+            return SitemapIndex::create()
+                ->add($appUrl.'/sitemap-pages.xml')
+                ->add($appUrl.'/sitemap-characters.xml')
+                ->render();
+        });
 
         return $xml;
     }
 
-    private function buildSitemap(): Sitemap
+    public function generatePagesSitemap(): string
+    {
+        /** @var string $xml */
+        $xml = Cache::remember('sitemap_pages_xml', 86400, fn (): string => $this->buildPagesSitemap()->render());
+
+        return $xml;
+    }
+
+    public function generateCharactersSitemap(): string
+    {
+        /** @var string $xml */
+        $xml = Cache::remember('sitemap_characters_xml', 3600, fn (): string => $this->buildCharactersSitemap()->render());
+
+        return $xml;
+    }
+
+    private function buildPagesSitemap(): Sitemap
     {
         /** @var string $configUrl */
         $configUrl = config('app.url', '');
@@ -190,11 +216,31 @@ class CharacterSeoService
                     ->setPriority(1.0),
             );
 
+        $databaseSeoService = resolve(DatabaseSeoService::class);
+
+        foreach ($databaseSeoService->getSitemapUrls() as $entry) {
+            $sitemap->add(
+                Url::create($entry['url'])
+                    ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
+                    ->setPriority(0.7),
+            );
+        }
+
+        return $sitemap;
+    }
+
+    private function buildCharactersSitemap(): Sitemap
+    {
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+        $appUrl = rtrim($configUrl, '/');
+
+        $sitemap = Sitemap::create();
+
         /** @var \Illuminate\Database\Eloquent\Collection<int, CharacterVisit> $recentVisits */
         $recentVisits = CharacterVisit::query()
-            ->where('last_visited_at', '>=', now()->subDays(30))
+            ->where('last_visited_at', '>=', now()->subDays(90))
             ->latest('last_visited_at')
-            ->limit(1000)
             ->get();
 
         foreach ($recentVisits as $recentVisit) {

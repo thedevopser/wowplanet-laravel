@@ -51,8 +51,8 @@ test('character page returns view for valid character', function (): void {
 test('sitemap returns xml', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('generateSitemap');
-    $exp->once()->andReturn('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+    $exp = $mock->shouldReceive('generateSitemapIndex');
+    $exp->once()->andReturn('<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></sitemapindex>');
 
     $this->get('/sitemap.xml')
         ->assertOk()

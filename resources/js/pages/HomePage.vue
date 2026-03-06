@@ -77,6 +77,58 @@
             </div>
         </div>
 
+        <!-- Database browse section -->
+        <div class="max-w-4xl mx-auto">
+            <h3 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 mb-4 sm:mb-6">
+                Explorez la base de donn&eacute;es
+                <div class="flex-1 h-px bg-slate-700"></div>
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                <router-link to="/base-de-donnees/montures" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 font-bold shrink-0 group-hover:scale-110 transition-transform">M</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Montures</div>
+                        <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
+                    </div>
+                </router-link>
+                <router-link to="/base-de-donnees/hauts-faits" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 font-bold shrink-0 group-hover:scale-110 transition-transform">HF</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Hauts-faits</div>
+                        <div class="text-xs text-slate-500">Par extension et cat&eacute;gorie</div>
+                    </div>
+                </router-link>
+                <router-link to="/base-de-donnees/quetes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 font-bold shrink-0 group-hover:scale-110 transition-transform">Q</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Qu&ecirc;tes</div>
+                        <div class="text-xs text-slate-500">Par extension et zone</div>
+                    </div>
+                </router-link>
+                <router-link to="/base-de-donnees/mascottes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 font-bold shrink-0 group-hover:scale-110 transition-transform">P</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Mascottes</div>
+                        <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
+                    </div>
+                </router-link>
+                <router-link to="/base-de-donnees/decorations" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-violet-500/30 transition-all">
+                    <div class="w-10 h-10 bg-violet-600/10 border border-violet-500/20 rounded-lg flex items-center justify-center text-violet-400 font-bold shrink-0 group-hover:scale-110 transition-transform">D</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-violet-400 transition-colors">D&eacute;corations</div>
+                        <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
+                    </div>
+                </router-link>
+                <router-link to="/base-de-donnees/professions" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 transition-all">
+                    <div class="w-10 h-10 bg-emerald-600/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400 font-bold shrink-0 group-hover:scale-110 transition-transform">R</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Professions</div>
+                        <div class="text-xs text-slate-500">Recettes par extension</div>
+                    </div>
+                </router-link>
+            </div>
+        </div>
+
         <!-- Data source info -->
         <div class="text-center text-xs sm:text-sm text-slate-600 max-w-lg mx-auto">
             Donn&eacute;es synchronis&eacute;es depuis l'API officielle Blizzard. Tous les noms sont en fran&ccedil;ais.

@@ -8,7 +8,11 @@
     <title>{{ $seo['title'] }}</title>
 
     <meta name="description" content="{{ $seo['description'] }}">
+    <meta name="robots" content="max-image-preview:large">
+    <meta name="content-language" content="fr">
     <link rel="canonical" href="{{ $seo['canonicalUrl'] }}">
+    <link rel="alternate" hreflang="fr" href="{{ $seo['canonicalUrl'] }}">
+    <link rel="alternate" hreflang="x-default" href="{{ $seo['canonicalUrl'] }}">
 
     <meta property="og:type" content="{{ $seo['ogType'] }}">
     <meta property="og:title" content="{{ $seo['ogTitle'] }}">

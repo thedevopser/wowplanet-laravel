@@ -39,6 +39,21 @@ readonly class ExpansionId
         }
     }
 
+    private const SLUG_MAP = [
+        self::CLASSIC => 'classic',
+        self::BURNING_CRUSADE => 'burning-crusade',
+        self::WRATH_OF_THE_LICH_KING => 'wrath',
+        self::CATACLYSM => 'cataclysm',
+        self::MISTS_OF_PANDARIA => 'pandaria',
+        self::WARLORDS_OF_DRAENOR => 'draenor',
+        self::LEGION => 'legion',
+        self::BATTLE_FOR_AZEROTH => 'battle-for-azeroth',
+        self::SHADOWLANDS => 'shadowlands',
+        self::DRAGONFLIGHT => 'dragonflight',
+        self::THE_WAR_WITHIN => 'the-war-within',
+        self::MIDNIGHT => 'midnight',
+    ];
+
     public function toString(): string
     {
         return match ($this->value) {
@@ -55,5 +70,25 @@ readonly class ExpansionId
             self::THE_WAR_WITHIN => 'The War Within',
             self::MIDNIGHT => 'Midnight',
         };
+    }
+
+    public function toSlug(): string
+    {
+        return self::SLUG_MAP[$this->value];
+    }
+
+    public static function fromSlug(string $slug): ?self
+    {
+        $id = array_search($slug, self::SLUG_MAP, true);
+
+        return $id !== false ? new self($id) : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function allSlugs(): array
+    {
+        return self::SLUG_MAP;
     }
 }

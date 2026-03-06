@@ -38,7 +38,25 @@ class SeoController extends Controller
 
     public function sitemap(): Response
     {
-        $xml = $this->characterSeoService->generateSitemap();
+        $xml = $this->characterSeoService->generateSitemapIndex();
+
+        return response($xml, 200, [
+            'Content-Type' => 'application/xml; charset=UTF-8',
+        ]);
+    }
+
+    public function sitemapPages(): Response
+    {
+        $xml = $this->characterSeoService->generatePagesSitemap();
+
+        return response($xml, 200, [
+            'Content-Type' => 'application/xml; charset=UTF-8',
+        ]);
+    }
+
+    public function sitemapCharacters(): Response
+    {
+        $xml = $this->characterSeoService->generateCharactersSitemap();
 
         return response($xml, 200, [
             'Content-Type' => 'application/xml; charset=UTF-8',
@@ -54,9 +72,11 @@ class SeoController extends Controller
         $content = implode("\n", [
             'User-agent: *',
             'Allow: /',
+            'Allow: /base-de-donnees/',
             'Disallow: /api/',
             'Disallow: /auth/',
             'Disallow: /my-characters',
+            'Disallow: /my-score',
             'Disallow: /class-stats',
             '',
             sprintf('Sitemap: %s/sitemap.xml', $appUrl),

@@ -39,6 +39,48 @@ const routes = [
         meta: { title: 'Mon score compte - WowPlanet' },
     },
     {
+        path: '/base-de-donnees',
+        name: 'database-index',
+        component: () => import('./pages/DatabaseIndexPage.vue'),
+        meta: { title: 'Base de données WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/montures/:category?',
+        name: 'database-mounts',
+        component: () => import('./pages/DatabaseMountsPage.vue'),
+        meta: { title: 'Montures WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/hauts-faits/:expansion?',
+        name: 'database-achievements',
+        component: () => import('./pages/DatabaseAchievementsPage.vue'),
+        meta: { title: 'Hauts-faits WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/quetes/:expansion?/:zone?',
+        name: 'database-quests',
+        component: () => import('./pages/DatabaseQuestsPage.vue'),
+        meta: { title: 'Quêtes WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/mascottes/:category?',
+        name: 'database-pets',
+        component: () => import('./pages/DatabasePetsPage.vue'),
+        meta: { title: 'Mascottes WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/decorations/:category?',
+        name: 'database-decors',
+        component: () => import('./pages/DatabaseDecorsPage.vue'),
+        meta: { title: 'Décorations WoW | WowPlanet' },
+    },
+    {
+        path: '/base-de-donnees/professions/:profession?',
+        name: 'database-professions',
+        component: () => import('./pages/DatabaseProfessionsPage.vue'),
+        meta: { title: 'Professions WoW | WowPlanet' },
+    },
+    {
         path: '/privacy',
         name: 'privacy',
         component: PrivacyPage,
