@@ -121,8 +121,7 @@ export function renderScoreCard({ variant, characterName, characterRealm, charac
     const barX = 160;
     const barW = 320;
     const barH = 12;
-    const pctX = barX + barW + 14;
-    const detailX = pctX + 50;
+    const detailX = barX + barW + 14;
 
     for (let i = 0; i < DIMENSION_KEYS.length; i++) {
         const key = DIMENSION_KEYS[i];
@@ -150,11 +149,6 @@ export function renderScoreCard({ variant, characterName, characterRealm, charac
             ctx.fillStyle = color;
             ctx.fill();
         }
-
-        // Percentage
-        ctx.font = `bold 13px ${FONT}`;
-        ctx.fillStyle = color;
-        ctx.fillText(`${pct}%`, pctX, y);
 
         // Completed / total
         ctx.font = `400 10px ${FONT}`;

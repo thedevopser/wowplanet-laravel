@@ -93,14 +93,9 @@
                         :key="dim.key"
                         class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl"
                     >
-                        <div class="flex justify-between items-start mb-3">
-                            <div class="flex items-center gap-2">
-                                <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.color }"></div>
-                                <span class="text-sm font-bold text-slate-300">{{ dim.label }}</span>
-                            </div>
-                            <span class="text-lg font-black tabular-nums" :style="{ color: dim.color }">
-                                {{ Math.round(dim.score) }}%
-                            </span>
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.color }"></div>
+                            <span class="text-sm font-bold text-slate-300">{{ dim.label }}</span>
                         </div>
                         <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
                             <div
