@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Application\Services\AccountScoreService;
 use App\Application\Services\UserCharacterService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class UserCharacterController extends Controller
 {
@@ -26,9 +27,10 @@ class UserCharacterController extends Controller
 
             return response()->json($characters);
         } catch (\Exception $exception) {
+            Log::error('Failed to fetch characters', ['exception' => $exception->getMessage()]);
+
             return response()->json([
                 'error' => 'Failed to fetch characters',
-                'message' => $exception->getMessage(),
             ], 500);
         }
     }
@@ -58,8 +60,6 @@ class UserCharacterController extends Controller
 
     public function accountScore(): JsonResponse
     {
-        set_time_limit(120);
-
         try {
             $result = $this->accountScoreService->getOrCompute();
 
@@ -69,9 +69,10 @@ class UserCharacterController extends Controller
 
             return response()->json($result);
         } catch (\Exception $exception) {
+            Log::error('Failed to compute account score', ['exception' => $exception->getMessage()]);
+
             return response()->json([
                 'error' => 'Failed to compute account score',
-                'message' => $exception->getMessage(),
             ], 500);
         }
     }

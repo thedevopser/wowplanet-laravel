@@ -8,12 +8,12 @@ use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Models\WowQuest;
 
-class QuestImporter
+final readonly class QuestImporter
 {
     use ImportsFromBlizzardApi;
 
     public function __construct(
-        private readonly BlizzardApiClient $blizzardApiClient,
+        private BlizzardApiClient $blizzardApiClient,
     ) {}
 
     /**

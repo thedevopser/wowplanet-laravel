@@ -46,5 +46,5 @@ test('show returns 404 when character not found', function (): void {
 
     $this->getJson('/api/character/hyjal/unknown')
         ->assertNotFound()
-        ->assertJsonStructure(['error', 'message']);
+        ->assertJsonStructure(['error']);
 });

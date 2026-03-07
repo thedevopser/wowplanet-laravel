@@ -119,5 +119,5 @@ test('character not found returns 404', function (): void {
 
     $this->getJson('/api/character/hyjal/unknown')
         ->assertNotFound()
-        ->assertJsonStructure(['error', 'message']);
+        ->assertJsonStructure(['error']);
 });

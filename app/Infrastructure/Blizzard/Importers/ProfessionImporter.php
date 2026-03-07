@@ -9,7 +9,7 @@ use App\Models\WowProfession;
 use App\Models\WowRecipe;
 use Illuminate\Support\Facades\Log;
 
-class ProfessionImporter
+final class ProfessionImporter
 {
     private function info(string $message): void
     {

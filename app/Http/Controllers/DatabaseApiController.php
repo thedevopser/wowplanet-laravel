@@ -12,6 +12,7 @@ use App\Models\WowPet;
 use App\Models\WowProfession;
 use App\Models\WowQuest;
 use App\Models\WowRecipe;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,28 +30,9 @@ class DatabaseApiController extends Controller
             $builder->where('category', $this->deSlugify($category, 'mounts'));
         }
 
-        $categories = [];
-
-        /** @var array<int, array{category: string, items_count: int}> $rawCategories */
-        $rawCategories = WowMount::query()->where('is_active', true)
-            ->whereNotNull('category')
-            ->selectRaw('category, COUNT(*) as items_count')
-            ->groupBy('category')
-            ->orderBy('category')
-            ->get()
-            ->toArray();
-
-        foreach ($rawCategories as $rawCategory) {
-            $categories[] = [
-                'name' => $rawCategory['category'],
-                'slug' => $this->slugify($rawCategory['category']),
-                'count' => $rawCategory['items_count'],
-            ];
-        }
-
         return response()->json([
             'items' => $builder->get(),
-            'categories' => $categories,
+            'categories' => $this->buildCategoryList(WowMount::class),
             'total' => WowMount::query()->where('is_active', true)->count(),
         ]);
     }
@@ -66,27 +48,14 @@ class DatabaseApiController extends Controller
 
         if ($expansionSlug !== null && $expansionSlug !== '') {
             $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
+            if ($expansion instanceof ExpansionId) {
                 $builder->where('expansion_id', $expansion->value);
-            }
-        }
-
-        $expansions = [];
-        foreach (ExpansionId::allSlugs() as $id => $slug) {
-            $count = WowAchievement::query()->where('is_active', true)->where('expansion_id', $id)->count();
-            if ($count > 0) {
-                $expansions[] = [
-                    'id' => $id,
-                    'name' => (new ExpansionId($id))->toString(),
-                    'slug' => $slug,
-                    'count' => $count,
-                ];
             }
         }
 
         return response()->json([
             'items' => $builder->get(),
-            'expansions' => $expansions,
+            'expansions' => $this->buildExpansionList(WowAchievement::class),
             'total' => WowAchievement::query()->where('is_active', true)->count(),
         ]);
     }
@@ -105,31 +74,18 @@ class DatabaseApiController extends Controller
         $expansion = null;
         if ($expansionSlug !== null && $expansionSlug !== '') {
             $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
+            if ($expansion instanceof ExpansionId) {
                 $builder->where('expansion_id', $expansion->value);
             }
         }
 
-        if ($zoneSlug !== null && $zoneSlug !== '' && $expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
+        if ($zoneSlug !== null && $zoneSlug !== '' && $expansion instanceof ExpansionId) {
             $zoneName = $this->deSlugify($zoneSlug, 'quests', $expansion->value);
             $builder->where('zone_name', $zoneName);
         }
 
-        $expansions = [];
-        foreach (ExpansionId::allSlugs() as $id => $slug) {
-            $count = WowQuest::query()->where('is_active', true)->where('expansion_id', $id)->count();
-            if ($count > 0) {
-                $expansions[] = [
-                    'id' => $id,
-                    'name' => (new ExpansionId($id))->toString(),
-                    'slug' => $slug,
-                    'count' => $count,
-                ];
-            }
-        }
-
         $zones = [];
-        if ($expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
+        if ($expansion instanceof ExpansionId) {
             /** @var array<int, array{zone_name: string, items_count: int}> $rawZones */
             $rawZones = WowQuest::query()->where('is_active', true)
                 ->where('expansion_id', $expansion->value)
@@ -140,18 +96,16 @@ class DatabaseApiController extends Controller
                 ->get()
                 ->toArray();
 
-            foreach ($rawZones as $rawZone) {
-                $zones[] = [
-                    'name' => $rawZone['zone_name'],
-                    'slug' => $this->slugify($rawZone['zone_name']),
-                    'count' => $rawZone['items_count'],
-                ];
-            }
+            $zones = array_map(fn (array $row): array => [
+                'name' => $row['zone_name'],
+                'slug' => $this->slugify($row['zone_name']),
+                'count' => $row['items_count'],
+            ], $rawZones);
         }
 
         return response()->json([
             'items' => $builder->get(),
-            'expansions' => $expansions,
+            'expansions' => $this->buildExpansionList(WowQuest::class),
             'zones' => $zones,
             'total' => WowQuest::query()->where('is_active', true)->count(),
         ]);
@@ -169,28 +123,9 @@ class DatabaseApiController extends Controller
             $builder->where('category', $this->deSlugify($category, 'pets'));
         }
 
-        $categories = [];
-
-        /** @var array<int, array{category: string, items_count: int}> $rawCategories */
-        $rawCategories = WowPet::query()->where('is_active', true)
-            ->whereNotNull('category')
-            ->selectRaw('category, COUNT(*) as items_count')
-            ->groupBy('category')
-            ->orderBy('category')
-            ->get()
-            ->toArray();
-
-        foreach ($rawCategories as $rawCategory) {
-            $categories[] = [
-                'name' => $rawCategory['category'],
-                'slug' => $this->slugify($rawCategory['category']),
-                'count' => $rawCategory['items_count'],
-            ];
-        }
-
         return response()->json([
             'items' => $builder->get(),
-            'categories' => $categories,
+            'categories' => $this->buildCategoryList(WowPet::class),
             'total' => WowPet::query()->where('is_active', true)->count(),
         ]);
     }
@@ -207,55 +142,29 @@ class DatabaseApiController extends Controller
             $builder->where('category', $this->deSlugify($category, 'decors'));
         }
 
-        $categories = [];
-
-        /** @var array<int, array{category: string, items_count: int}> $rawCategories */
-        $rawCategories = WowDecor::query()->where('is_active', true)
-            ->whereNotNull('category')
-            ->selectRaw('category, COUNT(*) as items_count')
-            ->groupBy('category')
-            ->orderBy('category')
-            ->get()
-            ->toArray();
-
-        foreach ($rawCategories as $rawCategory) {
-            $categories[] = [
-                'name' => $rawCategory['category'],
-                'slug' => $this->slugify($rawCategory['category']),
-                'count' => $rawCategory['items_count'],
-            ];
-        }
-
         return response()->json([
             'items' => $builder->get(),
-            'categories' => $categories,
+            'categories' => $this->buildCategoryList(WowDecor::class),
             'total' => WowDecor::query()->where('is_active', true)->count(),
         ]);
     }
 
     public function professions(): JsonResponse
     {
-        /** @var array<int, array{id: int, name_fr: string, type: string}> $professions */
-        $professions = WowProfession::query()->where('is_active', true)
+        $result = WowProfession::query()->where('is_active', true)
             ->select(['id', 'name_fr', 'type'])
             ->orderBy('name_fr')
             ->get()
-            ->toArray();
-
-        $result = [];
-        foreach ($professions as $profession) {
-            $recipeCount = WowRecipe::query()->where('is_active', true)
-                ->where('profession_id', $profession['id'])
-                ->count();
-
-            $result[] = [
-                'id' => $profession['id'],
-                'name_fr' => $profession['name_fr'],
-                'type' => $profession['type'],
-                'slug' => $this->slugify($profession['name_fr']),
-                'recipe_count' => $recipeCount,
-            ];
-        }
+            ->map(fn (WowProfession $wowProfession): array => [
+                'id' => $wowProfession->id,
+                'name_fr' => $wowProfession->name_fr,
+                'type' => $wowProfession->type,
+                'slug' => $this->slugify($wowProfession->name_fr),
+                'recipe_count' => WowRecipe::query()->where('is_active', true)
+                    ->where('profession_id', $wowProfession->id)
+                    ->count(),
+            ])
+            ->all();
 
         return response()->json([
             'professions' => $result,
@@ -291,30 +200,14 @@ class DatabaseApiController extends Controller
 
         if ($expansionSlug !== null && $expansionSlug !== '') {
             $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
+            if ($expansion instanceof ExpansionId) {
                 $builder->where('expansion_id', $expansion->value);
-            }
-        }
-
-        $expansions = [];
-        foreach (ExpansionId::allSlugs() as $id => $slug) {
-            $count = WowRecipe::query()->where('is_active', true)
-                ->where('profession_id', $profession->id)
-                ->where('expansion_id', $id)
-                ->count();
-            if ($count > 0) {
-                $expansions[] = [
-                    'id' => $id,
-                    'name' => (new ExpansionId($id))->toString(),
-                    'slug' => $slug,
-                    'count' => $count,
-                ];
             }
         }
 
         return response()->json([
             'items' => $builder->get(),
-            'expansions' => $expansions,
+            'expansions' => $this->buildExpansionList(WowRecipe::class, $profession->id),
             'profession' => [
                 'id' => $profession->id,
                 'name_fr' => $profession->name_fr,
@@ -334,6 +227,58 @@ class DatabaseApiController extends Controller
             'professions' => WowProfession::query()->where('is_active', true)->count(),
             'recipes' => WowRecipe::query()->where('is_active', true)->count(),
         ]);
+    }
+
+    /**
+     * @param  class-string<WowAchievement|WowQuest|WowRecipe>  $modelClass
+     * @return list<array{id: int, name: string, slug: string, count: int}>
+     */
+    private function buildExpansionList(string $modelClass, ?int $professionId = null): array
+    {
+        $expansions = [];
+
+        foreach (ExpansionId::allSlugs() as $id => $slug) {
+            /** @var Builder<WowAchievement|WowQuest|WowRecipe> $query */
+            $query = $modelClass::query()->where('is_active', true)->where('expansion_id', $id);
+
+            if ($professionId !== null) {
+                $query->where('profession_id', $professionId);
+            }
+
+            $count = $query->count();
+            if ($count > 0) {
+                $expansions[] = [
+                    'id' => $id,
+                    'name' => (new ExpansionId($id))->toString(),
+                    'slug' => $slug,
+                    'count' => $count,
+                ];
+            }
+        }
+
+        return $expansions;
+    }
+
+    /**
+     * @param  class-string<WowMount|WowPet|WowDecor>  $modelClass
+     * @return list<array{name: string, slug: string, count: int}>
+     */
+    private function buildCategoryList(string $modelClass): array
+    {
+        /** @var array<int, array{category: string, items_count: int}> $rawCategories */
+        $rawCategories = $modelClass::query()->where('is_active', true)
+            ->whereNotNull('category')
+            ->selectRaw('category, COUNT(*) as items_count')
+            ->groupBy('category')
+            ->orderBy('category')
+            ->get()
+            ->toArray();
+
+        return array_values(array_map(fn (array $row): array => [
+            'name' => $row['category'],
+            'slug' => $this->slugify($row['category']),
+            'count' => $row['items_count'],
+        ], $rawCategories));
     }
 
     private function slugify(string $text): string

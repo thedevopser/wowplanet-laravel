@@ -306,7 +306,7 @@ class CharacterSeoService
                 'name' => 'World of Warcraft',
                 'gamePlatform' => 'PC',
             ],
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
     }
 
     /**
@@ -339,6 +339,6 @@ class CharacterSeoService
                 '@type' => 'VideoGame',
                 'name' => 'World of Warcraft',
             ],
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
     }
 }

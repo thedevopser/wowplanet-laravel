@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Application\Services\CharacterProfileService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class CharacterController extends Controller
 {
@@ -20,9 +21,14 @@ class CharacterController extends Controller
 
             return response()->json($profile);
         } catch (\Exception $exception) {
+            Log::error('Failed to fetch character profile', [
+                'realm' => $realm,
+                'name' => $name,
+                'exception' => $exception->getMessage(),
+            ]);
+
             return response()->json([
                 'error' => 'Character not found or Blizzard API error',
-                'message' => $exception->getMessage(),
             ], 404);
         }
     }
