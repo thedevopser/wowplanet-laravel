@@ -5,19 +5,11 @@ declare(strict_types=1);
 use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach (['test_map.csv', 'test_headers.csv'] as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 // ─── loadMap ───────────────────────────────────────────────

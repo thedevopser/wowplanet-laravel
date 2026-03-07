@@ -5,35 +5,11 @@ declare(strict_types=1);
 use App\Infrastructure\Parsers\Db2ProfessionMapper;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->backups = [];
-    foreach (['skill_line.csv', 'skill_line_ability.csv', 'trade_skill_category.csv'] as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach (['skill_line.csv', 'skill_line_ability.csv', 'trade_skill_category.csv'] as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    foreach ($this->backups as $original => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $original);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it builds professions and recipes from CSV data', function (): void {
@@ -70,12 +46,6 @@ test('it builds professions and recipes from CSV data', function (): void {
 });
 
 test('it returns empty when no skill lines found', function (): void {
-    // Ensure skill_line.csv does not exist
-    $path = storage_path('app/blizzard/skill_line.csv');
-    if (file_exists($path)) {
-        unlink($path);
-    }
-
     $result = Db2ProfessionMapper::build([]);
 
     expect($result)->toBe(['professions' => [], 'recipes' => []]);

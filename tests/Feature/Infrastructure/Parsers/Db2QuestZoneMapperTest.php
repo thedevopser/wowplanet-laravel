@@ -5,35 +5,11 @@ declare(strict_types=1);
 use App\Infrastructure\Parsers\Db2QuestZoneMapper;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->backups = [];
-    foreach (['quest_poi_blob.csv', 'ui_map.csv'] as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach (['quest_poi_blob.csv', 'ui_map.csv'] as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    foreach ($this->backups as $original => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $original);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it maps quests to zones via QuestPOIBlob and UiMap', function (): void {
@@ -56,14 +32,6 @@ test('it maps quests to zones via QuestPOIBlob and UiMap', function (): void {
 });
 
 test('it returns empty map when CSV files are missing', function (): void {
-    // Ensure both files do not exist
-    foreach (['quest_poi_blob.csv', 'ui_map.csv'] as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
     $result = Db2QuestZoneMapper::build();
 
     expect($result)->toBe([]);

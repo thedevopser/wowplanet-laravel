@@ -156,8 +156,8 @@ class UserCharacterService
         /** @var array<string, \Illuminate\Http\Client\Response> $responses */
         $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($characters, $baseUrl, $namespace, $token): void {
             foreach ($characters as $i => $char) {
-                $realm = strtolower($char['realmSlug']);
-                $name = strtolower($char['name']);
+                $realm = mb_strtolower($char['realmSlug']);
+                $name = mb_strtolower($char['name']);
 
                 $pool->as((string) $i)
                     ->withToken($token)

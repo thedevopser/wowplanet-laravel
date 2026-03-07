@@ -5,37 +5,12 @@ declare(strict_types=1);
 use App\Infrastructure\Parsers\Db2AreaExpansionMapper;
 
 beforeEach(function (): void {
+    setUpBlizzardTempStorage($this);
     $this->mapper = new Db2AreaExpansionMapper;
-
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->backups = [];
-    foreach (['area_table.csv', 'map.csv', 'content_tuning.csv'] as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
 });
 
 afterEach(function (): void {
-    foreach (['area_table.csv', 'map.csv', 'content_tuning.csv'] as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    foreach ($this->backups as $original => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $original);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it builds area expansion map from CSV data', function (): void {

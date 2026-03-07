@@ -29,8 +29,8 @@ class CharacterProfileService
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
     {
-        $realm = strtolower($realm);
-        $name = strtolower($name);
+        $realm = mb_strtolower($realm);
+        $name = mb_strtolower($name);
 
         $apiData = $this->fetchCharacterData($realm, $name);
 

@@ -5,52 +5,26 @@ declare(strict_types=1);
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->dir = $dir;
-    $this->backups = [];
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach ($this->backups as [$path, $backup]) {
-        if (file_exists($path)) {
-            unlink($path);
-        }
-
-        if ($backup !== null && file_exists($backup)) {
-            rename($backup, $path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 function saWriteJson(object $testCase, string $filename, mixed $data): void
 {
-    $path = $testCase->dir.'/'.$filename;
-
-    if (file_exists($path)) {
-        $backup = $path.'.testbak';
-        rename($path, $backup);
-        $testCase->backups[] = [$path, $backup];
-    } else {
-        $testCase->backups[] = [$path, null];
-    }
+    $path = storage_path('app/blizzard/'.$filename);
 
     file_put_contents($path, json_encode($data, JSON_THROW_ON_ERROR));
 }
 
 function saEnsureMissing(object $testCase, string $filename): void
 {
-    $path = $testCase->dir.'/'.$filename;
-    if (! file_exists($path)) {
-        return;
+    $path = storage_path('app/blizzard/'.$filename);
+    if (file_exists($path)) {
+        unlink($path);
     }
-
-    $backup = $path.'.testbak';
-    rename($path, $backup);
-    $testCase->backups[] = [$path, $backup];
 }
 
 // --- buildIconUrl ---

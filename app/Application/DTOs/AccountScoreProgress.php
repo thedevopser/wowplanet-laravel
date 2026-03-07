@@ -11,10 +11,10 @@ class AccountScoreProgress
     /** @var list<string> */
     public array $errors = [];
 
-    /** @var list<int> */
+    /** @var array<int, true> */
     public array $completedQuestIds = [];
 
-    /** @var list<int> */
+    /** @var array<int, true> */
     public array $completedAchievementIds = [];
 
     /** @var array<int, array{completed: int, total: int}> */
@@ -35,7 +35,7 @@ class AccountScoreProgress
     /** @var array<int, array<string, mixed>> */
     public array $professionMap = [];
 
-    /** @var list<int> */
+    /** @var array<int, true> */
     public array $completedRecipeIds = [];
 
     /** @var array<int, array<int, array{skill_points: int, max_skill_points: int}>> */
@@ -52,17 +52,9 @@ class AccountScoreProgress
     {
         $this->processed++;
 
-        if ($this->accountMounts === null) {
-            $this->accountMounts = $characterProfileDTO->mounts;
-        }
-
-        if ($this->accountPets === null) {
-            $this->accountPets = $characterProfileDTO->pets;
-        }
-
-        if ($this->accountDecor === null) {
-            $this->accountDecor = $characterProfileDTO->decor;
-        }
+        $this->accountMounts ??= $characterProfileDTO->mounts;
+        $this->accountPets ??= $characterProfileDTO->pets;
+        $this->accountDecor ??= $characterProfileDTO->decor;
 
         $this->mergeCollections($characterProfileDTO);
         $this->mergeProfessions($characterProfileDTO);
@@ -73,23 +65,18 @@ class AccountScoreProgress
      */
     public function buildResult(): array
     {
-        $questIdSet = array_flip(array_unique($this->completedQuestIds));
-        $achIdSet = array_flip(array_unique($this->completedAchievementIds));
-
-        $collections = $this->rebuildCollections($questIdSet, $achIdSet);
+        $collections = $this->rebuildCollections();
 
         $mounts = $this->accountMounts ?? [];
         $pets = $this->accountPets ?? [];
         $decor = $this->accountDecor ?? [];
-
-        $professions = $this->rebuildProfessions();
 
         return [
             'collections' => $collections,
             'mounts' => $mounts,
             'pets' => $pets,
             'decor' => $decor,
-            'professions' => $professions,
+            'professions' => $this->rebuildProfessions(),
             'mountsCount' => count(array_filter($mounts, fn (array $m): bool => ! empty($m['is_completed']))),
             'petsCount' => count(array_filter($pets, fn (array $p): bool => ! empty($p['is_completed']))),
             'decorCount' => count(array_filter($decor, fn (array $d): bool => ! empty($d['is_completed']))),
@@ -101,57 +88,85 @@ class AccountScoreProgress
 
     private function mergeCollections(CharacterProfileDTO $characterProfileDTO): void
     {
+        $this->collectionsTotals ??= [];
+
         foreach ($characterProfileDTO->collections as $expId => $exp) {
             /** @var array{quests?: array{total?: int, zones?: list<array<string, mixed>>}, achievements?: array{total?: int, categories?: list<array<string, mixed>>}, reputations?: array{total?: int, completed?: int}} $exp */
-            if ($this->collectionsTotals === null) {
-                $this->collectionsTotals = [];
-            }
+            $this->initExpansionTotals($expId, $exp);
+            $this->collectCompletedIds($exp);
+            $this->mergeBestReputations($expId, $exp);
+        }
+    }
 
-            if (! isset($this->collectionsTotals[$expId])) {
-                $this->collectionsTotals[$expId] = [
-                    'quests' => [
-                        'total' => (int) ($exp['quests']['total'] ?? 0),
-                        'zones' => $exp['quests']['zones'] ?? [],
-                    ],
-                    'achievements' => [
-                        'total' => (int) ($exp['achievements']['total'] ?? 0),
-                        'categories' => $exp['achievements']['categories'] ?? [],
-                    ],
-                    'reputations' => [
-                        'total' => (int) ($exp['reputations']['total'] ?? 0),
-                    ],
-                ];
-            }
+    /**
+     * @param  array{quests?: array{total?: int, zones?: list<array<string, mixed>>}, achievements?: array{total?: int, categories?: list<array<string, mixed>>}, reputations?: array{total?: int, completed?: int}}  $exp
+     */
+    private function initExpansionTotals(int $expId, array $exp): void
+    {
+        if (isset($this->collectionsTotals[$expId])) {
+            return;
+        }
 
-            /** @var list<array<string, mixed>> $zones */
-            $zones = $exp['quests']['zones'] ?? [];
-            foreach ($zones as $zone) {
-                /** @var list<array<string, mixed>> $items */
-                $items = $zone['items'] ?? [];
-                foreach ($items as $item) {
-                    if (! empty($item['is_completed'])) {
-                        $this->completedQuestIds[] = is_int($item['id'] ?? null) ? $item['id'] : 0;
-                    }
-                }
-            }
+        $this->collectionsTotals[$expId] = [
+            'quests' => [
+                'total' => (int) ($exp['quests']['total'] ?? 0),
+                'zones' => $exp['quests']['zones'] ?? [],
+            ],
+            'achievements' => [
+                'total' => (int) ($exp['achievements']['total'] ?? 0),
+                'categories' => $exp['achievements']['categories'] ?? [],
+            ],
+            'reputations' => [
+                'total' => (int) ($exp['reputations']['total'] ?? 0),
+            ],
+        ];
+    }
 
-            /** @var list<array<string, mixed>> $categories */
-            $categories = $exp['achievements']['categories'] ?? [];
-            foreach ($categories as $category) {
-                /** @var list<array<string, mixed>> $items */
-                $items = $category['items'] ?? [];
-                foreach ($items as $item) {
-                    if (! empty($item['is_completed'])) {
-                        $this->completedAchievementIds[] = is_int($item['id'] ?? null) ? $item['id'] : 0;
-                    }
-                }
-            }
+    /**
+     * @param  array{quests?: array{total?: int, zones?: list<array<string, mixed>>}, achievements?: array{total?: int, categories?: list<array<string, mixed>>}, reputations?: array{total?: int, completed?: int}}  $exp
+     */
+    private function collectCompletedIds(array $exp): void
+    {
+        $this->extractCompletedFromGroups($exp['quests']['zones'] ?? [], $this->completedQuestIds);
+        $this->extractCompletedFromGroups($exp['achievements']['categories'] ?? [], $this->completedAchievementIds);
+    }
 
-            $repCompleted = is_int($exp['reputations']['completed'] ?? null) ? $exp['reputations']['completed'] : 0;
-            $repTotal = is_int($exp['reputations']['total'] ?? null) ? $exp['reputations']['total'] : 0;
-            if (! isset($this->bestReputations[$expId]) || $repCompleted > $this->bestReputations[$expId]['completed']) {
-                $this->bestReputations[$expId] = ['completed' => $repCompleted, 'total' => $repTotal];
+    /**
+     * @param  list<array<string, mixed>>  $groups
+     * @param  array<int, true>  $target
+     */
+    private function extractCompletedFromGroups(array $groups, array &$target): void
+    {
+        foreach ($groups as $group) {
+            /** @var list<array<string, mixed>> $items */
+            $items = $group['items'] ?? [];
+            $this->extractCompletedFromItems($items, $target);
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $items
+     * @param  array<int, true>  $target
+     */
+    private function extractCompletedFromItems(array $items, array &$target): void
+    {
+        foreach ($items as $item) {
+            if (! empty($item['is_completed']) && is_int($item['id'] ?? null)) {
+                $target[$item['id']] = true;
             }
+        }
+    }
+
+    /**
+     * @param  array{quests?: array{total?: int, zones?: list<array<string, mixed>>}, achievements?: array{total?: int, categories?: list<array<string, mixed>>}, reputations?: array{total?: int, completed?: int}}  $exp
+     */
+    private function mergeBestReputations(int $expId, array $exp): void
+    {
+        $repCompleted = (int) ($exp['reputations']['completed'] ?? 0);
+        $repTotal = (int) ($exp['reputations']['total'] ?? 0);
+
+        if (! isset($this->bestReputations[$expId]) || $repCompleted > $this->bestReputations[$expId]['completed']) {
+            $this->bestReputations[$expId] = ['completed' => $repCompleted, 'total' => $repTotal];
         }
     }
 
@@ -164,49 +179,39 @@ class AccountScoreProgress
             }
 
             $pid = $prof['profession_id'];
+            $this->professionMap[$pid] ??= $prof;
 
-            // Store structure from first character with this profession
-            if (! isset($this->professionMap[$pid])) {
-                $this->professionMap[$pid] = $prof;
-            }
-
-            // Collect completed recipe IDs from all characters (union)
             /** @var array<int|string, array<string, mixed>> $expansions */
             $expansions = is_array($prof['expansions'] ?? null) ? $prof['expansions'] : [];
             foreach ($expansions as $expId => $expData) {
-                /** @var array<string, mixed> $expData */
-
-                // Union recipe IDs from categories
-                /** @var list<array<string, mixed>> $categories */
-                $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
-                foreach ($categories as $category) {
-                    /** @var list<array<string, mixed>> $items */
-                    $items = $category['items'] ?? [];
-                    foreach ($items as $item) {
-                        if (! empty($item['is_completed']) && is_int($item['id'] ?? null)) {
-                            $this->completedRecipeIds[] = $item['id'];
-                        }
-                    }
-                }
-
-                // Best skill_points per profession per expansion
-                $sp = is_int($expData['skill_points'] ?? null) ? $expData['skill_points'] : 0;
-                $msp = is_int($expData['max_skill_points'] ?? null) ? $expData['max_skill_points'] : 0;
-                $intExpId = (int) $expId;
-
-                if (! isset($this->bestSkillPoints[$pid][$intExpId])
-                    || $sp > $this->bestSkillPoints[$pid][$intExpId]['skill_points']) {
-                    $this->bestSkillPoints[$pid][$intExpId] = [
-                        'skill_points' => $sp,
-                        'max_skill_points' => max($msp, $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'] ?? 0),
-                    ];
-                } else {
-                    $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'] = max(
-                        $msp,
-                        $this->bestSkillPoints[$pid][$intExpId]['max_skill_points'],
-                    );
-                }
+                $this->mergeProfessionExpansion($pid, (int) $expId, $expData);
             }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $expData
+     */
+    private function mergeProfessionExpansion(int $pid, int $expId, array $expData): void
+    {
+        /** @var list<array<string, mixed>> $categories */
+        $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
+        $this->extractCompletedFromGroups($categories, $this->completedRecipeIds);
+
+        $sp = is_int($expData['skill_points'] ?? null) ? $expData['skill_points'] : 0;
+        $msp = is_int($expData['max_skill_points'] ?? null) ? $expData['max_skill_points'] : 0;
+
+        if (! isset($this->bestSkillPoints[$pid][$expId])
+            || $sp > $this->bestSkillPoints[$pid][$expId]['skill_points']) {
+            $this->bestSkillPoints[$pid][$expId] = [
+                'skill_points' => $sp,
+                'max_skill_points' => max($msp, $this->bestSkillPoints[$pid][$expId]['max_skill_points'] ?? 0),
+            ];
+        } else {
+            $this->bestSkillPoints[$pid][$expId]['max_skill_points'] = max(
+                $msp,
+                $this->bestSkillPoints[$pid][$expId]['max_skill_points'],
+            );
         }
     }
 
@@ -215,7 +220,6 @@ class AccountScoreProgress
      */
     private function rebuildProfessions(): array
     {
-        $recipeIdSet = array_flip(array_unique($this->completedRecipeIds));
         $result = [];
 
         foreach ($this->professionMap as $pid => $prof) {
@@ -224,53 +228,7 @@ class AccountScoreProgress
             $rebuiltExpansions = [];
 
             foreach ($expansions as $expId => $expData) {
-                /** @var array<string, mixed> $expData */
-                $intExpId = (int) $expId;
-
-                // Rebuild categories with union of completed recipe IDs
-                /** @var list<array<string, mixed>> $categories */
-                $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
-                $totalRecipes = 0;
-                $completedRecipes = 0;
-                $rebuiltCategories = [];
-
-                foreach ($categories as $category) {
-                    /** @var list<array<string, mixed>> $items */
-                    $items = $category['items'] ?? [];
-                    $catCompleted = 0;
-                    $rebuiltItems = [];
-
-                    foreach ($items as $item) {
-                        $id = is_int($item['id'] ?? null) ? $item['id'] : 0;
-                        $completed = isset($recipeIdSet[$id]);
-                        if ($completed) {
-                            $catCompleted++;
-                            $completedRecipes++;
-                        }
-
-                        $totalRecipes++;
-                        $rebuiltItems[] = array_merge($item, ['is_completed' => $completed]);
-                    }
-
-                    $rebuiltCategories[] = array_merge($category, [
-                        'items' => $rebuiltItems,
-                        'completed' => $catCompleted,
-                        'total' => count($rebuiltItems),
-                    ]);
-                }
-
-                // Use best skill points from any character
-                $bestSp = $this->bestSkillPoints[$pid][$intExpId] ?? null;
-                $skillPoints = $bestSp !== null ? $bestSp['skill_points'] : 0;
-                $maxSkillPoints = $bestSp !== null ? $bestSp['max_skill_points'] : 0;
-
-                $rebuiltExpansions[$intExpId] = array_merge($expData, [
-                    'total' => $totalRecipes,
-                    'completed' => $completedRecipes,
-                    'categories' => $rebuiltCategories,
-                    'skill_points' => $skillPoints,
-                    'max_skill_points' => $maxSkillPoints,
-                ]);
+                $rebuiltExpansions[(int) $expId] = $this->rebuildProfessionExpansion($pid, (int) $expId, $expData);
             }
 
             $result[] = array_merge($prof, ['expansions' => $rebuiltExpansions]);
@@ -280,74 +238,107 @@ class AccountScoreProgress
     }
 
     /**
-     * @param  array<int, int>  $questIdSet
-     * @param  array<int, int>  $achIdSet
-     * @return array<int, array<string, mixed>>
+     * @param  array<string, mixed>  $expData
+     * @return array<string, mixed>
      */
-    private function rebuildCollections(array $questIdSet, array $achIdSet): array
+    private function rebuildProfessionExpansion(int $pid, int $expId, array $expData): array
     {
-        $collections = [];
+        /** @var list<array<string, mixed>> $categories */
+        $categories = is_array($expData['categories'] ?? null) ? $expData['categories'] : [];
 
-        if ($this->collectionsTotals === null) {
-            return $collections;
+        $totalRecipes = 0;
+        $completedRecipes = 0;
+        $rebuiltCategories = [];
+
+        foreach ($categories as $category) {
+            $rebuilt = $this->rebuildItemGroup($category, $this->completedRecipeIds);
+            $completedRecipes += $rebuilt['completed'];
+            $totalRecipes += $rebuilt['total'];
+            $rebuiltCategories[] = $rebuilt;
         }
 
+        $bestSp = $this->bestSkillPoints[$pid][$expId] ?? null;
+
+        return array_merge($expData, [
+            'total' => $totalRecipes,
+            'completed' => $completedRecipes,
+            'categories' => $rebuiltCategories,
+            'skill_points' => $bestSp !== null ? $bestSp['skill_points'] : 0,
+            'max_skill_points' => $bestSp !== null ? $bestSp['max_skill_points'] : 0,
+        ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function rebuildCollections(): array
+    {
+        if ($this->collectionsTotals === null) {
+            return [];
+        }
+
+        $collections = [];
+
         foreach ($this->collectionsTotals as $expId => $expTotals) {
-            $questCompleted = 0;
-            $zones = [];
-
-            foreach ($expTotals['quests']['zones'] as $zone) {
-                /** @var list<array<string, mixed>> $rawItems */
-                $rawItems = $zone['items'] ?? [];
-                $items = [];
-                $zoneCompleted = 0;
-
-                foreach ($rawItems as $rawItem) {
-                    $id = is_int($rawItem['id'] ?? null) ? $rawItem['id'] : 0;
-                    $completed = isset($questIdSet[$id]);
-                    if ($completed) {
-                        $questCompleted++;
-                        $zoneCompleted++;
-                    }
-
-                    $items[] = array_merge($rawItem, ['is_completed' => $completed]);
-                }
-
-                $zones[] = array_merge($zone, ['items' => $items, 'completed' => $zoneCompleted]);
-            }
-
-            $achCompleted = 0;
-            $categories = [];
-
-            foreach ($expTotals['achievements']['categories'] as $cat) {
-                /** @var list<array<string, mixed>> $rawItems */
-                $rawItems = $cat['items'] ?? [];
-                $items = [];
-                $catCompleted = 0;
-
-                foreach ($rawItems as $rawItem) {
-                    $id = is_int($rawItem['id'] ?? null) ? $rawItem['id'] : 0;
-                    $completed = isset($achIdSet[$id]);
-                    if ($completed) {
-                        $achCompleted++;
-                        $catCompleted++;
-                    }
-
-                    $items[] = array_merge($rawItem, ['is_completed' => $completed]);
-                }
-
-                $categories[] = array_merge($cat, ['items' => $items, 'completed' => $catCompleted]);
-            }
-
-            $rep = $this->bestReputations[$expId] ?? ['completed' => 0, 'total' => $expTotals['reputations']['total']];
-
-            $collections[$expId] = [
-                'quests' => ['total' => $expTotals['quests']['total'], 'completed' => $questCompleted, 'zones' => $zones],
-                'achievements' => ['total' => $expTotals['achievements']['total'], 'completed' => $achCompleted, 'categories' => $categories],
-                'reputations' => ['completed' => $rep['completed'], 'total' => $rep['total']],
-            ];
+            $collections[$expId] = $this->rebuildExpansionCollections($expId, $expTotals);
         }
 
         return $collections;
+    }
+
+    /**
+     * @param  array{quests: array{total: int, zones: list<array<string, mixed>>}, achievements: array{total: int, categories: list<array<string, mixed>>}, reputations: array{total: int}}  $expTotals
+     * @return array<string, mixed>
+     */
+    private function rebuildExpansionCollections(int $expId, array $expTotals): array
+    {
+        $questCompleted = 0;
+        $zones = [];
+        foreach ($expTotals['quests']['zones'] as $zone) {
+            $rebuilt = $this->rebuildItemGroup($zone, $this->completedQuestIds);
+            $questCompleted += $rebuilt['completed'];
+            $zones[] = $rebuilt;
+        }
+
+        $achCompleted = 0;
+        $categories = [];
+        foreach ($expTotals['achievements']['categories'] as $cat) {
+            $rebuilt = $this->rebuildItemGroup($cat, $this->completedAchievementIds);
+            $achCompleted += $rebuilt['completed'];
+            $categories[] = $rebuilt;
+        }
+
+        $rep = $this->bestReputations[$expId] ?? ['completed' => 0, 'total' => $expTotals['reputations']['total']];
+
+        return [
+            'quests' => ['total' => $expTotals['quests']['total'], 'completed' => $questCompleted, 'zones' => $zones],
+            'achievements' => ['total' => $expTotals['achievements']['total'], 'completed' => $achCompleted, 'categories' => $categories],
+            'reputations' => ['completed' => $rep['completed'], 'total' => $rep['total']],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $group
+     * @param  array<int, true>  $completedIds
+     * @return array<string, mixed>&array{completed: int, total: int}
+     */
+    private function rebuildItemGroup(array $group, array $completedIds): array
+    {
+        /** @var list<array<string, mixed>> $rawItems */
+        $rawItems = $group['items'] ?? [];
+        $items = [];
+        $completed = 0;
+
+        foreach ($rawItems as $rawItem) {
+            $id = is_int($rawItem['id'] ?? null) ? $rawItem['id'] : 0;
+            $isCompleted = isset($completedIds[$id]);
+            if ($isCompleted) {
+                $completed++;
+            }
+
+            $items[] = array_merge($rawItem, ['is_completed' => $isCompleted]);
+        }
+
+        return array_merge($group, ['items' => $items, 'completed' => $completed, 'total' => count($items)]);
     }
 }

@@ -24,8 +24,8 @@ class SeoController extends Controller
 
     public function characterPage(string $realm, string $name): View|RedirectResponse
     {
-        $normalizedRealm = strtolower($realm);
-        $normalizedName = strtolower($name);
+        $normalizedRealm = mb_strtolower($realm);
+        $normalizedName = mb_strtolower($name);
 
         if ($realm !== $normalizedRealm || $name !== $normalizedName) {
             return redirect(sprintf('/character/%s/%s', $normalizedRealm, $normalizedName), 301);

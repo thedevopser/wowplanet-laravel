@@ -5,44 +5,12 @@ declare(strict_types=1);
 use App\Infrastructure\Parsers\LuaAddonParser;
 
 beforeEach(function (): void {
+    setUpBlizzardTempStorage($this);
     $this->parser = resolve(LuaAddonParser::class);
-
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    // Back up real files to avoid interference with test data
-    $this->testFiles = [
-        'area_table.csv', 'map.csv', 'content_tuning.csv',
-        'quest_v2_cli_task.csv', 'skill_line_ability.csv', 'faction.csv',
-        'spell_name.csv', 'ui_map.csv', 'quest_poi_blob.csv',
-    ];
-    $this->backups = [];
-    foreach ($this->testFiles as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
 });
 
 afterEach(function (): void {
-    foreach ($this->testFiles as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    // Restore real files
-    foreach ($this->backups as $path => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 // ─── normalizeApostrophes ───────────────────────────────────

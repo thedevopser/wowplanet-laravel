@@ -16,45 +16,12 @@ use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
+    setUpBlizzardTempStorage($this);
     Sleep::fake();
-
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    // Back up real files to avoid interference with test data
-    $this->testFiles = [
-        'mount.csv', 'battle_pet_species.csv', 'skill_line_ability.csv',
-        'achievement.csv', 'achievements.json', 'mounts.json', 'pets.json',
-        'decors.json', 'housetdecor.csv',
-        'quest_v2_cli_task.csv', 'skill_line.csv', 'trade_skill_category.csv',
-    ];
-    $this->backups = [];
-    foreach ($this->testFiles as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
 });
 
 afterEach(function (): void {
-    foreach ($this->testFiles as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    // Restore real files
-    foreach ($this->backups as $path => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 // ─── Quest Import ───────────────────────────────────────────

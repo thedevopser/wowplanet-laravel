@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Http;
 
+beforeEach(function (): void {
+    setUpBlizzardTempStorage($this);
+});
+
 afterEach(function (): void {
-    // Clean up any files created during tests
-    $dir = storage_path('app/blizzard');
-    if (is_dir($dir)) {
-        foreach (glob($dir.'/*.testdownload') as $file) {
-            unlink($file);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it downloads DB2 CSV files', function (): void {

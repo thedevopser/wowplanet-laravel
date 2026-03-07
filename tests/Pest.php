@@ -4,3 +4,39 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
+
+/**
+ * Set up a temporary blizzard storage directory.
+ * Call this inside beforeEach() — it saves the original path and redirects storage_path().
+ */
+function setUpBlizzardTempStorage(object $test): void
+{
+    $test->originalStoragePath = app()->storagePath();
+    $test->blizzardTmpDir = sys_get_temp_dir().'/pest-blizzard-'.uniqid();
+    mkdir($test->blizzardTmpDir.'/app/blizzard', 0755, true);
+    app()->useStoragePath($test->blizzardTmpDir);
+}
+
+/**
+ * Tear down the temporary blizzard storage directory.
+ * Call this inside afterEach() — it restores the original path and cleans up.
+ */
+function tearDownBlizzardTempStorage(object $test): void
+{
+    app()->useStoragePath($test->originalStoragePath);
+
+    if (! is_dir($test->blizzardTmpDir)) {
+        return;
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($test->blizzardTmpDir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST,
+    );
+
+    foreach ($iterator as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
+
+    rmdir($test->blizzardTmpDir);
+}

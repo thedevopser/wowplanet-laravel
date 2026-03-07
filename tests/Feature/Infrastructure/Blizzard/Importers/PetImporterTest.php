@@ -6,36 +6,11 @@ use App\Infrastructure\Blizzard\Importers\PetImporter;
 use App\Models\WowPet;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->testFiles = ['pets.json', 'battle_pet_species.csv'];
-    $this->backups = [];
-    foreach ($this->testFiles as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach ($this->testFiles as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    foreach ($this->backups as $path => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it imports pets from SA JSON and spell names', function (): void {

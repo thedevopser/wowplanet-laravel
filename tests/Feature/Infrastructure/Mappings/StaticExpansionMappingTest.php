@@ -6,6 +6,8 @@ use App\Domain\ValueObjects\ExpansionId;
 use App\Infrastructure\Mappings\StaticExpansionMapping;
 
 beforeEach(function (): void {
+    setUpBlizzardTempStorage($this);
+
     $this->mapping = new StaticExpansionMapping;
 
     $dir = storage_path('app/blizzard/mappings/processed');
@@ -15,12 +17,7 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
-    foreach (['quests.json', 'achievements.json'] as $file) {
-        $path = storage_path('app/blizzard/mappings/processed/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 // ─── getZoneMapping ─────────────────────────────────────────

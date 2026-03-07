@@ -6,36 +6,11 @@ use App\Infrastructure\Blizzard\Importers\DecorImporter;
 use App\Models\WowDecor;
 
 beforeEach(function (): void {
-    $dir = storage_path('app/blizzard');
-    if (! is_dir($dir)) {
-        mkdir($dir, 0755, true);
-    }
-
-    $this->testFiles = ['decors.json', 'housetdecor.csv'];
-    $this->backups = [];
-    foreach ($this->testFiles as $file) {
-        $path = $dir.'/'.$file;
-        if (file_exists($path)) {
-            $backup = $path.'.testbak';
-            rename($path, $backup);
-            $this->backups[$path] = $backup;
-        }
-    }
+    setUpBlizzardTempStorage($this);
 });
 
 afterEach(function (): void {
-    foreach ($this->testFiles as $file) {
-        $path = storage_path('app/blizzard/'.$file);
-        if (file_exists($path)) {
-            unlink($path);
-        }
-    }
-
-    foreach ($this->backups as $path => $backup) {
-        if (file_exists($backup)) {
-            rename($backup, $path);
-        }
-    }
+    tearDownBlizzardTempStorage($this);
 });
 
 test('it imports decors from SA JSON and CSV', function (): void {

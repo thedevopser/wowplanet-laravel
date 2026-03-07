@@ -72,7 +72,7 @@ class AccountScoreService
             try {
                 $profile = $this->characterProfileService->getProfile(
                     $char['realmSlug'],
-                    strtolower($char['name']),
+                    mb_strtolower($char['name']),
                 );
                 $progress->mergeProfile($profile);
             } catch (\Exception $exception) {

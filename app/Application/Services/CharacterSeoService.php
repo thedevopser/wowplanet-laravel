@@ -50,8 +50,8 @@ class CharacterSeoService
         /** @var string $configUrl */
         $configUrl = config('app.url', '');
         $appUrl = rtrim($configUrl, '/');
-        $realmSlug = strtolower($realm);
-        $nameSlug = strtolower($name);
+        $realmSlug = mb_strtolower($realm);
+        $nameSlug = mb_strtolower($name);
         $cacheKey = sprintf('seo_character_%s_%s', $realmSlug, $nameSlug);
 
         /** @var array<string, string|int|bool> $charData */
