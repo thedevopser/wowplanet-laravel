@@ -40,6 +40,12 @@ return [
         'client_secret' => env('BLIZZARD_CLIENT_SECRET'),
         'region' => env('BLIZZARD_REGION', 'eu'),
         'redirect_uri' => env('BLIZZARD_REDIRECT_URI'),
+        'admin_bnet_id' => env('ADMIN_BNET_ID'),
+    ],
+
+    'discord' => [
+        'webhook_changelog' => env('DISCORD_WEBHOOK_URL_CHANGELOG'),
+        'webhook_discussion' => env('DISCORD_WEBHOOK_URL_DISCUSSION'),
     ],
 
 ];

@@ -7,6 +7,7 @@ export const useCharacterStore = defineStore('character', {
         loading: false,
         error: null,
         isAuthenticated: false,
+        isAdmin: false,
         userCharacters: [],
         classIcons: {},
         loadingCharacters: false,
@@ -31,8 +32,10 @@ export const useCharacterStore = defineStore('character', {
             try {
                 const response = await axios.get('/api/auth/status');
                 this.isAuthenticated = response.data.authenticated;
+                this.isAdmin = response.data.isAdmin ?? false;
             } catch {
                 this.isAuthenticated = false;
+                this.isAdmin = false;
             }
         },
 
@@ -80,6 +83,7 @@ export const useCharacterStore = defineStore('character', {
                 // ignore
             }
             this.isAuthenticated = false;
+            this.isAdmin = false;
             this.userCharacters = [];
             this.character = null;
         },

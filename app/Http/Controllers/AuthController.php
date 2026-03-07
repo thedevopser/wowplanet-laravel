@@ -107,6 +107,10 @@ class AuthController extends Controller
 
             Session::put('blizzard_user_token', $tokenData['access_token']);
 
+            /** @var string $accessToken */
+            $accessToken = $tokenData['access_token'];
+            $this->fetchAndStoreUserInfo($accessToken);
+
             return redirect('/');
         } catch (\Throwable $throwable) {
             Log::error('Blizzard OAuth: unexpected error during callback', [
@@ -115,6 +119,37 @@ class AuthController extends Controller
             ]);
 
             return redirect('/')->with('error', 'Authentication error');
+        }
+    }
+
+    private function fetchAndStoreUserInfo(string $accessToken): void
+    {
+        try {
+            $response = Http::withToken($accessToken)
+                ->timeout(10)
+                ->get(sprintf('https://%s.battle.net/oauth/userinfo', $this->region));
+
+            if (! $response->ok()) {
+                return;
+            }
+
+            /** @var array<string, mixed> $userInfo */
+            $userInfo = $response->json();
+            $sub = is_string($userInfo['sub'] ?? null) ? $userInfo['sub'] : '';
+            $battletag = is_string($userInfo['battletag'] ?? null) ? $userInfo['battletag'] : '';
+
+            Session::put('bnet_user_id', $sub);
+            Session::put('bnet_battletag', $battletag);
+
+            Log::info('Bnet user logged in', ['sub' => $sub, 'battletag' => $battletag]);
+
+            /** @var string $adminId */
+            $adminId = config('services.blizzard.admin_bnet_id', '');
+            if ($adminId !== '' && $sub === $adminId) {
+                Session::put('is_admin', true);
+            }
+        } catch (\Throwable $throwable) {
+            Log::warning('Failed to fetch Bnet userinfo', ['message' => $throwable->getMessage()]);
         }
     }
 }

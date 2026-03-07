@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\DatabaseApiController;
 use App\Http\Controllers\UserCharacterController;
@@ -25,4 +26,13 @@ Route::middleware('throttle:authenticated')->group(function (): void {
     Route::get('/class-icons', [UserCharacterController::class, 'classIcons']);
     Route::get('/account/score', [UserCharacterController::class, 'accountScore']);
     Route::post('/account/score/refresh', [UserCharacterController::class, 'refreshAccountScore']);
+});
+
+Route::middleware(['throttle:authenticated', 'admin'])->prefix('admin')->group(function (): void {
+    Route::get('/status', [AdminController::class, 'status']);
+    Route::post('/import', [AdminController::class, 'import']);
+    Route::get('/import/{jobId}', [AdminController::class, 'importStatus']);
+    Route::post('/clear-cache', [AdminController::class, 'clearCache']);
+    Route::post('/maintenance', [AdminController::class, 'maintenance']);
+    Route::post('/discord', [AdminController::class, 'discord']);
 });

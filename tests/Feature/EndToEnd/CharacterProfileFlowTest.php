@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Application\Services\UserCharacterService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\WowAchievement;
 use App\Models\WowDecor;
@@ -38,6 +39,10 @@ test('full character profile flow', function (): void {
     WowDecor::factory()->create(['id' => 500, 'name_fr' => 'Foyer orné']);
     WowDecor::factory()->create(['id' => 501, 'name_fr' => 'Tapis elfique']);
 
+    $this->mock(UserCharacterService::class)
+        ->shouldReceive('getClassIcons')
+        ->andReturn([7 => 'https://render.com/icon.jpg']);
+
     $mock = $this->mock(BlizzardApiClient::class);
 
     // Summary is fetched synchronously
@@ -69,7 +74,6 @@ test('full character profile flow', function (): void {
                     ['key' => 'inset', 'value' => 'https://render.com/inset.jpg'],
                 ],
             ],
-            'playable-class' => ['assets' => [['key' => 'icon', 'value' => 'https://render.com/icon.jpg']]],
             '/professions' => ['primaries' => [], 'secondaries' => []],
             '/reputations' => ['reputations' => []],
         ];

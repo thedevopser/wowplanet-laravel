@@ -1,4 +1,4 @@
-.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod push deploy prod-up prod-down
+.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod push deploy prod-up prod-down worker worker-stop
 
 help: ## Display this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -27,6 +27,12 @@ dev: ## Start Vite dev server (via Traefik HTTPS)
 
 dev-stop: ## Stop Vite dev server
 	docker compose --profile dev stop vite
+
+worker: ## Start queue worker (dev)
+	docker compose --profile dev up worker -d
+
+worker-stop: ## Stop queue worker (dev)
+	docker compose --profile dev stop worker
 
 clean: ## Clear Laravel caches
 	docker compose exec app php artisan config:clear

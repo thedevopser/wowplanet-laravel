@@ -24,6 +24,7 @@ class CharacterProfileService
         private readonly CollectionProgressAggregator $collectionProgressAggregator,
         private readonly ProfessionProgressAggregator $professionProgressAggregator,
         private readonly ReputationProgressAggregator $reputationProgressAggregator,
+        private readonly UserCharacterService $userCharacterService,
     ) {}
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
@@ -77,20 +78,10 @@ class CharacterProfileService
     {
         $base = sprintf('profile/wow/character/%s/%s', $realm, $name);
 
-        // Step 1: Summary must be fetched first (we need classId for class media)
         $summary = $this->blizzardApiClient->get($base);
 
-        /** @var array{id?: int, name?: string} $charClass */
-        $charClass = $summary['character_class'] ?? [];
-        $classId = (int) ($charClass['id'] ?? 0);
-
-        /** @var string $region */
-        $region = config('services.blizzard.region', 'eu');
-
-        // Step 2: All other endpoints in parallel
         $endpoints = [
             'media' => ['endpoint' => $base.'/character-media', 'query' => []],
-            'classMedia' => ['endpoint' => 'data/wow/media/playable-class/'.$classId, 'query' => ['namespace' => 'static-'.$region]],
             'quests' => ['endpoint' => $base.'/quests/completed', 'query' => []],
             'achievements' => ['endpoint' => $base.'/achievements', 'query' => []],
             'mounts' => ['endpoint' => $base.'/collections/mounts', 'query' => []],
@@ -105,8 +96,6 @@ class CharacterProfileService
 
         /** @var array<string, mixed> $media */
         $media = $responses['media'] ?? [];
-        /** @var array<string, mixed> $classMedia */
-        $classMedia = $responses['classMedia'] ?? [];
         /** @var array<string, mixed> $questsResponse */
         $questsResponse = $responses['quests'] ?? [];
         /** @var array<string, mixed> $achievementsResponse */
@@ -141,7 +130,6 @@ class CharacterProfileService
         return [
             'summary' => $summary,
             'media' => $media,
-            'classMedia' => $classMedia,
             'completedQuestIds' => array_column($questsList, 'id'),
             'completedAchievementIds' => array_column(
                 array_filter($achievementsList, fn (array $a): bool => isset($a['completed_timestamp'])),
@@ -417,19 +405,9 @@ class CharacterProfileService
         $mediaData = $apiData['media'] ?? [];
         /** @var list<array{value: string}> $mediaAssets */
         $mediaAssets = $mediaData['assets'] ?? [];
-        /** @var array<string, mixed> $classMediaData */
-        $classMediaData = $apiData['classMedia'] ?? [];
-        /** @var list<array{key: string, value: string}> $classAssets */
-        $classAssets = $classMediaData['assets'] ?? [];
-
-        $classIconUrl = '';
-        foreach ($classAssets as $classAsset) {
-            if ($classAsset['key'] === 'icon') {
-                $classIconUrl = $classAsset['value'];
-
-                break;
-            }
-        }
+        $classId = (int) ($charClass['id'] ?? 0);
+        $classIcons = $this->userCharacterService->getClassIcons();
+        $classIconUrl = $classIcons[$classId] ?? '';
 
         /** @var list<int> $mountIds */
         $mountIds = $apiData['characterMountIds'];

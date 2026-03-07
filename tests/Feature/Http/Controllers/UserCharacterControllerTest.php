@@ -9,10 +9,11 @@ test('auth status returns authenticated false by default', function (): void {
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('isAuthenticated');
     $exp->once()->andReturn(false);
+    $mock->shouldReceive('isAdmin')->once()->andReturn(false);
 
     $this->getJson('/api/auth/status')
         ->assertOk()
-        ->assertJson(['authenticated' => false]);
+        ->assertJson(['authenticated' => false, 'isAdmin' => false]);
 });
 
 test('auth status returns true when authenticated', function (): void {
@@ -20,10 +21,11 @@ test('auth status returns true when authenticated', function (): void {
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('isAuthenticated');
     $exp->once()->andReturn(true);
+    $mock->shouldReceive('isAdmin')->once()->andReturn(false);
 
     $this->getJson('/api/auth/status')
         ->assertOk()
-        ->assertJson(['authenticated' => true]);
+        ->assertJson(['authenticated' => true, 'isAdmin' => false]);
 });
 
 test('logout clears session', function (): void {

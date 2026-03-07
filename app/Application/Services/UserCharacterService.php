@@ -26,9 +26,14 @@ class UserCharacterService
         return Session::has('blizzard_user_token');
     }
 
+    public function isAdmin(): bool
+    {
+        return (bool) Session::get('is_admin', false);
+    }
+
     public function logout(): void
     {
-        Session::forget('blizzard_user_token');
+        Session::forget(['blizzard_user_token', 'bnet_user_id', 'bnet_battletag', 'is_admin']);
     }
 
     /**

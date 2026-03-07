@@ -93,6 +93,12 @@ const routes = [
         meta: { title: 'CGU - WowPlanet' },
     },
     {
+        path: '/admin',
+        name: 'admin',
+        component: () => import('./pages/AdminPage.vue'),
+        meta: { title: 'Administration - WowPlanet' },
+    },
+    {
         path: '/:pathMatch(.*)*',
         redirect: '/',
     },

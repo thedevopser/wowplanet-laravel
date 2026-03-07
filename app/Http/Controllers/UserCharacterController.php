@@ -39,6 +39,7 @@ class UserCharacterController extends Controller
     {
         return response()->json([
             'authenticated' => $this->userCharacterService->isAuthenticated(),
+            'isAdmin' => $this->userCharacterService->isAdmin(),
         ]);
     }
 

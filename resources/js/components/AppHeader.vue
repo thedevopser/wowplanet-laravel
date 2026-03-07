@@ -44,6 +44,18 @@
                         >
                             Mon score
                         </router-link>
+                        <router-link
+                            v-if="store.isAdmin"
+                            to="/admin"
+                            :class="[
+                                'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
+                                route.name === 'admin'
+                                    ? 'bg-red-600 border-red-400 text-white shadow-lg shadow-red-500/20'
+                                    : 'bg-slate-800/80 border-white/5 text-red-400 hover:text-white hover:bg-slate-700'
+                            ]"
+                        >
+                            Admin
+                        </router-link>
                         <button
                             @click="handleLogout"
                             class="px-2 md:px-3 py-1.5 rounded-md text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
@@ -130,6 +142,19 @@
                         ]"
                     >
                         Mon score
+                    </router-link>
+                    <router-link
+                        v-if="store.isAdmin"
+                        to="/admin"
+                        @click="mobileMenuOpen = false"
+                        :class="[
+                            'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
+                            route.name === 'admin'
+                                ? 'bg-red-600 border-red-400 text-white'
+                                : 'bg-slate-800/80 border-white/5 text-red-400'
+                        ]"
+                    >
+                        Admin
                     </router-link>
                     <button
                         @click="handleLogout(); mobileMenuOpen = false"

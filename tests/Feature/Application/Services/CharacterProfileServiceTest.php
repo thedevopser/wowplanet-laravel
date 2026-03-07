@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Services\CharacterProfileService;
+use App\Application\Services\UserCharacterService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\WowDecor;
 use App\Models\WowMount;
@@ -78,17 +79,17 @@ test('get profile returns correct dto', function (): void {
             'faction' => ['name' => 'Horde'],
         ]);
 
+    $userCharMock = $this->mock(UserCharacterService::class);
+    /** @var \Mockery\Expectation $classIconsExp */
+    $classIconsExp = $userCharMock->shouldReceive('getClassIcons');
+    $classIconsExp->andReturn([7 => 'https://render.com/class-icon.jpg']);
+
     // All other endpoints are fetched async
     mockAsyncEndpoints($mock, [
         'character-media' => [
             'assets' => [
                 ['key' => 'avatar', 'value' => 'https://render.com/avatar.jpg'],
                 ['key' => 'inset', 'value' => 'https://render.com/inset.jpg'],
-            ],
-        ],
-        'playable-class' => [
-            'assets' => [
-                ['key' => 'icon', 'value' => 'https://render.com/class-icon.jpg'],
             ],
         ],
         'quests/completed' => ['quests' => [['id' => 100]]],
@@ -155,9 +156,10 @@ test('aggregate progress groups by expansion and zone', function (): void {
         'faction' => ['name' => 'Alliance'],
     ]);
 
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
     mockAsyncEndpoints($mock, [
         'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
-        'playable-class' => ['assets' => []],
         'quests/completed' => ['quests' => [['id' => 1]]],
         'achievements' => ['achievements' => []],
         'collections/mounts' => ['mounts' => []],
@@ -221,9 +223,10 @@ test('aggregate progress filters quests by character faction', function (): void
         'faction' => ['name' => 'Horde'],
     ]);
 
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
     mockAsyncEndpoints($mock, [
         'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
-        'playable-class' => ['assets' => []],
         'quests/completed' => ['quests' => [['id' => 1], ['id' => 2]]],
         'achievements' => ['achievements' => []],
         'collections/mounts' => ['mounts' => []],
@@ -264,6 +267,8 @@ test('get profile handles decor api 404 gracefully', function (): void {
         'faction' => ['name' => 'Alliance'],
     ]);
 
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
     // Mock async - decor returns 404 (empty), others return normally
     /** @var \Mockery\Expectation $asyncExp */
     $asyncExp = $mock->shouldReceive('getAsync');
@@ -277,7 +282,6 @@ test('get profile handles decor api 404 gracefully', function (): void {
 
         $responses = [
             'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
-            'playable-class' => ['assets' => []],
             'quests/completed' => ['quests' => []],
             'achievements' => ['achievements' => []],
             'collections/mounts' => ['mounts' => []],
