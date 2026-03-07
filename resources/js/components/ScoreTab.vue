@@ -46,9 +46,14 @@
                     :key="dim.key"
                     class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors"
                 >
-                    <div class="flex items-center gap-2 mb-3">
-                        <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.color }"></div>
-                        <span class="text-sm font-bold text-slate-300">{{ dim.label }}</span>
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.color }"></div>
+                            <span class="text-sm font-bold text-slate-300">{{ dim.label }}</span>
+                        </div>
+                        <span class="text-lg font-black tabular-nums" :style="{ color: dim.color }">
+                            {{ Math.round(dim.score) }}%
+                        </span>
                     </div>
                     <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
                         <div
@@ -58,7 +63,6 @@
                     </div>
                     <div class="text-[10px] sm:text-xs font-mono text-slate-500">
                         {{ dim.completed.toLocaleString('fr-FR') }} / {{ dim.total.toLocaleString('fr-FR') }}
-                        <span class="ml-1 opacity-60">({{ dim.weightLabel }})</span>
                     </div>
                 </div>
             </div>

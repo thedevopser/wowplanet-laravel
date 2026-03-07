@@ -1,6 +1,6 @@
 <template>
-    <div class="relative" :style="{ width: size + 'px', height: size + 'px' }">
-        <svg :viewBox="`0 0 ${size} ${size}`" class="w-full h-full">
+    <div class="relative" :style="{ width: size + 'px', height: size + 'px', overflow: 'visible' }">
+        <svg :viewBox="`0 0 ${size} ${size}`" class="w-full h-full" overflow="visible">
             <!-- Grid lines -->
             <polygon
                 v-for="level in [25, 50, 75, 100]"
@@ -53,7 +53,7 @@
                 :key="'label-' + i"
                 :x="labelPoint(i).x"
                 :y="labelPoint(i).y"
-                text-anchor="middle"
+                :text-anchor="labelAnchor(i)"
                 dominant-baseline="middle"
                 class="fill-slate-400 text-[10px] sm:text-xs font-bold"
             >
@@ -66,7 +66,7 @@
                 :key="'value-' + i"
                 :x="labelPoint(i).x"
                 :y="labelPoint(i).y + 14"
-                text-anchor="middle"
+                :text-anchor="labelAnchor(i)"
                 dominant-baseline="middle"
                 class="fill-slate-500 text-[9px] font-mono"
             >
@@ -103,6 +103,14 @@ function labelPoint(index) {
         x: center.value + r * Math.cos(angle),
         y: center.value + r * Math.sin(angle),
     };
+}
+
+function labelAnchor(index) {
+    const angle = (2 * Math.PI * index) / props.axes.length - Math.PI / 2;
+    const x = Math.cos(angle);
+    if (x < -0.1) return 'end';
+    if (x > 0.1) return 'start';
+    return 'middle';
 }
 
 function gridPoints(level) {
