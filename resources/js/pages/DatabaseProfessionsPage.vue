@@ -124,6 +124,7 @@
             <SearchFilter
                 v-model:search="search"
                 placeholder="Rechercher une recette..."
+                :show-hide-toggle="false"
             >
                 <template #extra-toggles></template>
             </SearchFilter>

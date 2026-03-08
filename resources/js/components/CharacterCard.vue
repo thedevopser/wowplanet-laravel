@@ -60,7 +60,10 @@
 import { computed } from 'vue';
 import { classColors } from '../utils/classColors';
 import { computeScore } from '../utils/scoreCalculator';
+import { useCharacterStore } from '../stores/character';
 import ScoreBadge from './ScoreBadge.vue';
+
+const store = useCharacterStore();
 
 const props = defineProps({
     character: { type: Object, required: true },
@@ -71,6 +74,15 @@ const factionColor = computed(() => props.character.faction === 'Alliance' ? '#3
 const score = computed(() => computeScore(props.character));
 const mythicRatingColor = computed(() => {
     const c = props.character.mythicKeystone?.rating_color;
-    return c ? `rgb(${c.r}, ${c.g}, ${c.b})` : '#f43f5e';
+    if (!c) return '#f43f5e';
+    const { r, g, b } = c;
+    if (store.theme === 'light') {
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (brightness > 170) {
+            const f = 0.45;
+            return `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`;
+        }
+    }
+    return `rgb(${r}, ${g}, ${b})`;
 });
 </script>

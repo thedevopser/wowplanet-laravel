@@ -1,5 +1,5 @@
 <template>
-    <div class="flex items-center justify-center py-16">
+    <div class="flex items-center justify-center py-16" role="status" aria-live="polite">
         <div class="card-glass rounded-2xl p-8 md:p-10 max-w-2xl mx-auto w-full">
             <div class="text-center">
                 <div class="relative inline-block mb-6">

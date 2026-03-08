@@ -4,7 +4,7 @@
             <h2 class="text-3xl md:text-4xl font-black mb-3">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Mon score compte</span>
             </h2>
-            <p class="text-slate-400 text-sm md:text-base">Score de completion agrege de tous vos personnages</p>
+            <p class="text-slate-400 text-sm md:text-base">Score de complétion agrégé de tous vos personnages</p>
         </div>
 
         <!-- Computing progress -->
@@ -13,7 +13,7 @@
                 Analyse de {{ progress.current }}...
             </div>
             <div class="text-slate-500 text-sm">
-                {{ progress.loaded }} / {{ progress.total }} personnages charges
+                {{ progress.loaded }} / {{ progress.total }} personnages chargés
                 <span v-if="progress.errors > 0" class="text-amber-400 ml-1">
                     ({{ progress.errors }} erreur{{ progress.errors > 1 ? 's' : '' }})
                 </span>
@@ -26,20 +26,20 @@
                     <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
                 </div>
             </div>
-            <p class="text-slate-600 text-xs">Le resultat sera mis en cache pour 24h</p>
+            <p class="text-slate-600 text-xs">Le résultat sera mis en cache pour 24h</p>
         </div>
 
         <!-- Initial loading -->
         <LoadingSpinner
             v-else-if="status === 'loading'"
             title="Chargement en cours..."
-            subtitle="Recuperation de vos donnees"
+            subtitle="Récupération de vos données"
         />
 
         <!-- Error -->
         <div v-else-if="status === 'error'" class="text-center py-16">
             <p class="text-red-400 mb-4">{{ errorMessage }}</p>
-            <button @click="startPolling" class="text-sm text-blue-400 hover:underline">Reessayer</button>
+            <button @click="startPolling" class="text-sm text-blue-400 hover:underline">Réessayer</button>
         </div>
 
         <!-- Results -->
@@ -54,13 +54,13 @@
                             Score Compte
                         </h3>
                         <p class="text-slate-500 text-xs sm:text-sm mt-1">
-                            Agrege sur {{ characterCount }} personnage{{ characterCount > 1 ? 's' : '' }}
+                            Agrégé sur {{ characterCount }} personnage{{ characterCount > 1 ? 's' : '' }}
                             <span v-if="cachedAt" class="ml-2 text-slate-600">· maj {{ cachedAtFormatted }}</span>
                         </p>
                     </div>
 
                     <div class="flex flex-col sm:flex-row items-center gap-6 sm:gap-10 w-full justify-center">
-                        <ScoreRadar :axes="radarAxes" :size="280" />
+                        <ScoreRadar :axes="radarAxes" :size="280" :colors="radarColors" />
                         <div class="flex flex-col items-center gap-2">
                             <div class="text-5xl sm:text-6xl font-black tabular-nums" :style="{ color: globalColor }">
                                 {{ score.global }}
@@ -84,7 +84,7 @@
             <!-- Dimension Cards -->
             <section>
                 <h4 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1 mb-4 sm:mb-6">
-                    Detail par dimension
+                    Détail par dimension
                     <div class="flex-1 h-px bg-slate-700"></div>
                 </h4>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -121,7 +121,7 @@
                     Il vous reste...
                     <div class="flex-1 h-px bg-slate-700"></div>
                 </h4>
-                <p class="text-slate-500 text-xs sm:text-sm mb-4">Categories les plus proches de la completion sur l'ensemble de vos personnages.</p>
+                <p class="text-slate-500 text-xs sm:text-sm mb-4">Catégories les plus proches de la complétion sur l'ensemble de vos personnages.</p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div
                         v-for="rec in recommendations"
@@ -167,7 +167,8 @@
 
             <!-- Refresh -->
             <div class="text-center">
-                <button @click="refresh" class="text-xs text-slate-600 hover:text-slate-400 transition-colors underline">
+                <button @click="refresh" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     Recalculer (vider le cache)
                 </button>
             </div>
@@ -175,7 +176,7 @@
 
         <!-- Empty / not authenticated -->
         <div v-else-if="status === 'ready'" class="text-center py-16">
-            <p class="text-slate-500">Aucun personnage trouve. Connectez-vous avec Battle.net pour acceder a cette page.</p>
+            <p class="text-slate-500">Aucun personnage trouvé. Connectez-vous avec Battle.net pour accéder à cette page.</p>
         </div>
 
         <ShareScoreModal :show="showShareModal" variant="account" :score-data="shareData" @close="showShareModal = false" />
@@ -217,13 +218,18 @@ const radarAxes = computed(() => {
     }));
 });
 
+const radarColors = computed(() => {
+    if (!score.value) return [];
+    return Object.keys(score.value.dimensions).map(key => DIMENSION_COLORS[key]);
+});
+
 const rank = computed(() => {
     const s = score.value?.global || 0;
-    if (s >= 90) return 'Legendaire';
-    if (s >= 75) return 'Epique';
+    if (s >= 90) return 'Légendaire';
+    if (s >= 75) return 'Épique';
     if (s >= 50) return 'Rare';
     if (s >= 25) return 'Commun';
-    return 'Debutant';
+    return 'Débutant';
 });
 
 const rankClass = computed(() => {
@@ -299,7 +305,7 @@ const recommendations = computed(() => {
 
     recs.push(...buildGroupRecs(vp.mounts || [], 'mount', 'Montures', DIMENSION_COLORS.mounts, 'source'));
     recs.push(...buildGroupRecs(vp.pets || [], 'pet', 'Mascottes', DIMENSION_COLORS.pets, 'source'));
-    recs.push(...buildGroupRecs(vp.decor || [], 'decor', 'Decorations', DIMENSION_COLORS.decor, 'source'));
+    recs.push(...buildGroupRecs(vp.decor || [], 'decor', 'Décorations', DIMENSION_COLORS.decor, 'source'));
 
     for (const expId in (vp.collections || {})) {
         for (const cat of (vp.collections[expId]?.achievements?.categories || [])) {
@@ -321,7 +327,7 @@ const recommendations = computed(() => {
             const completed = zone.items.filter(i => i.is_completed);
             if (missing.length === 0 || completed.length === 0) continue;
             recs.push({
-                key: `quest:${expId}:${zone.name}`, name: zone.name, dimension: 'Quetes', color: DIMENSION_COLORS.quests,
+                key: `quest:${expId}:${zone.name}`, name: zone.name, dimension: 'Quêtes', color: DIMENSION_COLORS.quests,
                 completed: completed.length, total: zone.items.length, missing: missing.length,
                 percent: (completed.length / zone.items.length) * 100,
                 missingItems: missing.slice(0, MAX_ITEMS_SHOWN).map(i => ({ id: i.id, name: i.name, wowheadUrl: wowheadUrl('quest', i) })),
@@ -365,7 +371,7 @@ async function poll() {
             virtualProfile.value = null;
         } else {
             status.value = 'error';
-            errorMessage.value = err.response?.data?.message || 'Erreur lors du calcul du score';
+            errorMessage.value = err.response?.data?.message || 'Erreur lors du calcul du score.';
         }
     }
 }

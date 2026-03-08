@@ -17,14 +17,36 @@
         />
 
         <template v-else-if="store.userCharacters.length">
-            <!-- Search -->
-            <div class="max-w-md mx-auto">
-                <input
-                    v-model="characterSearch"
-                    type="text"
-                    placeholder="Rechercher un personnage..."
-                    class="w-full bg-slate-800/80 border border-white/5 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm md:text-base placeholder-slate-500 transition-all"
-                >
+            <!-- Search + Sort -->
+            <div class="max-w-2xl mx-auto space-y-3">
+                <div class="relative">
+                    <input
+                        v-model="characterSearch"
+                        type="text"
+                        placeholder="Rechercher un personnage..."
+                        aria-label="Rechercher un personnage"
+                        class="w-full bg-slate-800/80 border border-white/5 rounded-xl px-4 py-2.5 pl-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm md:text-base placeholder-slate-500 transition-all"
+                    >
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span class="text-xs text-slate-600 mr-1">Trier par :</span>
+                    <button
+                        v-for="opt in sortOptions"
+                        :key="opt.key"
+                        @click="sortBy = opt.key"
+                        :class="[
+                            'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border',
+                            sortBy === opt.key
+                                ? 'bg-blue-600/20 border-blue-500/30 text-blue-400'
+                                : 'bg-slate-800/50 border-white/5 text-slate-500 hover:text-slate-300'
+                        ]"
+                    >
+                        {{ opt.label }}
+                    </button>
+                </div>
             </div>
 
             <!-- Character Grid -->
@@ -73,8 +95,20 @@
         </template>
 
         <!-- Empty state -->
-        <div v-else class="text-center py-16">
-            <p class="text-slate-500">Aucun personnage trouv&eacute;.</p>
+        <div v-else class="text-center py-16 max-w-md mx-auto">
+            <div class="w-16 h-16 mx-auto mb-6 bg-slate-800/60 border border-white/10 rounded-2xl flex items-center justify-center">
+                <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-300 mb-2">Aucun personnage trouvé</h3>
+            <p class="text-sm text-slate-500 mb-6">Connectez-vous avec Battle.net pour importer automatiquement tous vos personnages World of Warcraft.</p>
+            <a
+                href="/auth/blizzard/redirect"
+                class="btn-gradient text-white font-semibold px-6 py-2.5 rounded-lg text-sm shadow-lg shadow-blue-500/20 inline-block"
+            >
+                Se connecter avec Battle.net
+            </a>
         </div>
     </div>
 </template>
@@ -87,6 +121,14 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 
 const store = useCharacterStore();
 const characterSearch = ref('');
+const sortBy = ref('name');
+
+const sortOptions = [
+    { key: 'name', label: 'Nom' },
+    { key: 'level', label: 'Niveau' },
+    { key: 'class', label: 'Classe' },
+    { key: 'realm', label: 'Royaume' },
+];
 
 onMounted(() => {
     if (!store.userCharacters.length) {
@@ -96,13 +138,23 @@ onMounted(() => {
 
 const filteredUserCharacters = computed(() => {
     const q = characterSearch.value.toLowerCase().trim();
-    if (!q) return store.userCharacters;
-    return store.userCharacters.filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        c.realm.toLowerCase().includes(q) ||
-        c.className.toLowerCase().includes(q) ||
-        c.raceName.toLowerCase().includes(q) ||
-        c.faction.toLowerCase().includes(q)
-    );
+    let list = store.userCharacters;
+    if (q) {
+        list = list.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            c.realm.toLowerCase().includes(q) ||
+            c.className.toLowerCase().includes(q) ||
+            c.raceName.toLowerCase().includes(q) ||
+            c.faction.toLowerCase().includes(q)
+        );
+    }
+    return [...list].sort((a, b) => {
+        switch (sortBy.value) {
+            case 'level': return b.level - a.level;
+            case 'class': return a.className.localeCompare(b.className);
+            case 'realm': return a.realm.localeCompare(b.realm);
+            default: return a.name.localeCompare(b.name);
+        }
+    });
 });
 </script>

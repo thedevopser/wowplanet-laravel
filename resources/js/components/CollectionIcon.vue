@@ -6,7 +6,7 @@
             :alt="alt"
             :class="sizeClass"
             class="rounded-lg object-cover"
-            loading="eager"
+            loading="lazy"
             @error="errored = true"
         />
         <div

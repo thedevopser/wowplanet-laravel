@@ -121,7 +121,15 @@ const ratingColorCss = computed(() => toColorCss(mythicData.value?.rating_color)
 
 function toColorCss(color) {
     if (!color) return '#e2e8f0';
-    return `rgb(${color.r}, ${color.g}, ${color.b})`;
+    const { r, g, b } = color;
+    if (store.theme === 'light') {
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (brightness > 170) {
+            const f = 0.45;
+            return `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`;
+        }
+    }
+    return `rgb(${r}, ${g}, ${b})`;
 }
 
 function formatDuration(ms) {

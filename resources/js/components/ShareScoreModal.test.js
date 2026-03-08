@@ -74,7 +74,7 @@ describe('ShareScoreModal', () => {
 
         // close button + download + copy = 3 buttons
         expect(buttons.length).toBe(3);
-        expect(wrapper.text()).toContain('Telecharger');
+        expect(wrapper.text()).toContain('Télécharger');
         expect(wrapper.text()).toContain("Copier l'image");
     });
 });

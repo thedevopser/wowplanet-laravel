@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { createTestingPinia } from '@pinia/testing';
 import CharacterCard from './CharacterCard.vue';
 
 const baseCharacter = {
@@ -17,15 +18,22 @@ const baseCharacter = {
     exaltedCount: 42,
 };
 
+function mountCard(character = baseCharacter) {
+    return mount(CharacterCard, {
+        props: { character },
+        global: { plugins: [createTestingPinia({ createSpy: vi.fn })] },
+    });
+}
+
 describe('CharacterCard', () => {
     it('displays character name', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
 
         expect(wrapper.text()).toContain('Arthas');
     });
 
     it('displays level, race, class and realm', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
 
         expect(wrapper.text()).toContain('Niv 80');
         expect(wrapper.text()).toContain('Humain');
@@ -34,14 +42,14 @@ describe('CharacterCard', () => {
     });
 
     it('displays mounts and pets counts', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
 
         expect(wrapper.text()).toContain('150');
         expect(wrapper.text()).toContain('200');
     });
 
     it('applies class color from classColors map', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
         const nameElement = wrapper.find('h2');
 
         expect(nameElement.attributes('style')).toContain('#C41E3A');
@@ -49,14 +57,14 @@ describe('CharacterCard', () => {
 
     it('falls back to white for unknown classId', () => {
         const character = { ...baseCharacter, classId: 99 };
-        const wrapper = mount(CharacterCard, { props: { character } });
+        const wrapper = mountCard(character);
         const nameElement = wrapper.find('h2');
 
         expect(nameElement.attributes('style')).toContain('#FFFFFF');
     });
 
     it('renders avatar image', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
         const avatar = wrapper.find('img[alt=""]');
         const mainAvatar = wrapper.findAll('img').find(img => img.attributes('src') === baseCharacter.avatarUrl);
 
@@ -64,20 +72,20 @@ describe('CharacterCard', () => {
     });
 
     it('displays completed reputations count', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
 
         expect(wrapper.text()).toContain('42');
         expect(wrapper.text()).toContain('Rép. terminées');
     });
 
     it('displays faction name', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
 
         expect(wrapper.text()).toContain('Alliance');
     });
 
     it('applies blue color for Alliance faction', () => {
-        const wrapper = mount(CharacterCard, { props: { character: baseCharacter } });
+        const wrapper = mountCard();
         const factionSpan = wrapper.findAll('span').find(s => s.text() === 'Alliance');
 
         expect(factionSpan.attributes('style')).toContain('#3b82f6');
@@ -85,7 +93,7 @@ describe('CharacterCard', () => {
 
     it('applies red color for Horde faction', () => {
         const character = { ...baseCharacter, faction: 'Horde' };
-        const wrapper = mount(CharacterCard, { props: { character } });
+        const wrapper = mountCard(character);
         const factionSpan = wrapper.findAll('span').find(s => s.text() === 'Horde');
 
         expect(factionSpan.attributes('style')).toContain('#ef4444');

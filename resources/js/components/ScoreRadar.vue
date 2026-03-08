@@ -42,9 +42,10 @@
                 :key="'point-' + i"
                 :cx="axisPoint(i, axis.score).x"
                 :cy="axisPoint(i, axis.score).y"
-                r="3"
-                fill="currentColor"
-                class="text-blue-400 transition-all duration-1000"
+                r="4"
+                :fill="colors[i] || 'currentColor'"
+                :class="colors.length ? '' : 'text-blue-400'"
+                class="transition-all duration-1000"
             />
 
             <!-- Labels -->
@@ -82,6 +83,7 @@ import { computed } from 'vue';
 const props = defineProps({
     axes: { type: Array, required: true },
     size: { type: Number, default: 320 },
+    colors: { type: Array, default: () => [] },
 });
 
 const center = computed(() => props.size / 2);

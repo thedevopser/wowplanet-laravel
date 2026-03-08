@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia';
+import { defineStore, acceptHMRUpdate } from 'pinia';
 import axios from 'axios';
 
 export const useCharacterStore = defineStore('character', {
@@ -11,6 +11,7 @@ export const useCharacterStore = defineStore('character', {
         userCharacters: [],
         classIcons: {},
         loadingCharacters: false,
+        theme: localStorage.getItem('wowplanet-theme') || 'dark',
         expansions: [
             { id: 0, name: 'Classic' },
             { id: 1, name: 'The Burning Crusade' },
@@ -33,6 +34,11 @@ export const useCharacterStore = defineStore('character', {
     },
 
     actions: {
+        toggleTheme() {
+            this.theme = this.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('wowplanet-theme', this.theme);
+        },
+
         async checkAuth() {
             try {
                 const response = await axios.get('/api/auth/status');
@@ -94,3 +100,7 @@ export const useCharacterStore = defineStore('character', {
         },
     },
 });
+
+if (import.meta.hot) {
+    import.meta.hot.accept(acceptHMRUpdate(useCharacterStore, import.meta.hot));
+}

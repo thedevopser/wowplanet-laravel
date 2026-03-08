@@ -50,6 +50,7 @@
         <SearchFilter
             v-model:search="search"
             placeholder="Rechercher un haut-fait..."
+            :show-hide-toggle="false"
         >
             <template #extra-toggles></template>
         </SearchFilter>

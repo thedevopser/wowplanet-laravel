@@ -56,22 +56,22 @@
         <!-- Features -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 max-w-5xl mx-auto">
             <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-4 sm:p-6 text-center">
-                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-lg sm:text-xl font-bold mb-3 sm:mb-4">Q</div>
+                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 mb-3 sm:mb-4 p-2 sm:p-2.5"><CategoryIcon category="quests" /></div>
                 <h4 class="font-bold text-white text-sm sm:text-base mb-1">Qu&ecirc;tes</h4>
                 <p class="text-[10px] sm:text-xs md:text-sm text-slate-500">Progression par zone et par extension, avec plus de 21 000 qu&ecirc;tes r&eacute;f&eacute;renc&eacute;es.</p>
             </div>
             <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-4 sm:p-6 text-center">
-                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-lg sm:text-xl font-bold mb-3 sm:mb-4">HF</div>
+                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 mb-3 sm:mb-4 p-2 sm:p-2.5"><CategoryIcon category="achievements" /></div>
                 <h4 class="font-bold text-white text-sm sm:text-base mb-1">Hauts-faits</h4>
                 <p class="text-[10px] sm:text-xs md:text-sm text-slate-500">Plus de 8 600 hauts-faits tri&eacute;s par cat&eacute;gorie et par extension.</p>
             </div>
             <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-4 sm:p-6 text-center">
-                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-lg sm:text-xl font-bold mb-3 sm:mb-4">M</div>
+                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 mb-3 sm:mb-4 p-2 sm:p-2.5"><CategoryIcon category="mounts" /></div>
                 <h4 class="font-bold text-white text-sm sm:text-base mb-1">Montures</h4>
                 <p class="text-[10px] sm:text-xs md:text-sm text-slate-500">1 569 montures avec statut d'obtention et lien Wowhead.</p>
             </div>
             <div class="bg-slate-800/40 border border-white/5 rounded-2xl p-4 sm:p-6 text-center">
-                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-lg sm:text-xl font-bold mb-3 sm:mb-4">P</div>
+                <div class="w-10 h-10 sm:w-12 sm:h-12 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 mb-3 sm:mb-4 p-2 sm:p-2.5"><CategoryIcon category="pets" /></div>
                 <h4 class="font-bold text-white text-sm sm:text-base mb-1">Mascottes</h4>
                 <p class="text-[10px] sm:text-xs md:text-sm text-slate-500">2 117 mascottes de combat avec suivi de collection.</p>
             </div>
@@ -85,42 +85,42 @@
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 <router-link to="/base-de-donnees/montures" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
-                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 font-bold shrink-0 group-hover:scale-110 transition-transform">M</div>
+                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="mounts" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Montures</div>
                         <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
                     </div>
                 </router-link>
                 <router-link to="/base-de-donnees/hauts-faits" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
-                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 font-bold shrink-0 group-hover:scale-110 transition-transform">HF</div>
+                    <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="achievements" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Hauts-faits</div>
                         <div class="text-xs text-slate-500">Par extension et cat&eacute;gorie</div>
                     </div>
                 </router-link>
                 <router-link to="/base-de-donnees/quetes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
-                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 font-bold shrink-0 group-hover:scale-110 transition-transform">Q</div>
+                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="quests" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Qu&ecirc;tes</div>
                         <div class="text-xs text-slate-500">Par extension et zone</div>
                     </div>
                 </router-link>
                 <router-link to="/base-de-donnees/mascottes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
-                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 font-bold shrink-0 group-hover:scale-110 transition-transform">P</div>
+                    <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="pets" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Mascottes</div>
                         <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
                     </div>
                 </router-link>
                 <router-link to="/base-de-donnees/decorations" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-violet-500/30 transition-all">
-                    <div class="w-10 h-10 bg-violet-600/10 border border-violet-500/20 rounded-lg flex items-center justify-center text-violet-400 font-bold shrink-0 group-hover:scale-110 transition-transform">D</div>
+                    <div class="w-10 h-10 bg-violet-600/10 border border-violet-500/20 rounded-lg flex items-center justify-center text-violet-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="decor" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-violet-400 transition-colors">D&eacute;corations</div>
                         <div class="text-xs text-slate-500">Par cat&eacute;gorie et source</div>
                     </div>
                 </router-link>
                 <router-link to="/base-de-donnees/professions" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 transition-all">
-                    <div class="w-10 h-10 bg-emerald-600/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400 font-bold shrink-0 group-hover:scale-110 transition-transform">R</div>
+                    <div class="w-10 h-10 bg-emerald-600/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="professions" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Professions</div>
                         <div class="text-xs text-slate-500">Recettes par extension</div>
@@ -139,6 +139,7 @@
 
 <script setup>
 import { useCharacterStore } from '../stores/character';
+import CategoryIcon from '../components/CategoryIcon.vue';
 
 const store = useCharacterStore();
 </script>

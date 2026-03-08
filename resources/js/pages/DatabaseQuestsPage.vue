@@ -77,6 +77,7 @@
         <SearchFilter
             v-model:search="search"
             placeholder="Rechercher une quête..."
+            :show-hide-toggle="false"
         >
             <template #extra-toggles></template>
         </SearchFilter>

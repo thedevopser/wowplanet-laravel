@@ -84,11 +84,14 @@
                     @click="toggleSource(src)"
                     class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
                 >
-                    <div class="flex justify-between items-start mb-3">
+                    <div class="flex justify-between items-center mb-3">
                         <span class="text-sm md:text-base font-bold text-slate-300 group-hover:text-amber-400 transition-colors">{{ translateSource(src.name) }}</span>
-                        <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ src.completed }}/{{ src.total }}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ src.completed }}/{{ src.total }}</span>
+                            <svg class="w-4 h-4 text-slate-600 transition-transform duration-200" :class="expandedSource === src.name ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
                     </div>
-                    <div class="h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div class="h-full bg-amber-600/80 transition-all duration-700" :style="{ width: (src.completed / src.total * 100) + '%' }"></div>
                     </div>
                     <div v-if="expandedSource === src.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-96 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">

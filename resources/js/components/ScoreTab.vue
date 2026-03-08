@@ -13,7 +13,7 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-center gap-6 sm:gap-10 w-full justify-center">
-                    <ScoreRadar :axes="radarAxes" :size="280" />
+                    <ScoreRadar :axes="radarAxes" :size="280" :colors="radarColors" />
                     <div class="flex flex-col items-center gap-2">
                         <div class="text-5xl sm:text-6xl font-black tabular-nums" :style="{ color: globalColor }">
                             {{ score.global }}
@@ -147,6 +147,11 @@ const radarAxes = computed(() => {
         label: DIMENSION_LABELS[key],
         score: dim.score,
     }));
+});
+
+const radarColors = computed(() => {
+    if (!score.value) return [];
+    return Object.keys(score.value.dimensions).map(key => DIMENSION_COLORS[key]);
 });
 
 const rank = computed(() => {

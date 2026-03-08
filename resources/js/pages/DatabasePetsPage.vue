@@ -50,6 +50,7 @@
         <SearchFilter
             v-model:search="search"
             placeholder="Rechercher une mascotte..."
+            :show-hide-toggle="false"
         >
             <template #extra-toggles></template>
         </SearchFilter>

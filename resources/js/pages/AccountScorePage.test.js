@@ -56,7 +56,7 @@ describe('AccountScorePage', () => {
         await flushPromises();
 
         expect(wrapper.text()).toContain('Analyse de CharName...');
-        expect(wrapper.text()).toContain('1 / 3 personnages charges');
+        expect(wrapper.text()).toContain('1 / 3 personnages chargés');
     });
 
     it('transitions to ready state with score data', async () => {
@@ -70,7 +70,7 @@ describe('AccountScorePage', () => {
         expect(wrapper.text()).toContain('Score Compte');
         expect(wrapper.text()).toContain('3 personnages');
         expect(wrapper.findComponent({ name: 'ScoreRadar' }).exists()).toBe(true);
-        expect(wrapper.text()).toContain('Detail par dimension');
+        expect(wrapper.text()).toContain('Détail par dimension');
     });
 
     it('shows error state on API error', async () => {
@@ -82,7 +82,7 @@ describe('AccountScorePage', () => {
         await flushPromises();
 
         expect(wrapper.text()).toContain('Server error');
-        expect(wrapper.text()).toContain('Reessayer');
+        expect(wrapper.text()).toContain('Réessayer');
     });
 
     it('shows unauthenticated message on 401', async () => {
@@ -93,7 +93,7 @@ describe('AccountScorePage', () => {
         const wrapper = await mountPage();
         await flushPromises();
 
-        expect(wrapper.text()).toContain('Aucun personnage trouve');
+        expect(wrapper.text()).toContain('Aucun personnage trouvé');
         expect(wrapper.text()).toContain('Connectez-vous avec Battle.net');
     });
 

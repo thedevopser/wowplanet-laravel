@@ -17,7 +17,7 @@
                 to="/base-de-donnees/montures"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-amber-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">M</div>
+                <div class="w-14 h-14 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="mounts" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-amber-400 transition-colors">Montures</h2>
                 <p class="text-sm text-slate-500 mb-3">Triées par catégorie et source d'obtention</p>
                 <div class="text-2xl font-black text-amber-400 font-mono">{{ counts.mounts?.toLocaleString('fr-FR') || '...' }}</div>
@@ -27,7 +27,7 @@
                 to="/base-de-donnees/hauts-faits"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-amber-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">HF</div>
+                <div class="w-14 h-14 mx-auto bg-amber-600/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="achievements" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-amber-400 transition-colors">Hauts-faits</h2>
                 <p class="text-sm text-slate-500 mb-3">Classés par extension et catégorie</p>
                 <div class="text-2xl font-black text-amber-400 font-mono">{{ counts.achievements?.toLocaleString('fr-FR') || '...' }}</div>
@@ -37,7 +37,7 @@
                 to="/base-de-donnees/quetes"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-blue-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">Q</div>
+                <div class="w-14 h-14 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="quests" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">Quêtes</h2>
                 <p class="text-sm text-slate-500 mb-3">Triées par extension et zone</p>
                 <div class="text-2xl font-black text-blue-400 font-mono">{{ counts.quests?.toLocaleString('fr-FR') || '...' }}</div>
@@ -47,7 +47,7 @@
                 to="/base-de-donnees/mascottes"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-blue-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">P</div>
+                <div class="w-14 h-14 mx-auto bg-blue-600/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="pets" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">Mascottes</h2>
                 <p class="text-sm text-slate-500 mb-3">Triées par catégorie et source</p>
                 <div class="text-2xl font-black text-blue-400 font-mono">{{ counts.pets?.toLocaleString('fr-FR') || '...' }}</div>
@@ -57,7 +57,7 @@
                 to="/base-de-donnees/decorations"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-violet-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-violet-600/10 border border-violet-500/20 rounded-xl flex items-center justify-center text-violet-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">D</div>
+                <div class="w-14 h-14 mx-auto bg-violet-600/10 border border-violet-500/20 rounded-xl flex items-center justify-center text-violet-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="decor" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-violet-400 transition-colors">Décorations</h2>
                 <p class="text-sm text-slate-500 mb-3">Triées par catégorie et source</p>
                 <div class="text-2xl font-black text-violet-400 font-mono">{{ counts.decors?.toLocaleString('fr-FR') || '...' }}</div>
@@ -67,7 +67,7 @@
                 to="/base-de-donnees/professions"
                 class="bg-slate-800/40 border border-white/5 rounded-2xl p-6 sm:p-8 text-center group hover:border-emerald-500/30 hover:bg-slate-800/60 transition-all"
             >
-                <div class="w-14 h-14 mx-auto bg-emerald-600/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 text-2xl font-bold mb-4 group-hover:scale-110 transition-transform">R</div>
+                <div class="w-14 h-14 mx-auto bg-emerald-600/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform p-3"><CategoryIcon category="professions" /></div>
                 <h2 class="text-lg sm:text-xl font-bold text-white mb-2 group-hover:text-emerald-400 transition-colors">Professions</h2>
                 <p class="text-sm text-slate-500 mb-3">Recettes classées par extension</p>
                 <div class="text-2xl font-black text-emerald-400 font-mono">{{ counts.recipes?.toLocaleString('fr-FR') || '...' }}</div>
@@ -86,6 +86,7 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import BreadcrumbNav from '../components/BreadcrumbNav.vue';
+import CategoryIcon from '../components/CategoryIcon.vue';
 
 const counts = ref({});
 
