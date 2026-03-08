@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mountWithPlugins } from '../tests/helpers';
 import DecorTab from './DecorTab.vue';
 
 const makeCharacter = (decor = [], decorCount = null) => ({
@@ -21,16 +21,16 @@ const categorizedDecor = [
 ];
 
 describe('DecorTab', () => {
-    it('renders heading and decor count', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(categorizedDecor, 2) } });
+    it('renders heading and decor count', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(categorizedDecor, 2) } });
 
         expect(wrapper.text()).toContain('Décorations');
         expect(wrapper.text()).toContain('2');
         expect(wrapper.text()).toContain('2 / 3');
     });
 
-    it('sorts decor alphabetically', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+    it('sorts decor alphabetically', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
         // Uncategorized items are rendered as flat list sorted alphabetically
         const names = wrapper.findAll('.font-bold.text-slate-200').map(el => el.text());
 
@@ -39,8 +39,8 @@ describe('DecorTab', () => {
         expect(names[2]).toBe('Chandelier doré');
     });
 
-    it('shows "Obtenue" badge for completed decor', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+    it('shows "Obtenue" badge for completed decor', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
         const badges = wrapper.findAll('.text-green-400');
 
         expect(badges.length).toBe(2);
@@ -48,7 +48,7 @@ describe('DecorTab', () => {
     });
 
     it('filters decor by search text', async () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
         const input = wrapper.find('input[type="text"]');
         await input.setValue('armoire');
@@ -59,7 +59,7 @@ describe('DecorTab', () => {
     });
 
     it('hides completed decor when toggle is clicked', async () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
         const toggleBtn = wrapper.findAll('button').find(b => b.text().includes('Masquer'));
         await toggleBtn.trigger('click');
@@ -70,7 +70,7 @@ describe('DecorTab', () => {
     });
 
     it('shows empty result message when no matches', async () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
         const input = wrapper.find('input[type="text"]');
         await input.setValue('zzzzzzzzz');
@@ -78,7 +78,7 @@ describe('DecorTab', () => {
         expect(wrapper.text()).toContain('Aucun résultat trouvé.');
     });
 
-    it('paginates source cards at 8 per page', () => {
+    it('paginates source cards at 8 per page', async () => {
         // Create items spread across 10 different sources to trigger pagination (8 per page)
         const sourceNames = [
             'Quest', 'Achievement', 'Vendor', 'Raid Drop', 'Dungeon Drop',
@@ -93,7 +93,7 @@ describe('DecorTab', () => {
             category: 'The War Within',
             source,
         }));
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(manyDecor) } });
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(manyDecor) } });
 
         // Should show pagination controls (10 sources / 8 per page = 2 pages)
         expect(wrapper.text()).toContain('1 / 2');
@@ -102,24 +102,24 @@ describe('DecorTab', () => {
         expect(sourceCards.length).toBe(8);
     });
 
-    it('generates wowhead link with item_id when available', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+    it('generates wowhead link with item_id when available', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         const itemLink = links.find(l => l.attributes('href').includes('/item=100'));
         expect(itemLink).toBeTruthy();
     });
 
-    it('generates wowhead search link when no item_id', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+    it('generates wowhead search link when no item_id', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         const searchLink = links.find(l => l.attributes('href').includes('/search?q='));
         expect(searchLink).toBeTruthy();
     });
 
-    it('displays item IDs', () => {
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
+    it('displays item IDs', async () => {
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(sampleDecor) } });
 
         expect(wrapper.text()).toContain('ID: 1');
         expect(wrapper.text()).toContain('ID: 2');
@@ -141,7 +141,7 @@ describe('DecorTab', () => {
             category: 'The War Within',
             source,
         }));
-        const wrapper = mount(DecorTab, { props: { character: makeCharacter(manyDecor) } });
+        const wrapper = await mountWithPlugins(DecorTab, { props: { character: makeCharacter(manyDecor) } });
 
         // Go to page 2
         const nextBtn = wrapper.findAll('button').find(b => b.text().includes('→'));

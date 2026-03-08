@@ -131,6 +131,9 @@
 import { ref, computed, watch } from 'vue';
 import SearchFilter from './SearchFilter.vue';
 import CollectionIcon from './CollectionIcon.vue';
+import { useCharacterStore } from '../stores/character';
+
+const characterStore = useCharacterStore();
 
 const props = defineProps({
     character: { type: Object, required: true },
@@ -265,20 +268,15 @@ const categoryMap = computed(() => {
 });
 
 /** Ordered list of category names (recent expansions first, then special categories) */
-const CATEGORY_ORDER = [
-    'Midnight', 'The War Within', 'Dragonflight', 'Shadowlands',
-    'Battle for Azeroth', 'Legion', 'Warlords of Draenor', 'Mists of Pandaria',
-    'Cataclysm', 'Wrath of the Lich King', 'Burning Crusade', 'Classic',
-    'Profession', 'Neighbourhoods', 'General', 'Limited Time',
-    'World Events', 'PVP', 'Promotion', 'Undiscovered',
-];
+const EXTRA_CATEGORIES = ['Profession', 'Neighbourhoods', 'General', 'Limited Time', 'World Events', 'PVP', 'Promotion', 'Undiscovered'];
+const categoryOrder = computed(() => [...characterStore.expansionNamesDesc, ...EXTRA_CATEGORIES]);
 
 const categories = computed(() => {
     const cats = [];
     const knownCats = new Set(Object.keys(categoryMap.value));
 
     // Add known categories in order
-    for (const name of CATEGORY_ORDER) {
+    for (const name of categoryOrder.value) {
         if (knownCats.has(name)) {
             const sources = categoryMap.value[name];
             const items = Object.values(sources).flat();
@@ -292,7 +290,7 @@ const categories = computed(() => {
 
     // Add any categories not in the predefined order
     for (const name of knownCats) {
-        if (!CATEGORY_ORDER.includes(name)) {
+        if (!categoryOrder.value.includes(name)) {
             const sources = categoryMap.value[name];
             const items = Object.values(sources).flat();
             cats.push({

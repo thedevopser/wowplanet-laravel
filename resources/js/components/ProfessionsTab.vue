@@ -207,7 +207,7 @@ import SearchFilter from './SearchFilter.vue';
 const store = useCharacterStore();
 
 const selectedProfessionId = ref(null);
-const activeExpansion = ref(10);
+const activeExpansion = ref(store.latestExpansionId);
 const expandedCategory = ref(null);
 const page = ref(1);
 const itemsPerPage = 8;

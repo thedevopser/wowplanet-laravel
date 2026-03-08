@@ -5,7 +5,7 @@ import AchievementsTab from './AchievementsTab.vue';
 const characterData = {
     name: 'Arthas',
     collections: {
-        10: {
+        11: {
             quests: { completed: 25, total: 50 },
             achievements: {
                 completed: 8,

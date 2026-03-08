@@ -101,7 +101,7 @@ import SearchFilter from './SearchFilter.vue';
 
 const store = useCharacterStore();
 
-const activeExpansion = ref(10);
+const activeExpansion = ref(store.latestExpansionId);
 const expandedZone = ref(null);
 const page = ref(1);
 const itemsPerPage = 8;

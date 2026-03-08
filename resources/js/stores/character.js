@@ -27,6 +27,11 @@ export const useCharacterStore = defineStore('character', {
         ],
     }),
 
+    getters: {
+        latestExpansionId: (state) => state.expansions.at(-1)?.id ?? 10,
+        expansionNamesDesc: (state) => [...state.expansions].reverse().map(e => e.name),
+    },
+
     actions: {
         async checkAuth() {
             try {

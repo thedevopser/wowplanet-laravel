@@ -103,7 +103,7 @@ import CollectionIcon from './CollectionIcon.vue';
 
 const store = useCharacterStore();
 
-const activeExpansion = ref(10);
+const activeExpansion = ref(store.latestExpansionId);
 const expandedCategory = ref(null);
 const page = ref(1);
 const itemsPerPage = 8;

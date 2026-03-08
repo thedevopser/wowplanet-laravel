@@ -5,7 +5,7 @@ import ReputationsTab from './ReputationsTab.vue';
 const characterData = {
     name: 'Arthas',
     collections: {
-        10: {
+        11: {
             quests: { completed: 25, total: 50 },
             achievements: { completed: 8, total: 20, categories: [] },
             reputations: {
@@ -76,7 +76,7 @@ describe('ReputationsTab', () => {
         const data = {
             ...characterData,
             collections: {
-                10: {
+                11: {
                     ...characterData.collections[10],
                     reputations: {
                         completed: 1,
@@ -119,7 +119,7 @@ describe('ReputationsTab', () => {
         const data = {
             ...characterData,
             collections: {
-                10: {
+                11: {
                     ...characterData.collections[10],
                     reputations: {
                         completed: 1,
@@ -144,7 +144,7 @@ describe('ReputationsTab', () => {
         const data = {
             ...characterData,
             collections: {
-                10: {
+                11: {
                     ...characterData.collections[10],
                     reputations: {
                         completed: 0,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mountWithPlugins } from '../tests/helpers';
 import MountsTab from './MountsTab.vue';
 
 const makeCharacter = (mounts = [], mountsCount = null) => ({
@@ -22,15 +22,15 @@ const categorizedMounts = [
 ];
 
 describe('MountsTab', () => {
-    it('renders the mounts heading and count', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(categorizedMounts, 2) } });
+    it('renders the mounts heading and count', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(categorizedMounts, 2) } });
 
         expect(wrapper.text()).toContain('Montures');
         expect(wrapper.text()).toContain('2 / 3');
     });
 
-    it('displays mount names sorted alphabetically in uncategorized view', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
+    it('displays mount names sorted alphabetically in uncategorized view', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const mountNames = wrapper.findAll('.font-bold.text-slate-200').map(el => el.text());
 
         expect(mountNames[0]).toBe('Aigle de guerre');
@@ -38,37 +38,37 @@ describe('MountsTab', () => {
         expect(mountNames[2]).toBe('Loup de guerre');
     });
 
-    it('shows "Obtenue" badge for collected mounts', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
+    it('shows "Obtenue" badge for collected mounts', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const badges = wrapper.findAll('.text-green-400');
 
         expect(badges.length).toBe(2);
     });
 
-    it('displays mount IDs', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
+    it('displays mount IDs', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
 
         expect(wrapper.text()).toContain('ID: 1');
         expect(wrapper.text()).toContain('ID: 2');
         expect(wrapper.text()).toContain('ID: 3');
     });
 
-    it('links to wowhead', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
+    it('links to wowhead', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(sampleMounts) } });
         const links = wrapper.findAll('a[href*="wowhead.com"]');
 
         expect(links.length).toBe(3);
         expect(links[0].attributes('href')).toContain('/spell=');
     });
 
-    it('handles empty mounts array', () => {
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter([], 0) } });
+    it('handles empty mounts array', async () => {
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter([], 0) } });
 
         expect(wrapper.text()).toContain('Montures');
         expect(wrapper.text()).toContain('Aucun résultat trouvé.');
     });
 
-    it('paginates source cards at 8 per page', () => {
+    it('paginates source cards at 8 per page', async () => {
         const sourceNames = [
             'Quest', 'Achievement', 'Vendor', 'Raid Drop', 'Dungeon Drop',
             'Reputation', 'Treasure', 'Rare Spawn', 'Renown', 'Daily Activities',
@@ -82,7 +82,7 @@ describe('MountsTab', () => {
             category: 'The War Within',
             source,
         }));
-        const wrapper = mount(MountsTab, { props: { character: makeCharacter(manyMounts) } });
+        const wrapper = await mountWithPlugins(MountsTab, { props: { character: makeCharacter(manyMounts) } });
 
         expect(wrapper.text()).toContain('1 / 2');
         const sourceCards = wrapper.findAll('.bg-slate-800\\/40.border');

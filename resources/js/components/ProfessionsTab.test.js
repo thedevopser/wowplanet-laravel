@@ -10,7 +10,7 @@ const standardProfession = {
     type: 'primary',
     is_archaeology: false,
     expansions: {
-        10: {
+        11: {
             has_tier: true,
             tier_exists: true,
             completed: 5,
@@ -59,7 +59,7 @@ const archaeologyProfession = {
     global_max_skill_points: 950,
     expansions: {
         0: { skill_points: 300, max_skill_points: 300 },
-        10: { skill_points: 0, max_skill_points: 0 },
+        11: { skill_points: 0, max_skill_points: 0 },
     },
 };
 
@@ -69,7 +69,7 @@ const secondProfession = {
     type: 'primary',
     is_archaeology: false,
     expansions: {
-        10: {
+        11: {
             has_tier: true,
             tier_exists: true,
             completed: 1,

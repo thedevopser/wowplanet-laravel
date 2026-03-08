@@ -6,7 +6,7 @@ import { useCharacterStore } from '../stores/character';
 const characterData = {
     name: 'Arthas',
     collections: {
-        10: {
+        11: {
             quests: {
                 completed: 25,
                 total: 50,

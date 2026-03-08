@@ -138,7 +138,7 @@ import SearchFilter from './SearchFilter.vue';
 
 const store = useCharacterStore();
 
-const activeExpansion = ref(10);
+const activeExpansion = ref(store.latestExpansionId);
 const page = ref(1);
 const itemsPerPage = 12;
 const search = ref('');
