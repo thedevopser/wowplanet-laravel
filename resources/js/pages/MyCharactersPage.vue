@@ -7,6 +7,27 @@
             <p class="text-slate-400 text-sm md:text-base">Cliquez sur un personnage pour voir sa progression</p>
         </div>
 
+        <!-- Cross-character loading bar -->
+        <div v-if="store.crossCharacterStatus === 'loading'" class="max-w-2xl mx-auto">
+            <div class="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5">
+                <svg class="w-4 h-4 text-amber-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span class="text-xs text-amber-300/80">Chargement des donn&eacute;es multi-personnages...</span>
+            </div>
+        </div>
+        <Transition enter-active-class="transition duration-300" enter-from-class="opacity-0 -translate-y-2" leave-active-class="transition duration-500" leave-from-class="opacity-100" leave-to-class="opacity-0 -translate-y-2">
+        <div v-if="showCrossCharSuccess" class="max-w-2xl mx-auto">
+            <div class="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2.5">
+                <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span class="text-xs text-emerald-300/80">Donn&eacute;es multi-personnages charg&eacute;es</span>
+            </div>
+        </div>
+        </Transition>
+
         <!-- Loading -->
         <LoadingSpinner
             v-if="store.loadingCharacters"
@@ -114,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import { classColors } from '../utils/classColors';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
@@ -122,6 +143,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 const store = useCharacterStore();
 const characterSearch = ref('');
 const sortBy = ref('name');
+const showCrossCharSuccess = ref(false);
 
 const sortOptions = [
     { key: 'name', label: 'Nom' },
@@ -130,9 +152,19 @@ const sortOptions = [
     { key: 'realm', label: 'Royaume' },
 ];
 
-onMounted(() => {
+onMounted(async () => {
     if (!store.userCharacters.length) {
-        store.fetchUserCharacters();
+        await store.fetchUserCharacters();
+    }
+    if (store.isAuthenticated && store.crossCharacterStatus !== 'ready') {
+        store.computeCrossCharacter();
+    }
+});
+
+watch(() => store.crossCharacterStatus, (status) => {
+    if (status === 'ready') {
+        showCrossCharSuccess.value = true;
+        setTimeout(() => { showCrossCharSuccess.value = false; }, 3000);
     }
 });
 

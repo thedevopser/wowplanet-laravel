@@ -117,6 +117,10 @@
                                 {{ faction.value.toLocaleString('fr-FR') }} / {{ faction.max.toLocaleString('fr-FR') }}
                             </div>
                         </template>
+                        <div v-if="betterCharacter(faction)" class="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400/70">
+                            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            <span>Meilleur : <strong class="text-amber-300">{{ betterCharacter(faction).character_name }}</strong> &mdash; {{ betterCharacter(faction).standing_name }}</span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -214,6 +218,14 @@ const standingClasses = (faction) => {
         7: 'text-amber-300 bg-amber-300/10 border-amber-300/30',
     };
     return map[faction.tier] || 'text-sky-400 bg-sky-400/10 border-sky-400/30';
+};
+
+const betterCharacter = (faction) => {
+    const best = store.getBestFactionStanding(faction.id);
+    if (!best) return null;
+    if (best.character_name === store.character?.name) return null;
+    if (best.raw <= (faction.raw || 0)) return null;
+    return best;
 };
 
 const standingBarColor = (faction) => {

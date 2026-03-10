@@ -12,6 +12,12 @@ export const useCharacterStore = defineStore('character', {
         classIcons: {},
         loadingCharacters: false,
         theme: localStorage.getItem('wowplanet-theme') || 'dark',
+        crossCharacter: null,
+        crossCharacterStatus: 'idle',
+        crossCharacterProgress: null,
+        _crossCharQuestSet: null,
+        _crossCharAchievementSet: null,
+        _crossCharRecipeSet: null,
         expansions: [
             { id: 0, name: 'Classic' },
             { id: 1, name: 'The Burning Crusade' },
@@ -31,6 +37,27 @@ export const useCharacterStore = defineStore('character', {
     getters: {
         latestExpansionId: (state) => state.expansions.at(-1)?.id ?? 10,
         expansionNamesDesc: (state) => [...state.expansions].reverse().map(e => e.name),
+        crossCharQuestIds: (state) => {
+            if (!state.crossCharacter) return null;
+            if (!state._crossCharQuestSet) {
+                state._crossCharQuestSet = new Set(state.crossCharacter.completedQuestIds || []);
+            }
+            return state._crossCharQuestSet;
+        },
+        crossCharAchievementIds: (state) => {
+            if (!state.crossCharacter) return null;
+            if (!state._crossCharAchievementSet) {
+                state._crossCharAchievementSet = new Set(state.crossCharacter.completedAchievementIds || []);
+            }
+            return state._crossCharAchievementSet;
+        },
+        crossCharRecipeIds: (state) => {
+            if (!state.crossCharacter) return null;
+            if (!state._crossCharRecipeSet) {
+                state._crossCharRecipeSet = new Set(state.crossCharacter.completedRecipeIds || []);
+            }
+            return state._crossCharRecipeSet;
+        },
     },
 
     actions: {
@@ -97,6 +124,105 @@ export const useCharacterStore = defineStore('character', {
             this.isAdmin = false;
             this.userCharacters = [];
             this.character = null;
+            this.crossCharacter = null;
+            this.crossCharacterStatus = 'idle';
+            this._crossCharQuestSet = null;
+            this._crossCharAchievementSet = null;
+            this._crossCharRecipeSet = null;
+        },
+
+        async computeCrossCharacter() {
+            if (this.crossCharacterStatus === 'loading' || this.crossCharacterStatus === 'ready') return;
+            this.crossCharacterStatus = 'loading';
+            try {
+                const response = await axios.get('/api/account/cross-character');
+                const { status, data, jobId } = response.data;
+
+                if (status === 'ready' && data) return this._setCrossCharacterData(data);
+                if (status === 'computing' && jobId) return this._pollCrossCharacterJob(jobId);
+            } catch {
+                this.crossCharacterStatus = 'error';
+            }
+        },
+
+        _pollCrossCharacterJob(jobId) {
+            const poll = async () => {
+                const res = await axios.get(`/api/account/cross-character/${jobId}`).catch(() => null);
+                const status = res?.data?.status;
+
+                if (status === 'completed') return this.loadCrossCharacterData();
+                if (status === 'failed' || status === 'not_found' || !res) {
+                    this.crossCharacterStatus = 'error';
+                    return;
+                }
+
+                setTimeout(poll, 3000);
+            };
+            setTimeout(poll, 3000);
+        },
+
+        async loadCrossCharacterData() {
+            if (this.crossCharacterStatus === 'ready') return;
+            try {
+                const response = await axios.get('/api/account/cross-character-data');
+                if (response.data.status === 'ready' && response.data.data) {
+                    this._setCrossCharacterData(response.data.data);
+                } else {
+                    this.crossCharacterStatus = 'not_available';
+                }
+            } catch {
+                this.crossCharacterStatus = 'not_available';
+            }
+        },
+
+        _setCrossCharacterData(data) {
+            this.crossCharacter = data;
+            this.crossCharacterStatus = 'ready';
+            this._crossCharQuestSet = null;
+            this._crossCharAchievementSet = null;
+            this._crossCharRecipeSet = null;
+        },
+
+        isQuestCompletedElsewhere(questId) {
+            const set = this.crossCharQuestIds;
+            return set ? set.has(questId) : false;
+        },
+
+        isAchievementCompletedElsewhere(achievementId) {
+            const set = this.crossCharAchievementIds;
+            return set ? set.has(achievementId) : false;
+        },
+
+        isRecipeKnownElsewhere(recipeId) {
+            const set = this.crossCharRecipeIds;
+            return set ? set.has(recipeId) : false;
+        },
+
+        getQuestOwner(questId) {
+            if (!this.crossCharacter?.questOwners) return null;
+            return this.crossCharacter.questOwners[questId] || null;
+        },
+
+        getAchievementOwner(achievementId) {
+            if (!this.crossCharacter?.achievementOwners) return null;
+            return this.crossCharacter.achievementOwners[achievementId] || null;
+        },
+
+        getRecipeOwner(recipeId) {
+            if (!this.crossCharacter?.recipeOwners) return null;
+            return this.crossCharacter.recipeOwners[recipeId] || null;
+        },
+
+        getBestFactionStanding(factionId) {
+            if (!this.crossCharacter?.bestFactionStandings) return null;
+            return this.crossCharacter.bestFactionStandings[factionId] || null;
+        },
+
+        getBestSkillPoints(profId, expId) {
+            if (!this.crossCharacter?.skillPointOwners) return null;
+            const prof = this.crossCharacter.skillPointOwners[profId];
+            if (!prof) return null;
+            return prof[expId] || null;
         },
     },
 });

@@ -26,6 +26,9 @@ Route::middleware('throttle:authenticated')->group(function (): void {
     Route::get('/class-icons', [UserCharacterController::class, 'classIcons']);
     Route::get('/account/score', [UserCharacterController::class, 'accountScore']);
     Route::post('/account/score/refresh', [UserCharacterController::class, 'refreshAccountScore']);
+    Route::get('/account/cross-character', [UserCharacterController::class, 'crossCharacter']);
+    Route::get('/account/cross-character/{jobId}', [UserCharacterController::class, 'crossCharacterStatus']);
+    Route::get('/account/cross-character-data', [UserCharacterController::class, 'crossCharacterData']);
 });
 
 Route::middleware(['throttle:authenticated', 'admin'])->prefix('admin')->group(function (): void {

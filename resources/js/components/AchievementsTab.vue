@@ -79,8 +79,12 @@
                         <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-96 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
                             <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex items-center gap-3 text-xs sm:text-sm py-1.5">
                                 <CollectionIcon :src="item.icon_url" :alt="item.name" fallback="A" size="sm" class="text-amber-500" />
-                                <a :href="`https://www.wowhead.com/fr/achievement=${item.id}`" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-amber-400 font-medium' : 'text-slate-500', 'hover:underline flex-1 truncate']">{{ item.name }}</a>
+                                <a :href="`https://www.wowhead.com/fr/achievement=${item.id}`" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-amber-400 font-medium' : store.isAchievementCompletedElsewhere(item.id) ? 'text-amber-400/70' : 'text-slate-500', 'hover:underline flex-1 truncate']">{{ item.name }}</a>
+                                <span v-if="!item.is_completed && store.getAchievementOwner(item.id)" class="text-[9px] text-amber-400/60 font-mono shrink-0 truncate max-w-25">{{ store.getAchievementOwner(item.id) }}</span>
                                 <span v-if="item.is_completed" class="text-green-500 font-bold shrink-0">&check;</span>
+                                <span v-else-if="store.isAchievementCompletedElsewhere(item.id)" class="text-amber-400 shrink-0" :title="store.getAchievementOwner(item.id) ? ('Fait par ' + store.getAchievementOwner(item.id)) : 'Fait par un autre personnage'">
+                                    <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </span>
                                 <span v-else class="text-slate-800 shrink-0">&cir;</span>
                             </div>
                         </div>

@@ -53,7 +53,7 @@ trait ImportsFromBlizzardApi
         }
     }
 
-    private const MAX_BATCH_RETRIES = 2;
+    private const MAX_BATCH_RETRIES = 5;
 
     /**
      * Fetch multiple endpoints concurrently using Guzzle promises.
@@ -73,15 +73,17 @@ trait ImportsFromBlizzardApi
         $pending = $endpoints;
 
         for ($attempt = 0; $attempt <= self::MAX_BATCH_RETRIES; $attempt++) {
+            $currentBatchSize = $attempt === 0 ? $batchSize : max(5, intdiv($batchSize, 2));
+
             if ($attempt > 0) {
-                $delay = $attempt * self::RATE_LIMIT_WAIT_S;
-                $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds)...', count($pending), $attempt, self::MAX_BATCH_RETRIES, $delay));
+                $delay = self::RATE_LIMIT_WAIT_S / 2 * (2 ** $attempt);
+                $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds, concurrency %d)...', count($pending), $attempt, self::MAX_BATCH_RETRIES, $delay, $currentBatchSize));
                 Sleep::sleep($delay);
             }
 
             $failed = [];
 
-            foreach (array_chunk($pending, $batchSize, true) as $batch) {
+            foreach (array_chunk($pending, $currentBatchSize, true) as $batch) {
                 $promises = [];
                 foreach ($batch as $key => $endpoint) {
                     $promises[$key] = $this->blizzardApiClient->getAsync($endpoint, [

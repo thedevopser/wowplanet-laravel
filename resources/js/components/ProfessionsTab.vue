@@ -135,6 +135,10 @@
                                     {{ currentExpansionData.skill_points }} / {{ currentExpansionData.max_skill_points }}
                                 </span>
                             </div>
+                            <div v-if="betterSkillPoints" class="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400/70">
+                                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <span>Meilleur : <strong class="text-amber-300">{{ betterSkillPoints.character_name }}</strong> &mdash; {{ betterSkillPoints.skill_points }}/{{ betterSkillPoints.max_skill_points }}</span>
+                            </div>
                         </div>
                     </div>
 
@@ -178,10 +182,14 @@
                                         <div class="h-full bg-emerald-600/80 transition-all duration-700" :style="{ width: (cat.completed / cat.total * 100) + '%' }"></div>
                                     </div>
                                     <div v-if="expandedCategory === cat.name" class="mt-4 pt-4 border-t border-white/5 space-y-1 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
-                                        <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex justify-between items-center text-[10px] sm:text-xs py-1">
-                                            <a :href="wowheadLink(item)" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-emerald-400 font-medium' : 'text-slate-500', 'hover:underline']">{{ item.name }}</a>
-                                            <span v-if="item.is_completed" class="text-green-500 font-bold">&check;</span>
-                                            <span v-else class="text-slate-800">&cir;</span>
+                                        <div v-for="item in sortedItems(cat.items)" :key="item.id" class="flex items-center gap-2 text-[10px] sm:text-xs py-1">
+                                            <a :href="wowheadLink(item)" target="_blank" rel="noopener" @click.stop :class="[item.is_completed ? 'text-emerald-400 font-medium' : store.isRecipeKnownElsewhere(item.id) ? 'text-amber-400/70' : 'text-slate-500', 'hover:underline flex-1 truncate']">{{ item.name }}</a>
+                                            <span v-if="!item.is_completed && store.getRecipeOwner(item.id)" class="text-[9px] text-amber-400/60 font-mono shrink-0 truncate max-w-25">{{ store.getRecipeOwner(item.id) }}</span>
+                                            <span v-if="item.is_completed" class="text-green-500 font-bold shrink-0">&check;</span>
+                                            <span v-else-if="store.isRecipeKnownElsewhere(item.id)" class="text-amber-400 shrink-0" title="Connue par un autre personnage">
+                                                <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                            </span>
+                                            <span v-else class="text-slate-800 shrink-0">&cir;</span>
                                         </div>
                                     </div>
                                 </div>
@@ -278,6 +286,15 @@ const skillPointsPercent = computed(() => {
     if (!currentExpansionData.value) return 0;
     const { skill_points, max_skill_points } = currentExpansionData.value;
     return max_skill_points > 0 ? skill_points / max_skill_points * 100 : 0;
+});
+
+const betterSkillPoints = computed(() => {
+    if (!selectedProfession.value || !currentExpansionData.value) return null;
+    const best = store.getBestSkillPoints(selectedProfession.value.profession_id, activeExpansion.value);
+    if (!best) return null;
+    if (best.character_name === store.character?.name) return null;
+    if (best.skill_points <= (currentExpansionData.value.skill_points || 0)) return null;
+    return best;
 });
 
 const sortedCategories = computed(() => {

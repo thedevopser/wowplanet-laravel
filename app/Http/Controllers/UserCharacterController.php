@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\AccountScoreService;
+use App\Application\Services\CrossCharacterService;
 use App\Application\Services\UserCharacterService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +15,7 @@ class UserCharacterController extends Controller
     public function __construct(
         private readonly UserCharacterService $userCharacterService,
         private readonly AccountScoreService $accountScoreService,
+        private readonly CrossCharacterService $crossCharacterService,
     ) {}
 
     public function index(): JsonResponse
@@ -87,5 +89,42 @@ class UserCharacterController extends Controller
         $this->accountScoreService->invalidate();
 
         return response()->json(['success' => true]);
+    }
+
+    public function crossCharacter(): JsonResponse
+    {
+        try {
+            $result = $this->crossCharacterService->compute();
+
+            if ($result['status'] === 'unauthenticated') {
+                return response()->json(['error' => 'Not authenticated'], 401);
+            }
+
+            return response()->json($result);
+        } catch (\Exception $exception) {
+            Log::error('Failed to compute cross-character data', ['exception' => $exception->getMessage()]);
+
+            return response()->json(['error' => 'Failed to compute cross-character data'], 500);
+        }
+    }
+
+    public function crossCharacterStatus(string $jobId): JsonResponse
+    {
+        return response()->json($this->crossCharacterService->getJobStatus($jobId));
+    }
+
+    public function crossCharacterData(): JsonResponse
+    {
+        if (! $this->userCharacterService->isAuthenticated()) {
+            return response()->json(['error' => 'Not authenticated'], 401);
+        }
+
+        $stored = $this->crossCharacterService->getStoredData();
+
+        if ($stored === null) {
+            return response()->json(['status' => 'not_available']);
+        }
+
+        return response()->json(['status' => 'ready', 'data' => $stored['data'], 'characterCount' => $stored['character_count']]);
     }
 }

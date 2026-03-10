@@ -451,6 +451,50 @@ class CharacterProfileService
             decor: $decor,
             exaltedCount: $this->countExalted($collections),
             mythicKeystone: $this->buildMythicKeystoneData($mythicProfile, $mythicSeason),
+            completedQuestIds: is_array($apiData['completedQuestIds'] ?? null) ? array_values(array_filter($apiData['completedQuestIds'], is_int(...))) : [],
+            completedAchievementIds: is_array($apiData['completedAchievementIds'] ?? null) ? array_values(array_filter($apiData['completedAchievementIds'], is_int(...))) : [],
         );
+    }
+
+    /**
+     * Lightweight fetch for cross-character data: only quests, achievements, reputations, professions.
+     *
+     * @return array{questIds: list<int>, achievementIds: list<int>, reputations: array<string, mixed>, professions: array<string, mixed>}
+     */
+    public function fetchCrossCharacterRawData(string $realm, string $name): array
+    {
+        $realm = mb_strtolower($realm);
+        $name = mb_strtolower($name);
+
+        $base = sprintf('profile/wow/character/%s/%s', $realm, $name);
+
+        $endpoints = [
+            'quests' => ['endpoint' => $base.'/quests/completed', 'query' => []],
+            'achievements' => ['endpoint' => $base.'/achievements', 'query' => []],
+            'reputations' => ['endpoint' => $base.'/reputations', 'query' => []],
+            'professions' => ['endpoint' => $base.'/professions', 'query' => []],
+        ];
+
+        $responses = $this->fetchAsync($endpoints);
+
+        /** @var array<string, mixed> $questsResponse */
+        $questsResponse = $responses['quests'] ?? [];
+        /** @var array<string, mixed> $achievementsResponse */
+        $achievementsResponse = $responses['achievements'] ?? [];
+
+        /** @var list<array{id: int}> $questsList */
+        $questsList = $questsResponse['quests'] ?? [];
+        /** @var list<array{id: int, completed_timestamp?: int}> $achievementsList */
+        $achievementsList = $achievementsResponse['achievements'] ?? [];
+
+        return [
+            'questIds' => array_column($questsList, 'id'),
+            'achievementIds' => array_column(
+                array_filter($achievementsList, fn (array $a): bool => isset($a['completed_timestamp'])),
+                'id',
+            ),
+            'reputations' => $responses['reputations'] ?? [],
+            'professions' => $responses['professions'] ?? [],
+        ];
     }
 }

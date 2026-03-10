@@ -41,7 +41,9 @@ test('full character profile flow', function (): void {
 
     $this->mock(UserCharacterService::class)
         ->shouldReceive('getClassIcons')
-        ->andReturn([7 => 'https://render.com/icon.jpg']);
+        ->andReturn([7 => 'https://render.com/icon.jpg'])
+        ->shouldReceive('isAuthenticated')
+        ->andReturn(false);
 
     $mock = $this->mock(BlizzardApiClient::class);
 

@@ -107,6 +107,9 @@ const loadCharacter = () => {
 onMounted(() => {
     loadCharacter();
     nextTick(updateScrollIndicators);
+    if (store.isAuthenticated && store.crossCharacterStatus !== 'ready') {
+        store.loadCrossCharacterData();
+    }
 });
 
 watch(() => route.params, (newParams, oldParams) => {
