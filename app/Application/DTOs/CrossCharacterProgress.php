@@ -94,7 +94,8 @@ class CrossCharacterProgress
      */
     private function isBetterStanding(int $renownLevel, int $raw, array $current): bool
     {
-        if ($renownLevel > 0) {
+        // If either has renown, compare by renown_level (renown is account-wide)
+        if ($renownLevel > 0 || $current['renown_level'] > 0) {
             return $renownLevel > $current['renown_level'];
         }
 

@@ -23,10 +23,10 @@
                         </div>
                         <div class="text-right">
                             <div class="text-2xl sm:text-3xl font-black text-purple-400 font-mono">
-                                {{ currentCollection.reputations.completed }}
+                                {{ effectiveProgress.completed }}
                             </div>
                             <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">
-                                {{ currentCollection.reputations.completed }} / {{ currentCollection.reputations.total }} terminé
+                                {{ effectiveProgress.completed }} / {{ effectiveProgress.total }} terminé
                             </div>
                         </div>
                     </div>
@@ -102,9 +102,9 @@
                             <span
                                 :class="[
                                     'text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ml-2',
-                                    standingClasses(faction)
+                                    standingClasses(effectiveStanding(faction))
                                 ]"
-                            >{{ faction.standing_name }}</span>
+                            >{{ effectiveStanding(faction).standing_name }}</span>
                         </div>
                         <template v-if="faction.max > 0 && faction.value > 0">
                             <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
@@ -151,9 +151,29 @@ const hideUnstarted = ref(false);
 
 const currentCollection = computed(() => store.character?.collections?.[activeExpansion.value] || null);
 
+// Renown is account-wide: use the best renown found across all characters
+const effectiveStanding = (faction) => {
+    if (faction.renown_level <= 0) return faction;
+    const best = store.getBestFactionStanding(faction.id);
+    if (!best || best.renown_level <= faction.renown_level) return faction;
+    return {
+        ...faction,
+        renown_level: best.renown_level,
+        standing_name: `Renom ${best.renown_level}`,
+        completed: best.completed || faction.completed,
+    };
+};
+
+const effectiveProgress = computed(() => {
+    if (!currentCollection.value) return { completed: 0, total: 0 };
+    const factions = currentCollection.value.reputations.factions || [];
+    const total = factions.length;
+    const completed = factions.filter(f => effectiveStanding(f).completed).length;
+    return { completed, total };
+});
+
 const progressPercent = computed(() => {
-    if (!currentCollection.value) return 0;
-    const { completed, total } = currentCollection.value.reputations;
+    const { completed, total } = effectiveProgress.value;
     return total > 0 ? completed / total * 100 : 0;
 });
 
@@ -162,7 +182,9 @@ const sortedFactions = computed(() => {
     const factions = currentCollection.value.reputations.factions || [];
     return [...factions].sort((a, b) => {
         if (a.started !== b.started) return a.started ? -1 : 1;
-        if (a.started && b.started && a.completed !== b.completed) return a.completed ? 1 : -1;
+        const aCompleted = effectiveStanding(a).completed;
+        const bCompleted = effectiveStanding(b).completed;
+        if (a.started && b.started && aCompleted !== bCompleted) return aCompleted ? 1 : -1;
         return a.name.localeCompare(b.name, 'fr');
     });
 });
@@ -175,7 +197,7 @@ const filteredFactions = computed(() => {
         factions = factions.filter(f => f.name.toLowerCase().includes(q));
     }
     if (hideCompleted.value) {
-        factions = factions.filter(f => !f.completed);
+        factions = factions.filter(f => !effectiveStanding(f).completed);
     }
     if (hideUnstarted.value) {
         factions = factions.filter(f => f.started !== false);
@@ -221,12 +243,13 @@ const standingClasses = (faction) => {
 };
 
 const betterCharacter = (faction) => {
+    // Renown is account-wide — no cross-character comparison needed
+    if (effectiveStanding(faction).renown_level > 0) return null;
+
     const best = store.getBestFactionStanding(faction.id);
     if (!best) return null;
     if (best.character_name === store.character?.name) return null;
-
-    if (faction.renown_level > 0 && best.renown_level <= (faction.renown_level || 0)) return null;
-    if (faction.renown_level <= 0 && best.raw <= (faction.raw || 0)) return null;
+    if (best.raw <= (faction.raw || 0)) return null;
 
     return best;
 };
