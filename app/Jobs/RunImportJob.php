@@ -14,7 +14,7 @@ class RunImportJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 600;
+    public int $timeout = 1200;
 
     /**
      * @param  array<string, mixed>  $parameters

@@ -215,7 +215,7 @@ final readonly class QuestImporter
 
         $this->info(sprintf('  Fetching %d unique quest details concurrently (batches of %d)...', count($endpoints), self::CONCURRENT_BATCH_SIZE));
 
-        return $this->fetchBatchAsync($endpoints);
+        return $this->fetchBatchAsync($endpoints, 50);
     }
 
     /**
