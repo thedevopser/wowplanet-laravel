@@ -32,6 +32,7 @@ class ComputeCrossCharacterJob implements ShouldQueue
 
     public function handle(CrossCharacterService $crossCharacterService): void
     {
+        ini_set('memory_limit', '256M');
         Cache::put($this->cacheKey(), ['status' => 'running'], 3600);
 
         try {

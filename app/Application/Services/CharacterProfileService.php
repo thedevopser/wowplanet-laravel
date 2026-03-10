@@ -113,17 +113,25 @@ class CharacterProfileService
 
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
+        unset($questsResponse);
         /** @var list<array{id: int, completed_timestamp?: int}> $achievementsList */
         $achievementsList = $achievementsResponse['achievements'] ?? [];
+        $achievementPoints = is_int($achievementsResponse['total_points'] ?? null)
+            ? $achievementsResponse['total_points'] : 0;
+        unset($achievementsResponse);
         /** @var list<array{mount: array{id: int}}> $mountsList */
         $mountsList = $mountsResponse['mounts'] ?? [];
+        unset($mountsResponse);
         /** @var list<array{species: array{id: int}}> $petsList */
         $petsList = $petsResponse['pets'] ?? [];
+        unset($petsResponse);
         /** @var list<array{decor: array{id: int}}> $decorList */
         $decorList = $decorResponse['decor_collected'] ?? [];
+        unset($decorResponse);
 
         /** @var array<string, mixed> $mythicKeystoneProfile */
         $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
+        unset($responses);
 
         $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base, $mythicKeystoneProfile);
 
@@ -138,8 +146,7 @@ class CharacterProfileService
             'characterMountIds' => array_map(fn (array $m): int => $m['mount']['id'], $mountsList),
             'characterPetIds' => array_map(fn (array $p): int => $p['species']['id'], $petsList),
             'characterDecorIds' => array_map(fn (array $d): int => $d['decor']['id'], $decorList),
-            'achievementPoints' => is_int($achievementsResponse['total_points'] ?? null)
-                ? $achievementsResponse['total_points'] : 0,
+            'achievementPoints' => $achievementPoints,
             'professionsResponse' => $professionsResponse,
             'reputationsResponse' => $reputationsResponse,
             'mythicKeystoneProfile' => $mythicKeystoneProfile,
@@ -176,6 +183,8 @@ class CharacterProfileService
                 if ($result['state'] === 'fulfilled' && isset($result['value'])) {
                     /** @var array<string, mixed> $decoded */
                     $decoded = json_decode($result['value']->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+                    $result['value']->getBody()->close();
+                    unset($settled[$key]);
                     $results[$key] = $decoded;
 
                     continue;

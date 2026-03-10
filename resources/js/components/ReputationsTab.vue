@@ -224,7 +224,10 @@ const betterCharacter = (faction) => {
     const best = store.getBestFactionStanding(faction.id);
     if (!best) return null;
     if (best.character_name === store.character?.name) return null;
-    if (best.raw <= (faction.raw || 0)) return null;
+
+    if (faction.renown_level > 0 && best.renown_level <= (faction.renown_level || 0)) return null;
+    if (faction.renown_level <= 0 && best.raw <= (faction.raw || 0)) return null;
+
     return best;
 };
 

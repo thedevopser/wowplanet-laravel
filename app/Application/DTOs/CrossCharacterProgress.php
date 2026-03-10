@@ -90,6 +90,18 @@ class CrossCharacterProgress
     }
 
     /**
+     * @param  array{character_name: string, tier: int, raw: int, renown_level: int, standing_name: string, completed: bool}  $current
+     */
+    private function isBetterStanding(int $renownLevel, int $raw, array $current): bool
+    {
+        if ($renownLevel > 0) {
+            return $renownLevel > $current['renown_level'];
+        }
+
+        return $raw > $current['raw'];
+    }
+
+    /**
      * @param  array<string, mixed>  $reputationsResponse
      */
     private function mergeReputations(string $characterName, array $reputationsResponse): void
@@ -112,7 +124,7 @@ class CrossCharacterProgress
             $renownLevel = is_int($standing['renown_level'] ?? null) ? $standing['renown_level'] : 0;
             $maxStanding = is_int($standing['max'] ?? null) ? $standing['max'] : 1;
 
-            if (! isset($this->bestFactionStandings[$factionId]) || $raw > $this->bestFactionStandings[$factionId]['raw']) {
+            if (! isset($this->bestFactionStandings[$factionId]) || $this->isBetterStanding($renownLevel, $raw, $this->bestFactionStandings[$factionId])) {
                 $this->bestFactionStandings[$factionId] = [
                     'character_name' => $characterName,
                     'tier' => $tier,
@@ -205,13 +217,14 @@ class CrossCharacterProgress
 
                 $raw = is_int($faction['raw'] ?? null) ? $faction['raw'] : 0;
                 $tier = is_int($faction['tier'] ?? null) ? $faction['tier'] : 0;
+                $renownLevel = is_int($faction['renown_level'] ?? null) ? $faction['renown_level'] : 0;
 
-                if (! isset($this->bestFactionStandings[$factionId]) || $raw > $this->bestFactionStandings[$factionId]['raw']) {
+                if (! isset($this->bestFactionStandings[$factionId]) || $this->isBetterStanding($renownLevel, $raw, $this->bestFactionStandings[$factionId])) {
                     $this->bestFactionStandings[$factionId] = [
                         'character_name' => $characterName,
                         'tier' => $tier,
                         'raw' => $raw,
-                        'renown_level' => is_int($faction['renown_level'] ?? null) ? $faction['renown_level'] : 0,
+                        'renown_level' => $renownLevel,
                         'standing_name' => is_string($faction['standing_name'] ?? null) ? $faction['standing_name'] : '',
                         'completed' => ! empty($faction['completed']),
                     ];
