@@ -11,11 +11,13 @@ function makeAggregator(
     array $maxRenownMap = [],
     array $namesMap = [],
     array $factionMap = [],
+    array $accountWideFactionIds = [],
 ): ReputationProgressAggregator {
     $mapperMock = Mockery::mock(Db2FactionExpansionMapper::class);
     $mapperMock->shouldReceive('build')->andReturn($buildMap);
     $mapperMock->shouldReceive('buildMaxRenownMap')->andReturn($maxRenownMap);
     $mapperMock->shouldReceive('buildFactionNamesMap')->andReturn($namesMap);
+    $mapperMock->shouldReceive('buildAccountWideFactionIds')->andReturn($accountWideFactionIds);
 
     $addonMock = Mockery::mock(AddonDataParser::class);
     $addonMock->shouldReceive('getReputationFactionMap')->andReturn($factionMap);

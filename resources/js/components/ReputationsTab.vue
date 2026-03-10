@@ -87,7 +87,7 @@
                         :key="faction.id"
                         :class="[
                             'border p-4 rounded-2xl transition-colors group',
-                            faction.started === false
+                            effectiveStanding(faction).started === false
                                 ? 'bg-slate-900/30 border-slate-700/30 opacity-60'
                                 : 'bg-slate-800/40 border-white/5 hover:bg-slate-800/60'
                         ]"
@@ -151,16 +151,36 @@ const hideUnstarted = ref(false);
 
 const currentCollection = computed(() => store.character?.collections?.[activeExpansion.value] || null);
 
-// Renown is account-wide: use the best renown found across all characters
+// Account-wide factions (renown + friendship): use best standing across all characters
 const effectiveStanding = (faction) => {
-    if (faction.renown_level <= 0) return faction;
+    if (!faction.account_wide) return faction;
     const best = store.getBestFactionStanding(faction.id);
-    if (!best || best.renown_level <= faction.renown_level) return faction;
+    if (!best) return faction;
+    // Unstarted faction: always prefer cross-character best
+    if (faction.started === false) {
+        return {
+            ...faction,
+            tier: best.tier,
+            raw: best.raw,
+            renown_level: best.renown_level,
+            standing_name: best.renown_level > 0 ? `Renom ${best.renown_level}` : best.standing_name,
+            completed: best.completed || faction.completed,
+            started: true,
+        };
+    }
+    // Compare by renown_level if either has renown, by raw otherwise
+    const currentBetter = (faction.renown_level > 0 || best.renown_level > 0)
+        ? faction.renown_level >= best.renown_level
+        : faction.raw >= best.raw;
+    if (currentBetter) return faction;
     return {
         ...faction,
+        tier: best.tier,
+        raw: best.raw,
         renown_level: best.renown_level,
-        standing_name: `Renom ${best.renown_level}`,
+        standing_name: best.renown_level > 0 ? `Renom ${best.renown_level}` : best.standing_name,
         completed: best.completed || faction.completed,
+        started: true,
     };
 };
 
@@ -181,10 +201,12 @@ const sortedFactions = computed(() => {
     if (!currentCollection.value) return [];
     const factions = currentCollection.value.reputations.factions || [];
     return [...factions].sort((a, b) => {
-        if (a.started !== b.started) return a.started ? -1 : 1;
+        const aStarted = effectiveStanding(a).started;
+        const bStarted = effectiveStanding(b).started;
+        if (aStarted !== bStarted) return aStarted ? -1 : 1;
         const aCompleted = effectiveStanding(a).completed;
         const bCompleted = effectiveStanding(b).completed;
-        if (a.started && b.started && aCompleted !== bCompleted) return aCompleted ? 1 : -1;
+        if (aStarted && bStarted && aCompleted !== bCompleted) return aCompleted ? 1 : -1;
         return a.name.localeCompare(b.name, 'fr');
     });
 });
@@ -200,7 +222,7 @@ const filteredFactions = computed(() => {
         factions = factions.filter(f => !effectiveStanding(f).completed);
     }
     if (hideUnstarted.value) {
-        factions = factions.filter(f => f.started !== false);
+        factions = factions.filter(f => effectiveStanding(f).started !== false);
     }
 
     return factions;
@@ -243,8 +265,8 @@ const standingClasses = (faction) => {
 };
 
 const betterCharacter = (faction) => {
-    // Renown is account-wide — no cross-character comparison needed
-    if (effectiveStanding(faction).renown_level > 0) return null;
+    // Account-wide factions already show best standing directly, no indicator needed
+    if (faction.account_wide) return null;
 
     const best = store.getBestFactionStanding(faction.id);
     if (!best) return null;

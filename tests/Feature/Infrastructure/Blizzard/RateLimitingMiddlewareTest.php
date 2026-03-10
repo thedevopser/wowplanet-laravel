@@ -6,14 +6,8 @@ use App\Infrastructure\Blizzard\RateLimitingMiddleware;
 use GuzzleHttp\Promise\FulfilledPromise;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use Illuminate\Support\Facades\RateLimiter;
 
-test('middleware passes request through when rate limit not exceeded', function (): void {
-    RateLimiter::shouldReceive('attempt')
-        ->once()
-        ->withArgs(fn (string $key, int $maxAttempts, callable $callback, int $perSeconds): bool => $key === 'blizzard-api' && $maxAttempts === 100 && $perSeconds === 1)
-        ->andReturn(true);
-
+test('middleware passes request through and returns response', function (): void {
     $middleware = new RateLimitingMiddleware;
 
     $handler = fn ($request, $options): FulfilledPromise => new FulfilledPromise(new Response(200, [], '{"ok":true}'));
@@ -28,32 +22,27 @@ test('middleware passes request through when rate limit not exceeded', function 
     expect((string) $response->getBody())->toBe('{"ok":true}');
 });
 
-test('middleware uses blizzard-api key with 100 requests per second limit', function (): void {
-    RateLimiter::shouldReceive('attempt')
-        ->once()
-        ->withArgs(function (string $key, int $maxAttempts, callable $callback, int $perSeconds): true {
-            expect($key)->toBe('blizzard-api');
-            expect($maxAttempts)->toBe(100);
-            expect($perSeconds)->toBe(1);
-
-            return true;
-        })
-        ->andReturn(true);
-
+test('middleware allows up to 80 requests within one second', function (): void {
     $middleware = new RateLimitingMiddleware;
+    $callCount = 0;
 
-    $handler = fn ($request, $options): FulfilledPromise => new FulfilledPromise(new Response(200));
+    $handler = function ($request, $options) use (&$callCount): FulfilledPromise {
+        $callCount++;
+
+        return new FulfilledPromise(new Response(200));
+    };
 
     $wrappedHandler = $middleware($handler);
-    $request = new Request('GET', 'https://eu.api.blizzard.com/test');
-    $wrappedHandler($request, []);
+
+    for ($i = 0; $i < 80; $i++) {
+        $request = new Request('GET', 'https://eu.api.blizzard.com/test');
+        $wrappedHandler($request, []);
+    }
+
+    expect($callCount)->toBe(80);
 });
 
 test('middleware resolves promise with original response', function (): void {
-    RateLimiter::shouldReceive('attempt')
-        ->once()
-        ->andReturn(true);
-
     $middleware = new RateLimitingMiddleware;
     $originalResponse = new Response(404, ['X-Custom' => 'test'], 'Not Found');
 

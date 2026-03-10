@@ -211,6 +211,11 @@ class CrossCharacterProgress
             $factions = $reputations['factions'] ?? [];
 
             foreach ($factions as $faction) {
+                // Skip unstarted factions — merging raw: 0 data would pollute best standings
+                if (($faction['started'] ?? true) === false) {
+                    continue;
+                }
+
                 $factionId = is_int($faction['id'] ?? null) ? $faction['id'] : 0;
                 if ($factionId === 0) {
                     continue;

@@ -285,6 +285,64 @@ class Db2FactionExpansionMapper
         return $map;
     }
 
+    /** Expansion ID from which ALL factions are account-wide (Dragonflight+). */
+    private const ACCOUNT_WIDE_FROM_EXPANSION = 9;
+
+    /**
+     * Build set of account-wide faction IDs.
+     *
+     * Detected via: RenownCurrencyID, FriendshipRepID, or expansion >= Dragonflight.
+     *
+     * @return array<int, true>
+     */
+    public function buildAccountWideFactionIds(): array
+    {
+        $csvPath = storage_path('app/blizzard/faction.csv');
+        if (! File::exists($csvPath)) {
+            return [];
+        }
+
+        $handle = fopen($csvPath, 'r');
+        if ($handle === false) {
+            return [];
+        }
+
+        $headers = fgetcsv($handle, 0, ',', '"', '');
+        if ($headers === false) {
+            fclose($handle);
+
+            return [];
+        }
+
+        $idIdx = (int) array_search('ID', $headers, true);
+        $renownCurrencyIdx = (int) array_search('RenownCurrencyID', $headers, true);
+        $friendshipIdx = (int) array_search('FriendshipRepID', $headers, true);
+
+        $result = [];
+
+        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
+            $factionId = (int) $row[$idIdx];
+            $renownCurrencyId = (int) $row[$renownCurrencyIdx];
+            $friendshipRepId = (int) $row[$friendshipIdx];
+
+            if ($renownCurrencyId > 0 || $friendshipRepId > 0) {
+                $result[$factionId] = true;
+            }
+        }
+
+        fclose($handle);
+
+        // All factions from Midnight+ are account-wide
+        $expansionMap = $this->build();
+        foreach ($expansionMap as $factionId => $expansionId) {
+            if ($expansionId >= self::ACCOUNT_WIDE_FROM_EXPANSION) {
+                $result[$factionId] = true;
+            }
+        }
+
+        return $result;
+    }
+
     private function shouldExclude(string $name): bool
     {
         if (str_contains($name, '(parangon)')) {

@@ -25,6 +25,7 @@ class ReputationProgressAggregator
         $factionExpansionMap = $this->db2FactionExpansionMapper->build();
         $maxRenownMap = $this->db2FactionExpansionMapper->buildMaxRenownMap();
         $factionNamesMap = $this->db2FactionExpansionMapper->buildFactionNamesMap();
+        $accountWideFactionIds = $this->db2FactionExpansionMapper->buildAccountWideFactionIds();
         $reputationFactionMap = $this->addonDataParser->getReputationFactionMap();
 
         /** @var list<array<string, mixed>> $reputations */
@@ -70,6 +71,7 @@ class ReputationProgressAggregator
                 'renown_level' => $renownLevel,
                 'completed' => $completed,
                 'started' => true,
+                'account_wide' => $renownLevel > 0 || isset($accountWideFactionIds[$factionId]),
             ];
 
             $startedFactionIds[$factionId] = true;
@@ -121,6 +123,7 @@ class ReputationProgressAggregator
                 'renown_level' => 0,
                 'completed' => false,
                 'started' => false,
+                'account_wide' => isset($accountWideFactionIds[$factionId]),
             ];
         }
 
