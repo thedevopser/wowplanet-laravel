@@ -41,6 +41,9 @@ class AccountScoreProgress
     /** @var array<int, array<int, array{skill_points: int, max_skill_points: int}>> */
     public array $bestSkillPoints = [];
 
+    /** @var array{completed: int, total: int}|null */
+    public ?array $bestProfessionStats = null;
+
     /**
      * @param  list<array{realmSlug: string, name: string}>  $characters
      */
@@ -58,6 +61,7 @@ class AccountScoreProgress
 
         $this->mergeCollections($characterProfileDTO);
         $this->mergeProfessions($characterProfileDTO);
+        $this->trackBestProfessionStats($characterProfileDTO);
     }
 
     /**
@@ -80,6 +84,7 @@ class AccountScoreProgress
             'mountsCount' => count(array_filter($mounts, fn (array $m): bool => ! empty($m['is_completed']))),
             'petsCount' => count(array_filter($pets, fn (array $p): bool => ! empty($p['is_completed']))),
             'decorCount' => count(array_filter($decor, fn (array $d): bool => ! empty($d['is_completed']))),
+            'bestProfessionStats' => $this->bestProfessionStats,
             'characterCount' => $this->processed,
             'errors' => $this->errors,
             'cachedAt' => now()->toISOString(),
@@ -167,6 +172,32 @@ class AccountScoreProgress
 
         if (! isset($this->bestReputations[$expId]) || $repCompleted > $this->bestReputations[$expId]['completed']) {
             $this->bestReputations[$expId] = ['completed' => $repCompleted, 'total' => $repTotal];
+        }
+    }
+
+    private function trackBestProfessionStats(CharacterProfileDTO $characterProfileDTO): void
+    {
+        $recipeCompleted = 0;
+        $recipeTotal = 0;
+        $skillPoints = 0;
+        $skillMax = 0;
+
+        foreach ($characterProfileDTO->professions as $prof) {
+            /** @var array<int|string, array<string, mixed>> $expansions */
+            $expansions = is_array($prof['expansions'] ?? null) ? $prof['expansions'] : [];
+            foreach ($expansions as $expansion) {
+                $recipeCompleted += is_int($expansion['completed'] ?? null) ? $expansion['completed'] : 0;
+                $recipeTotal += is_int($expansion['total'] ?? null) ? $expansion['total'] : 0;
+                $skillPoints += is_int($expansion['skill_points'] ?? null) ? $expansion['skill_points'] : 0;
+                $skillMax += is_int($expansion['max_skill_points'] ?? null) ? $expansion['max_skill_points'] : 0;
+            }
+        }
+
+        $completed = $recipeTotal > 0 ? $recipeCompleted : $skillPoints;
+        $total = $recipeTotal > 0 ? $recipeTotal : $skillMax;
+
+        if ($total > 0 && ($this->bestProfessionStats === null || ($completed / $total) > ($this->bestProfessionStats['completed'] / max(1, $this->bestProfessionStats['total'])))) {
+            $this->bestProfessionStats = ['completed' => $completed, 'total' => $total];
         }
     }
 

@@ -173,6 +173,43 @@ describe('createAccountAggregator', () => {
         expect(prof.expansions[1].skill_points).toBe(90);
     });
 
+    it('bestProfessionStats tracks best single-character profession ratio', () => {
+        const agg = createAccountAggregator();
+        agg.mergeCharacter(char1);
+        agg.mergeCharacter(char2);
+
+        const profile = agg.getVirtualProfile();
+        // char1 professions: 2/10 = 20%, char2 professions: 5/8 = 62.5%
+        // bestProfessionStats should be char2's stats (higher ratio)
+        expect(profile.bestProfessionStats).toEqual({ completed: 5, total: 8 });
+    });
+
+    it('account score uses bestProfessionStats so account >= any character', () => {
+        const charA = {
+            mounts: [{ is_completed: true }], pets: [], decor: [],
+            collections: {
+                1: { quests: { total: 1, completed: 1, zones: [{ name: 'Z', items: [{ id: 1, is_completed: true }] }] }, achievements: { total: 0, completed: 0, categories: [] }, reputations: { completed: 0, total: 0 } },
+            },
+            professions: [{ profession_id: 1, expansions: { 1: { completed: 90, total: 100, skill_points: 0, max_skill_points: 0 } } }],
+        };
+        const charB = {
+            mounts: [{ is_completed: true }], pets: [], decor: [],
+            collections: {
+                1: { quests: { total: 1, completed: 0, zones: [{ name: 'Z', items: [{ id: 1, is_completed: false }] }] }, achievements: { total: 0, completed: 0, categories: [] }, reputations: { completed: 0, total: 0 } },
+            },
+            professions: [{ profession_id: 2, expansions: { 1: { completed: 10, total: 100, skill_points: 0, max_skill_points: 0 } } }],
+        };
+
+        const agg = createAccountAggregator();
+        agg.mergeCharacter(charA);
+        agg.mergeCharacter(charB);
+
+        const accountScore = agg.getScore();
+        // bestProfessionStats should be charA's 90/100 = 90%
+        // Without fix, union would give 100/200 = 50%
+        expect(accountScore.dimensions.professions.score).toBe(90);
+    });
+
     it('getScore returns computed score after merge', () => {
         const agg = createAccountAggregator();
         agg.mergeCharacter(char1);

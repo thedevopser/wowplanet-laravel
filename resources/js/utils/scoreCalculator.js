@@ -84,7 +84,9 @@ export function computeScore(character) {
     const mountStats = countCollectionItems(character.mounts || []);
     const petStats = countCollectionItems(character.pets || []);
     const decorStats = countCollectionItems(character.decor || []);
-    const professionStats = sumProfessionProgress(character.professions || []);
+    const professionStats = character.bestProfessionStats
+        ? { completed: character.bestProfessionStats.completed, total: character.bestProfessionStats.total }
+        : sumProfessionProgress(character.professions || []);
 
     const dimensions = {
         quests: { ...questStats, score: dimensionScore(questStats.completed, questStats.total) },
@@ -126,4 +128,4 @@ export function getScoreTailwindColor(score) {
     return 'text-red-400';
 }
 
-export { WEIGHTS, DIMENSION_LABELS, DIMENSION_COLORS };
+export { WEIGHTS, DIMENSION_LABELS, DIMENSION_COLORS, sumProfessionProgress };

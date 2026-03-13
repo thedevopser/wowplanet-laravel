@@ -1,11 +1,11 @@
-import { computeScore, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS } from './scoreCalculator';
+import { computeScore, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS, sumProfessionProgress } from './scoreCalculator';
 
 /**
  * Incrementally aggregate multiple character profiles into one virtual "account" profile.
  * - Mounts/Pets/Decor: account-wide, taken from first character.
  * - Quests/Achievements: union of completed item IDs across all characters.
  * - Reputations: best completed count per expansion.
- * - Professions: union across characters (different chars have different profs).
+ * - Professions: union across characters, score uses best single-character ratio.
  */
 export function createAccountAggregator() {
     let collectionsTotals = null;    // { expId: { quests: { total, zones }, achievements: { total, categories } } }
@@ -16,6 +16,7 @@ export function createAccountAggregator() {
     let accountPets = null;
     let accountDecor = null;
     let professionMap = {};          // { profId: professionData }
+    let bestProfessionStats = null;  // { completed, total } — best ratio among all characters
     let loadedCount = 0;
 
     function mergeCharacter(character) {
@@ -64,7 +65,17 @@ export function createAccountAggregator() {
             }
         }
 
-        // Professions: union across characters
+        // Professions: track best single-character ratio for scoring
+        const charProfStats = sumProfessionProgress(character.professions || []);
+        if (charProfStats.total > 0) {
+            const charRatio = charProfStats.completed / charProfStats.total;
+            const bestRatio = bestProfessionStats ? bestProfessionStats.completed / Math.max(1, bestProfessionStats.total) : -1;
+            if (charRatio > bestRatio) {
+                bestProfessionStats = { completed: charProfStats.completed, total: charProfStats.total };
+            }
+        }
+
+        // Professions: union across characters (for display)
         for (const prof of (character.professions || [])) {
             const pid = prof.profession_id;
             if (!professionMap[pid]) {
@@ -137,6 +148,7 @@ export function createAccountAggregator() {
             pets: accountPets || [],
             decor: accountDecor || [],
             professions: Object.values(professionMap),
+            bestProfessionStats,
             mountsCount: (accountMounts || []).filter(m => m.is_completed).length,
             petsCount: (accountPets || []).filter(p => p.is_completed).length,
             decorCount: (accountDecor || []).filter(d => d.is_completed).length,

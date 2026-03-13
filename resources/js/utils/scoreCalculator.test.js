@@ -145,6 +145,22 @@ describe('computeScore', () => {
         expect(result.dimensions.quests.score).toBe(30);
     });
 
+    it('uses bestProfessionStats when present instead of summing professions', () => {
+        const character = {
+            professions: [
+                { expansions: { 1: { completed: 2, total: 10, skill_points: 0, max_skill_points: 0 } } },
+                { expansions: { 1: { completed: 5, total: 8, skill_points: 0, max_skill_points: 0 } } },
+            ],
+            bestProfessionStats: { completed: 5, total: 8 },
+        };
+
+        const result = computeScore(character);
+        // Should use bestProfessionStats (5/8 = 62.5%) instead of sum (7/18 = 38.9%)
+        expect(result.dimensions.professions.completed).toBe(5);
+        expect(result.dimensions.professions.total).toBe(8);
+        expect(result.dimensions.professions.score).toBeCloseTo(62.5);
+    });
+
     it('falls back to skill_points when recipeTotal is 0', () => {
         const character = {
             professions: [{ expansions: { 1: { completed: 0, total: 0, skill_points: 75, max_skill_points: 100 } } }],
