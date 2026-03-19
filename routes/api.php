@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
+use App\Http\Controllers\CharacterTaskController;
 use App\Http\Controllers\DatabaseApiController;
 use App\Http\Controllers\UserCharacterController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,11 @@ Route::middleware('throttle:authenticated')->group(function (): void {
     Route::get('/account/cross-character', [UserCharacterController::class, 'crossCharacter']);
     Route::get('/account/cross-character/{jobId}', [UserCharacterController::class, 'crossCharacterStatus']);
     Route::get('/account/cross-character-data', [UserCharacterController::class, 'crossCharacterData']);
+
+    Route::get('/character-tasks', [CharacterTaskController::class, 'index']);
+    Route::post('/character-tasks', [CharacterTaskController::class, 'store']);
+    Route::put('/character-tasks/{id}', [CharacterTaskController::class, 'update']);
+    Route::delete('/character-tasks/{id}', [CharacterTaskController::class, 'destroy']);
 });
 
 Route::middleware(['throttle:authenticated', 'admin'])->prefix('admin')->group(function (): void {
