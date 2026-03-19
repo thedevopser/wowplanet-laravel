@@ -1,0 +1,130 @@
+import { defineStore, acceptHMRUpdate } from 'pinia';
+import axios from 'axios';
+
+export const useTaskStore = defineStore('tasks', {
+    state: () => ({
+        tasks: [],
+        loading: false,
+        sidebarOpen: localStorage.getItem('wowplanet-tasks-sidebar') === 'true',
+    }),
+
+    getters: {
+        charactersWithTasks(state) {
+            const seen = new Set();
+            const result = [];
+            for (const task of state.tasks) {
+                const key = `${task.realm_slug}|${task.character_name}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    result.push({ realm_slug: task.realm_slug, character_name: task.character_name });
+                }
+            }
+            return result;
+        },
+
+        totalPendingCount(state) {
+            return state.tasks.filter(t => !t.is_completed).length;
+        },
+
+        characterTasks(state) {
+            return (realmSlug, characterName) =>
+                state.tasks
+                    .filter(t => t.realm_slug === realmSlug && t.character_name === characterName)
+                    .sort((a, b) => (a.reset_type === 'daily' ? 0 : 1) - (b.reset_type === 'daily' ? 0 : 1));
+        },
+
+        pendingCount(state) {
+            return (realmSlug, characterName) =>
+                state.tasks.filter(
+                    t => t.realm_slug === realmSlug && t.character_name === characterName && !t.is_completed
+                ).length;
+        },
+    },
+
+    actions: {
+        async fetchTasks() {
+            this.loading = true;
+            try {
+                const { data } = await axios.get('/api/character-tasks');
+                this.tasks = data;
+                this.applyResets();
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async createTask(realmSlug, characterName, taskName, resetType) {
+            const { data } = await axios.post('/api/character-tasks', {
+                realm_slug: realmSlug,
+                character_name: characterName,
+                name: taskName,
+                reset_type: resetType,
+            });
+            this.tasks.push(data);
+        },
+
+        async toggleTask(taskId) {
+            const { data } = await axios.put(`/api/character-tasks/${taskId}`);
+            const index = this.tasks.findIndex(t => t.id === taskId);
+            if (index !== -1) {
+                this.tasks[index] = data;
+            }
+        },
+
+        async deleteTask(taskId) {
+            await axios.delete(`/api/character-tasks/${taskId}`);
+            this.tasks = this.tasks.filter(t => t.id !== taskId);
+        },
+
+        applyResets() {
+            const now = new Date();
+            const dailyThreshold = this._getDailyThreshold(now);
+            const weeklyThreshold = this._getWeeklyThreshold(now);
+
+            for (const task of this.tasks) {
+                if (!task.is_completed || !task.completed_at) continue;
+
+                const completedAt = new Date(task.completed_at);
+                const threshold = task.reset_type === 'daily' ? dailyThreshold : weeklyThreshold;
+
+                if (completedAt < threshold) {
+                    task.is_completed = false;
+                    task.completed_at = null;
+                    // Fire-and-forget reset to API
+                    axios.put(`/api/character-tasks/${task.id}`);
+                }
+            }
+        },
+
+        toggleSidebar() {
+            this.sidebarOpen = !this.sidebarOpen;
+            localStorage.setItem('wowplanet-tasks-sidebar', String(this.sidebarOpen));
+        },
+
+        _getDailyThreshold(now) {
+            const threshold = new Date(now);
+            threshold.setHours(5, 0, 0, 0);
+            if (now < threshold) {
+                threshold.setDate(threshold.getDate() - 1);
+            }
+            return threshold;
+        },
+
+        _getWeeklyThreshold(now) {
+            const threshold = new Date(now);
+            threshold.setHours(5, 0, 0, 0);
+            // Go back to last Wednesday
+            const day = threshold.getDay(); // 0=Sun, 3=Wed
+            const daysBack = (day + 4) % 7; // days since last Wednesday
+            threshold.setDate(threshold.getDate() - daysBack);
+            if (now < threshold) {
+                threshold.setDate(threshold.getDate() - 7);
+            }
+            return threshold;
+        },
+    },
+});
+
+if (import.meta.hot) {
+    import.meta.hot.accept(acceptHMRUpdate(useTaskStore, import.meta.hot));
+}

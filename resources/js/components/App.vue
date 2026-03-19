@@ -21,16 +21,21 @@
         </main>
 
         <AppFooter />
+
+        <TaskSidebar v-if="store.isAuthenticated" />
     </div>
 </template>
 
 <script setup>
 import { onMounted, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
+import { useTaskStore } from '../stores/tasks';
 import AppHeader from './AppHeader.vue';
 import AppFooter from './AppFooter.vue';
+import TaskSidebar from './TaskSidebar.vue';
 
 const store = useCharacterStore();
+const taskStore = useTaskStore();
 
 function applyTheme(theme) {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -39,6 +44,12 @@ function applyTheme(theme) {
 applyTheme(store.theme);
 
 watch(() => store.theme, applyTheme);
+
+watch(() => store.isAuthenticated, (authenticated) => {
+    if (authenticated) {
+        taskStore.fetchTasks();
+    }
+});
 
 onMounted(() => {
     store.checkAuth();
