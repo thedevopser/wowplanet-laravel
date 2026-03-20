@@ -255,6 +255,12 @@ class CharacterSeoService
                 ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
                 ->setPriority(0.3),
         );
+        $sitemap->add(
+            Url::create($appUrl.'/faq')
+                ->setLastModificationDate($now)
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
+                ->setPriority(0.3),
+        );
 
         return $sitemap;
     }

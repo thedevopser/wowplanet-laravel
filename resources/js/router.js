@@ -6,6 +6,7 @@ import ClassStatsPage from './pages/ClassStatsPage.vue';
 import AccountScorePage from './pages/AccountScorePage.vue';
 import PrivacyPage from './pages/PrivacyPage.vue';
 import CguPage from './pages/CguPage.vue';
+import FaqPage from './pages/FaqPage.vue';
 
 const routes = [
     {
@@ -91,6 +92,12 @@ const routes = [
         name: 'cgu',
         component: CguPage,
         meta: { title: 'CGU - WowPlanet' },
+    },
+    {
+        path: '/faq',
+        name: 'faq',
+        component: FaqPage,
+        meta: { title: 'FAQ - WowPlanet' },
     },
     {
         path: '/admin',
