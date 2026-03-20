@@ -44,6 +44,13 @@ test('character page returns view for valid character', function (): void {
         'canonicalUrl' => 'https://example.com/character/hyjal/thrall',
         'jsonLd' => '{}',
     ]);
+    /** @var \Mockery\Expectation $expCached */
+    $expCached = $mock->shouldReceive('getCachedCharacterData');
+    $expCached->once()->with('hyjal', 'thrall')->andReturn([
+        'name' => 'Thrall',
+        'realm' => 'Hyjal',
+        'found' => false,
+    ]);
 
     $this->get('/character/hyjal/thrall')->assertOk();
 });

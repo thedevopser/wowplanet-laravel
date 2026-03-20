@@ -1,6 +1,10 @@
 {
     "name": "WowPlanet",
     "short_name": "WowPlanet",
+    "description": "Suivi de progression World of Warcraft en français",
+    "lang": "fr",
+    "start_url": "/",
+    "scope": "/",
     "icons": [
         {
             "src": "/android-chrome-192x192.png",

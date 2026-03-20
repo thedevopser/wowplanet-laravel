@@ -49,6 +49,18 @@
         body {
             font-family: 'Outfit', sans-serif;
         }
+
+        #seo-content {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 
     @production
@@ -57,7 +69,18 @@
 </head>
 
 <body class="antialiased">
-    <div id="app"></div>
+    <div id="app">
+        @if(!empty($seo['serverHtml']))
+        <div id="seo-content">{!! $seo['serverHtml'] !!}</div>
+        @endif
+    </div>
+    <noscript>
+        <div style="max-width:900px;margin:2rem auto;padding:1rem;color:#94a3b8;font-family:sans-serif">
+            <h1>WowPlanet</h1>
+            <p>{{ $seo['description'] }}</p>
+            <p>Ce site nécessite JavaScript pour fonctionner pleinement.</p>
+        </div>
+    </noscript>
 </body>
 
 </html>

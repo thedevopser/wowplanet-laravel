@@ -170,6 +170,19 @@ class CharacterSeoService
         ];
     }
 
+    /**
+     * @return array<string, string|int|bool>
+     */
+    public function getCachedCharacterData(string $realm, string $name): array
+    {
+        $cacheKey = sprintf('seo_character_%s_%s', mb_strtolower($realm), mb_strtolower($name));
+
+        /** @var array<string, string|int|bool>|null $data */
+        $data = Cache::get($cacheKey);
+
+        return $data ?? ['name' => ucfirst($name), 'realm' => ucfirst($realm), 'found' => false];
+    }
+
     public function generateSitemapIndex(): string
     {
         /** @var string $xml */
@@ -209,9 +222,12 @@ class CharacterSeoService
         $configUrl = config('app.url', '');
         $appUrl = rtrim($configUrl, '/');
 
+        $now = now();
+
         $sitemap = Sitemap::create()
             ->add(
                 Url::create($appUrl)
+                    ->setLastModificationDate($now)
                     ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
                     ->setPriority(1.0),
             );
@@ -221,10 +237,24 @@ class CharacterSeoService
         foreach ($databaseSeoService->getSitemapUrls() as $entry) {
             $sitemap->add(
                 Url::create($entry['url'])
+                    ->setLastModificationDate($now)
                     ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
                     ->setPriority(0.7),
             );
         }
+
+        $sitemap->add(
+            Url::create($appUrl.'/privacy')
+                ->setLastModificationDate($now)
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
+                ->setPriority(0.3),
+        );
+        $sitemap->add(
+            Url::create($appUrl.'/cgu')
+                ->setLastModificationDate($now)
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
+                ->setPriority(0.3),
+        );
 
         return $sitemap;
     }

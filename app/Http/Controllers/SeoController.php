@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\CharacterSeoService;
+use App\Application\Services\SeoContentRenderer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
@@ -13,13 +14,15 @@ class SeoController extends Controller
 {
     public function __construct(
         private readonly CharacterSeoService $characterSeoService,
+        private readonly SeoContentRenderer $seoContentRenderer,
     ) {}
 
     public function spa(): View
     {
-        return view('welcome', [
-            'seo' => $this->characterSeoService->getHomeMeta(),
-        ]);
+        $seo = $this->characterSeoService->getHomeMeta();
+        $seo['serverHtml'] = $this->seoContentRenderer->renderHome($this->appUrl());
+
+        return view('welcome', ['seo' => $seo]);
     }
 
     public function characterPage(string $realm, string $name): View|RedirectResponse
@@ -31,9 +34,15 @@ class SeoController extends Controller
             return redirect(sprintf('/character/%s/%s', $normalizedRealm, $normalizedName), 301);
         }
 
-        return view('welcome', [
-            'seo' => $this->characterSeoService->getCharacterMeta($realm, $name),
-        ]);
+        $seo = $this->characterSeoService->getCharacterMeta($realm, $name);
+        $seo['serverHtml'] = $this->seoContentRenderer->renderCharacter(
+            $this->appUrl(),
+            $this->characterSeoService->getCachedCharacterData($realm, $name),
+            $realm,
+            $name,
+        );
+
+        return view('welcome', ['seo' => $seo]);
     }
 
     public function sitemap(): Response
@@ -75,6 +84,7 @@ class SeoController extends Controller
             'Allow: /base-de-donnees/',
             'Disallow: /api/',
             'Disallow: /auth/',
+            'Disallow: /admin',
             'Disallow: /my-characters',
             'Disallow: /my-score',
             'Disallow: /class-stats',
@@ -86,5 +96,13 @@ class SeoController extends Controller
         return response($content, 200, [
             'Content-Type' => 'text/plain',
         ]);
+    }
+
+    private function appUrl(): string
+    {
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+
+        return rtrim($configUrl, '/');
     }
 }
