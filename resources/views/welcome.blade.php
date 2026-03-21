@@ -28,7 +28,11 @@
     <meta name="twitter:image" content="{{ $seo['ogImage'] }}">
 
     @if(!empty($seo['jsonLd']))
-    <script type="application/ld+json">{!! $seo['jsonLd'] !!}</script>
+    <script type="application/ld+json">
+        {
+            !!$seo['jsonLd'] !!
+        }
+    </script>
     @endif
 
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -62,10 +66,6 @@
             border: 0;
         }
     </style>
-
-    @production
-    <script defer src="https://umami.wowplanet.fr/script.js" data-website-id="70643c68-1a19-40ef-9a24-dc944c9a6110"></script>
-    @endproduction
 </head>
 
 <body class="antialiased">
