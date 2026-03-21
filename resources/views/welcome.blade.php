@@ -49,6 +49,10 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
+    @production
+    <script defer src="https://umami.wowplanet.fr/script.js" data-website-id="be8977fd-a0fe-4a4c-867d-d75f83101232"></script>
+    @endproduction
+
     <style>
         body {
             font-family: 'Outfit', sans-serif;
