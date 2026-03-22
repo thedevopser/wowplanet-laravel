@@ -283,6 +283,7 @@ import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useCharacterStore } from '../stores/character';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import axios from 'axios';
 
 marked.setOptions({
@@ -452,7 +453,7 @@ const currentColorHex = computed(() => {
 
 const renderedDescription = computed(() => {
     if (!discord.description) return '';
-    return marked(discord.description);
+    return DOMPurify.sanitize(marked(discord.description));
 });
 
 const addField = () => {
