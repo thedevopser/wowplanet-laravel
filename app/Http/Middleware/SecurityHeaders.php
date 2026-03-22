@@ -30,7 +30,7 @@ final class SecurityHeaders
                 ."style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 ."font-src 'self' https://fonts.gstatic.com; "
                 ."img-src 'self' https://wow.zamimg.com https://render.worldofwarcraft.com data:; "
-                ."connect-src 'self'; "
+                ."connect-src 'self' https://umami.wowplanet.fr; "
                 ."frame-ancestors 'none';"
             );
         }
