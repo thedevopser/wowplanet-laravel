@@ -133,7 +133,7 @@ class CharacterProfileService
         $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
         unset($responses);
 
-        $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base, $mythicKeystoneProfile);
+        $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base);
 
         return [
             'summary' => $summary,
@@ -293,34 +293,20 @@ class CharacterProfileService
     }
 
     /**
-     * @param  array<string, mixed>  $mythicKeystoneProfile
      * @return array<string, mixed>
      */
-    private function fetchCurrentMythicSeason(string $base, array $mythicKeystoneProfile): array
+    private function fetchCurrentMythicSeason(string $base): array
     {
-        /** @var list<array<string, mixed>> $seasons */
-        $seasons = $mythicKeystoneProfile['seasons'] ?? [];
+        $currentSeasonId = $this->blizzardApiClient->getCurrentMythicSeasonId();
 
-        if ($seasons === []) {
+        if ($currentSeasonId === 0) {
             return [];
         }
-
-        /** @var list<int> $seasonIds */
-        $seasonIds = array_values(array_filter(
-            array_map(fn (array $s): int => is_int($s['id'] ?? null) ? $s['id'] : 0, $seasons),
-            fn (int $id): bool => $id > 0,
-        ));
-
-        if ($seasonIds === []) {
-            return [];
-        }
-
-        $maxSeasonId = max($seasonIds);
 
         try {
             /** @var array<string, mixed> $seasonData */
             $seasonData = $this->blizzardApiClient->get(
-                $base.'/mythic-keystone-profile/season/'.$maxSeasonId,
+                $base.'/mythic-keystone-profile/season/'.$currentSeasonId,
             );
 
             return $seasonData;

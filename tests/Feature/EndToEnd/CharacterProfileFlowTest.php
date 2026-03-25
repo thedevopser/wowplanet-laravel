@@ -60,6 +60,10 @@ test('full character profile flow', function (): void {
         'faction' => ['name' => 'Horde'],
     ]);
 
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+
     // All other endpoints are fetched async
     /** @var \Mockery\Expectation $asyncExp */
     $asyncExp = $mock->shouldReceive('getAsync');

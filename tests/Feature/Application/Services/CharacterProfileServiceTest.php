@@ -79,6 +79,10 @@ test('get profile returns correct dto', function (): void {
             'faction' => ['name' => 'Horde'],
         ]);
 
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+
     $userCharMock = $this->mock(UserCharacterService::class);
     /** @var \Mockery\Expectation $classIconsExp */
     $classIconsExp = $userCharMock->shouldReceive('getClassIcons');
@@ -156,6 +160,10 @@ test('aggregate progress groups by expansion and zone', function (): void {
         'faction' => ['name' => 'Alliance'],
     ]);
 
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 
     mockAsyncEndpoints($mock, [
@@ -223,6 +231,10 @@ test('aggregate progress filters quests by character faction', function (): void
         'faction' => ['name' => 'Horde'],
     ]);
 
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 
     mockAsyncEndpoints($mock, [
@@ -266,6 +278,10 @@ test('get profile handles decor api 404 gracefully', function (): void {
         'equipped_item_level' => 600,
         'faction' => ['name' => 'Alliance'],
     ]);
+
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
 
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 
