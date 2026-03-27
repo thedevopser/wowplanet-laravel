@@ -128,7 +128,7 @@ class DatabaseSeoService
                 ->count();
 
             $expansionName = $expansion->toString();
-            $title = sprintf('Hauts-faits WoW %s - Liste complète en français | WowPlanet', $expansionName);
+            $title = sprintf('Hauts-faits WoW %s — %d | WowPlanet', $expansionName, $count);
             $description = sprintf(
                 'Tous les %d hauts-faits de %s dans World of Warcraft en français. Classés par catégorie avec points et faction.',
                 $count,
@@ -142,7 +142,7 @@ class DatabaseSeoService
             ];
         } else {
             $count = WowAchievement::query()->where('is_active', true)->count();
-            $title = 'Hauts-faits WoW - Liste des '.$count.' hauts-faits en français | WowPlanet';
+            $title = sprintf('Hauts-faits WoW — %s hauts-faits | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Tous les %d hauts-faits de World of Warcraft en français. Classés par extension et catégorie avec points. La référence francophone.',
                 $count,
@@ -191,7 +191,7 @@ class DatabaseSeoService
                     return null;
                 }
 
-                $title = sprintf('Quêtes WoW %s (%s) - %d quêtes en français | WowPlanet', $zoneName, $expansionName, $count);
+                $title = sprintf('Quêtes %s (%s) — %d quêtes | WowPlanet', $zoneName, $expansionName, $count);
                 $description = sprintf(
                     'Liste des %d quêtes de %s (%s) dans World of Warcraft en français. Vérifiez votre progression et trouvez les quêtes manquantes.',
                     $count,
@@ -207,7 +207,7 @@ class DatabaseSeoService
                 ];
             } else {
                 $count = $query->count();
-                $title = sprintf('Quêtes WoW %s - %d quêtes en français | WowPlanet', $expansionName, $count);
+                $title = sprintf('Quêtes WoW %s — %d quêtes | WowPlanet', $expansionName, $count);
                 $description = sprintf(
                     'Toutes les %d quêtes de %s dans World of Warcraft en français. Triées par zone avec liens Wowhead.',
                     $count,
@@ -222,7 +222,7 @@ class DatabaseSeoService
             }
         } else {
             $count = WowQuest::query()->where('is_active', true)->count();
-            $title = 'Quêtes WoW - Liste des '.number_format($count, 0, ',', ' ').' quêtes en français | WowPlanet';
+            $title = sprintf('Quêtes WoW — %s quêtes | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Toutes les %s quêtes de World of Warcraft en français. Triées par extension et zone. La référence francophone.',
                 number_format($count, 0, ',', ' '),
@@ -261,7 +261,7 @@ class DatabaseSeoService
                 return null;
             }
 
-            $title = sprintf('Mascottes WoW %s - Liste complète en français | WowPlanet', $category);
+            $title = sprintf('Mascottes WoW %s — %d mascottes | WowPlanet', $category, $count);
             $description = sprintf(
                 'Découvrez les %d mascottes de combat %s dans World of Warcraft en français. Liste complète avec source et lien Wowhead.',
                 $count,
@@ -275,7 +275,7 @@ class DatabaseSeoService
             ];
         } else {
             $count = $builder->count();
-            $title = 'Mascottes WoW - Liste complète des '.$count.' mascottes en français | WowPlanet';
+            $title = sprintf('Mascottes WoW — %s mascottes | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Toutes les %d mascottes de combat de World of Warcraft en français. Triées par catégorie avec source d\'obtention et lien Wowhead.',
                 $count,
@@ -314,7 +314,7 @@ class DatabaseSeoService
                 return null;
             }
 
-            $title = sprintf('Décorations WoW %s - Liste complète en français | WowPlanet', $category);
+            $title = sprintf('Décorations WoW %s — %d | WowPlanet', $category, $count);
             $description = sprintf(
                 'Découvrez les %d décorations %s dans World of Warcraft en français. Liste complète avec source et lien Wowhead.',
                 $count,
@@ -328,7 +328,7 @@ class DatabaseSeoService
             ];
         } else {
             $count = $builder->count();
-            $title = 'Décorations WoW - Liste complète des '.$count.' décorations en français | WowPlanet';
+            $title = sprintf('Décorations WoW — %s décorations | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Toutes les %d décorations de World of Warcraft en français. Triées par catégorie avec source d\'obtention et lien Wowhead.',
                 $count,
@@ -386,7 +386,7 @@ class DatabaseSeoService
         } else {
             $professionCount = WowProfession::query()->where('is_active', true)->count();
             $recipeCount = WowRecipe::query()->where('is_active', true)->count();
-            $title = 'Professions WoW - '.$professionCount.' professions et '.number_format($recipeCount, 0, ',', ' ').' recettes en français | WowPlanet';
+            $title = sprintf('Professions WoW — %d métiers, %s recettes | WowPlanet', $professionCount, number_format($recipeCount, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Toutes les %d professions de World of Warcraft en français avec %s recettes. Classées par type et extension. La référence francophone.',
                 $professionCount,
