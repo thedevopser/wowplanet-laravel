@@ -78,3 +78,22 @@ test('robots returns plain text', function (): void {
         ->toContain('Disallow: /api/')
         ->toContain('Sitemap:');
 });
+
+test('faq page returns ok with unique meta', function (): void {
+    $this->get('/faq')
+        ->assertOk()
+        ->assertSee('FAQ')
+        ->assertSee('Questions fréquentes');
+});
+
+test('cgu page returns ok with unique meta', function (): void {
+    $this->get('/cgu')
+        ->assertOk()
+        ->assertSee('Conditions');
+});
+
+test('privacy page returns ok with unique meta', function (): void {
+    $this->get('/privacy')
+        ->assertOk()
+        ->assertSee('Politique de confidentialité');
+});

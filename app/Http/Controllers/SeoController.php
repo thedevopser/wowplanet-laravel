@@ -25,6 +25,30 @@ class SeoController extends Controller
         return view('welcome', ['seo' => $seo]);
     }
 
+    public function faqPage(): View
+    {
+        $seo = $this->characterSeoService->getStaticPageMeta('faq');
+        $seo['serverHtml'] = '';
+
+        return view('welcome', ['seo' => $seo]);
+    }
+
+    public function cguPage(): View
+    {
+        $seo = $this->characterSeoService->getStaticPageMeta('cgu');
+        $seo['serverHtml'] = '';
+
+        return view('welcome', ['seo' => $seo]);
+    }
+
+    public function privacyPage(): View
+    {
+        $seo = $this->characterSeoService->getStaticPageMeta('privacy');
+        $seo['serverHtml'] = '';
+
+        return view('welcome', ['seo' => $seo]);
+    }
+
     public function characterPage(string $realm, string $name): View|RedirectResponse
     {
         $normalizedRealm = mb_strtolower($realm);

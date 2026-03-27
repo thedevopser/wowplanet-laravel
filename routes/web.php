@@ -23,4 +23,8 @@ Route::get('/base-de-donnees/mascottes/{category?}', [DatabaseController::class,
 Route::get('/base-de-donnees/decorations/{category?}', [DatabaseController::class, 'decors']);
 Route::get('/base-de-donnees/professions/{profession?}', [DatabaseController::class, 'professions']);
 
+Route::get('/faq', [SeoController::class, 'faqPage']);
+Route::get('/cgu', [SeoController::class, 'cguPage']);
+Route::get('/privacy', [SeoController::class, 'privacyPage']);
+
 Route::get('/{any?}', [SeoController::class, 'spa'])->where('any', '^(?!api/).*$');

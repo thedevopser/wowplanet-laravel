@@ -45,6 +45,50 @@ class CharacterSeoService
     /**
      * @return array<string, string|null>
      */
+    public function getStaticPageMeta(string $page): array
+    {
+        /** @var string $configUrl */
+        $configUrl = config('app.url', '');
+        $appUrl = rtrim($configUrl, '/');
+
+        [$title, $description] = match ($page) {
+            'faq' => [
+                'FAQ - Questions fréquentes | WowPlanet',
+                'Réponses aux questions fréquentes sur WowPlanet : import de personnages, score compte, tâches quotidiennes et base de données WoW.',
+            ],
+            'cgu' => [
+                'Conditions générales d\'utilisation | WowPlanet',
+                'Conditions générales d\'utilisation du site WowPlanet.',
+            ],
+            'privacy' => [
+                'Politique de confidentialité | WowPlanet',
+                'Politique de confidentialité et gestion des données personnelles sur WowPlanet.',
+            ],
+            default => [
+                'WowPlanet',
+                'WowPlanet - Suivi de progression World of Warcraft.',
+            ],
+        };
+
+        $canonicalUrl = $appUrl.'/'.$page;
+        $jsonLd = $page === 'faq' ? $this->getFaqJsonLd($appUrl) : null;
+
+        return [
+            'title' => $title,
+            'description' => $description,
+            'ogTitle' => $title,
+            'ogDescription' => $description,
+            'ogImage' => $appUrl.'/images/og-default.png',
+            'ogUrl' => $canonicalUrl,
+            'ogType' => 'website',
+            'canonicalUrl' => $canonicalUrl,
+            'jsonLd' => $jsonLd,
+        ];
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
     public function getCharacterMeta(string $realm, string $name): array
     {
         /** @var string $configUrl */
@@ -374,6 +418,58 @@ class CharacterSeoService
             'about' => [
                 '@type' => 'VideoGame',
                 'name' => 'World of Warcraft',
+            ],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+    }
+
+    private function getFaqJsonLd(string $appUrl): string
+    {
+        return (string) json_encode([
+            '@context' => 'https://schema.org',
+            '@type' => 'FAQPage',
+            'url' => $appUrl.'/faq',
+            'inLanguage' => 'fr',
+            'mainEntity' => [
+                [
+                    '@type' => 'Question',
+                    'name' => "Qu'est-ce que WowPlanet ?",
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => 'WowPlanet est un site fan gratuit de suivi de progression pour World of Warcraft. Il permet de visualiser la progression de vos personnages et de comparer vos accomplissements avec la base de données complète du jeu, entièrement en français.',
+                    ],
+                ],
+                [
+                    '@type' => 'Question',
+                    'name' => 'Comment importer mes personnages ?',
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => 'Cliquez sur « Se connecter avec Battle.net » en haut du site. Une fois authentifié, tous vos personnages sont automatiquement importés et synchronisés.',
+                    ],
+                ],
+                [
+                    '@type' => 'Question',
+                    'name' => "Qu'est-ce que le score compte ?",
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => 'Le score compte est une note globale sur 100 qui évalue votre progression sur l\'ensemble de vos personnages : quêtes, hauts-faits, montures, mascottes, métiers, décorations et réputations.',
+                    ],
+                ],
+                [
+                    '@type' => 'Question',
+                    'name' => 'Peut-on utiliser le site sans se connecter ?',
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => 'Oui. La base de données complète et la recherche de personnages sont accessibles sans connexion. La connexion Battle.net est nécessaire uniquement pour importer vos propres personnages.',
+                    ],
+                ],
+                [
+                    '@type' => 'Question',
+                    'name' => 'Comment fonctionnent les tâches quotidiennes ?',
+                    'acceptedAnswer' => [
+                        '@type' => 'Answer',
+                        'text' => 'WowPlanet permet de créer des tâches personnalisées pour chacun de vos personnages. Les tâches « daily » se réinitialisent chaque jour à 5h, les « weekly » chaque mercredi à 5h.',
+                    ],
+                ],
             ],
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
     }
