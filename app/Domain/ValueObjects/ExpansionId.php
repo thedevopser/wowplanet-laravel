@@ -72,6 +72,24 @@ readonly class ExpansionId
         };
     }
 
+    public function toOrdinal(): string
+    {
+        return match ($this->value) {
+            self::CLASSIC => 'le jeu original',
+            self::BURNING_CRUSADE => 'la 1re extension',
+            self::WRATH_OF_THE_LICH_KING => 'la 2e extension',
+            self::CATACLYSM => 'la 3e extension',
+            self::MISTS_OF_PANDARIA => 'la 4e extension',
+            self::WARLORDS_OF_DRAENOR => 'la 5e extension',
+            self::LEGION => 'la 6e extension',
+            self::BATTLE_FOR_AZEROTH => 'la 7e extension',
+            self::SHADOWLANDS => 'la 8e extension',
+            self::DRAGONFLIGHT => 'la 9e extension',
+            self::THE_WAR_WITHIN => 'la 10e extension',
+            self::MIDNIGHT => 'la 11e extension',
+        };
+    }
+
     public function toSlug(): string
     {
         return self::SLUG_MAP[$this->value];

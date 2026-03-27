@@ -94,6 +94,17 @@ class SeoContentRenderer
                 ->pluck('name_fr')
                 ->all();
 
+            /** @var array<string, int> $sourceCounts */
+            $sourceCounts = WowMount::query()->where('is_active', true)
+                ->where('category', $category)
+                ->whereNotNull('source')
+                ->selectRaw('source, count(*) as total')
+                ->groupBy('source')
+                ->pluck('total', 'source')
+                ->all();
+
+            $sourceText = $this->formatSourceSummary($sourceCounts);
+
             return $this->wrap(
                 sprintf('<h1>Montures WoW %s — %d montures</h1>', e($category), count($items))
                 .$this->breadcrumb($appUrl, [
@@ -101,6 +112,7 @@ class SeoContentRenderer
                     ['Montures', $dbUrl.'/montures'],
                     [$category, $dbUrl.'/montures/'.$categorySlug],
                 ])
+                .sprintf('<p>Retrouvez les %d montures %s de World of Warcraft en français.%s</p>', count($items), e($category), $sourceText)
                 .$this->itemList($items),
             );
         }
@@ -121,7 +133,7 @@ class SeoContentRenderer
                 ['Base de données', $dbUrl],
                 ['Montures', $dbUrl.'/montures'],
             ])
-            .'<p>Toutes les montures de World of Warcraft en français, triées par catégorie.</p>'
+            .sprintf('<p>Retrouvez toutes les montures de World of Warcraft en français, classées en %d catégories. Chaque monture est liée à sa fiche Wowhead.</p>', count($categories))
             .$this->categoryLinks($dbUrl.'/montures', $categories),
         );
     }
@@ -143,6 +155,10 @@ class SeoContentRenderer
                 ->pluck('name_fr')
                 ->all();
 
+            $totalPoints = (int) WowAchievement::query()->where('is_active', true)
+                ->where('expansion_id', $expansion->value)
+                ->sum('points');
+
             return $this->wrap(
                 sprintf('<h1>Hauts-faits WoW %s — %d hauts-faits</h1>', e($expansion->toString()), count($items))
                 .$this->breadcrumb($appUrl, [
@@ -150,6 +166,13 @@ class SeoContentRenderer
                     ['Hauts-faits', $dbUrl.'/hauts-faits'],
                     [$expansion->toString(), $dbUrl.'/hauts-faits/'.$expansionSlug],
                 ])
+                .sprintf(
+                    '<p>%s est %s de World of Warcraft. Elle contient %d hauts-faits pour un total de %s points.</p>',
+                    e($expansion->toString()),
+                    $expansion->toOrdinal(),
+                    count($items),
+                    number_format($totalPoints, 0, ',', "\u{202f}"),
+                )
                 .$this->itemList($items),
             );
         }
@@ -225,7 +248,13 @@ class SeoContentRenderer
                     ['Quêtes', $dbUrl.'/quetes'],
                     [$expansion->toString(), $dbUrl.'/quetes/'.$expansionSlug],
                 ])
-                .sprintf('<p>Toutes les quêtes de %s dans World of Warcraft, triées par zone.</p>', e($expansion->toString()))
+                .sprintf(
+                    '<p>%s est %s de World of Warcraft. Elle contient %d quêtes réparties dans %d zones.</p>',
+                    e($expansion->toString()),
+                    $expansion->toOrdinal(),
+                    $count,
+                    count($zones),
+                )
                 .$this->categoryLinks($dbUrl.'/quetes/'.$expansionSlug, $zones),
             );
         }
@@ -261,6 +290,17 @@ class SeoContentRenderer
                 ->pluck('name_fr')
                 ->all();
 
+            /** @var array<string, int> $sourceCounts */
+            $sourceCounts = WowPet::query()->where('is_active', true)
+                ->where('category', $category)
+                ->whereNotNull('source')
+                ->selectRaw('source, count(*) as total')
+                ->groupBy('source')
+                ->pluck('total', 'source')
+                ->all();
+
+            $sourceText = $this->formatSourceSummary($sourceCounts);
+
             return $this->wrap(
                 sprintf('<h1>Mascottes WoW %s — %d mascottes</h1>', e($category), count($items))
                 .$this->breadcrumb($appUrl, [
@@ -268,6 +308,7 @@ class SeoContentRenderer
                     ['Mascottes', $dbUrl.'/mascottes'],
                     [$category, $dbUrl.'/mascottes/'.$categorySlug],
                 ])
+                .sprintf('<p>Découvrez les %d mascottes de combat %s de World of Warcraft en français.%s</p>', count($items), e($category), $sourceText)
                 .$this->itemList($items),
             );
         }
@@ -310,6 +351,17 @@ class SeoContentRenderer
                 ->pluck('name_fr')
                 ->all();
 
+            /** @var array<string, int> $sourceCounts */
+            $sourceCounts = WowDecor::query()->where('is_active', true)
+                ->where('category', $category)
+                ->whereNotNull('source')
+                ->selectRaw('source, count(*) as total')
+                ->groupBy('source')
+                ->pluck('total', 'source')
+                ->all();
+
+            $sourceText = $this->formatSourceSummary($sourceCounts);
+
             return $this->wrap(
                 sprintf('<h1>Décorations WoW %s — %d décorations</h1>', e($category), count($items))
                 .$this->breadcrumb($appUrl, [
@@ -317,6 +369,7 @@ class SeoContentRenderer
                     ['Décorations', $dbUrl.'/decorations'],
                     [$category, $dbUrl.'/decorations/'.$categorySlug],
                 ])
+                .sprintf('<p>Retrouvez les %d décorations %s de World of Warcraft en français.%s</p>', count($items), e($category), $sourceText)
                 .$this->itemList($items),
             );
         }
@@ -591,5 +644,22 @@ class SeoContentRenderer
         $slug = (string) preg_replace('/-+/', '-', $slug);
 
         return trim($slug, '-');
+    }
+
+    /**
+     * @param  array<string, int>  $sourceCounts
+     */
+    private function formatSourceSummary(array $sourceCounts): string
+    {
+        if ($sourceCounts === []) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($sourceCounts as $source => $count) {
+            $parts[] = sprintf('%d %s', $count, e(mb_strtolower($source)));
+        }
+
+        return ' Sources : '.implode(', ', array_slice($parts, 0, 5)).'.';
     }
 }
