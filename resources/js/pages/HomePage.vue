@@ -3,7 +3,7 @@
         <!-- Hero -->
         <div class="text-center max-w-3xl mx-auto">
             <div class="w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-slate-800 rounded-2xl sm:rounded-3xl border border-white/10 flex items-center justify-center mb-6 sm:mb-8 shadow-2xl shadow-blue-500/10">
-                <img src="/images/logo.png" alt="" class="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl object-cover">
+                <img src="/images/logo.png" alt="WowPlanet" class="w-10 h-10 sm:w-14 sm:h-14 rounded-lg sm:rounded-xl object-cover">
             </div>
             <h2 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black mb-4">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Suivez votre progression</span>

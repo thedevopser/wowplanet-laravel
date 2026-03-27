@@ -75,7 +75,7 @@ class DatabaseSeoService
 
             $title = sprintf('Montures WoW %s — %d montures | WowPlanet', $category, $count);
             $description = sprintf(
-                'Découvrez les %d montures %s dans World of Warcraft. Liste complète en français avec source d\'obtention et lien Wowhead.',
+                '%d montures %s WoW en français. Source d\'obtention, icône et lien Wowhead pour chaque monture.',
                 $count,
                 $category,
             );
@@ -89,7 +89,7 @@ class DatabaseSeoService
             $count = $builder->count();
             $title = sprintf('Montures WoW — %s montures | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
-                'Toutes les %d montures de World of Warcraft en français. Triées par catégorie avec source d\'obtention, icône et lien Wowhead. La référence francophone.',
+                '%d montures WoW classées par catégorie : terrestres, volantes, aquatiques et plus. Trouvez comment obtenir chaque monture.',
                 $count,
             );
             $canonicalUrl = $appUrl.'/base-de-donnees/montures';
@@ -193,7 +193,7 @@ class DatabaseSeoService
 
                 $title = sprintf('Quêtes %s (%s) — %d quêtes | WowPlanet', $zoneName, $expansionName, $count);
                 $description = sprintf(
-                    'Liste des %d quêtes de %s (%s) dans World of Warcraft en français. Vérifiez votre progression et trouvez les quêtes manquantes.',
+                    '%d quêtes de %s (%s) en français. Vérifiez votre progression et trouvez les quêtes manquantes.',
                     $count,
                     $zoneName,
                     $expansionName,
@@ -373,7 +373,7 @@ class DatabaseSeoService
 
             $title = sprintf('%s WoW - %d recettes en français | WowPlanet', $professionName, $recipeCount);
             $description = sprintf(
-                'Toutes les %d recettes de %s dans World of Warcraft en français. Classées par extension avec liens Wowhead.',
+                '%d recettes de %s WoW en français. Classées par extension avec liens Wowhead.',
                 $recipeCount,
                 $professionName,
             );

@@ -1,11 +1,11 @@
 <template>
     <div class="relative overflow-hidden rounded-2xl card-glass border shadow-2xl">
         <div class="absolute inset-0 bg-linear-to-r from-slate-900 via-slate-800/80 to-slate-800/40 z-10"></div>
-        <img v-if="character.classIconUrl" :src="character.classIconUrl" class="absolute right-2 sm:right-8 top-1/2 -translate-y-1/2 w-28 h-28 sm:w-48 sm:h-48 object-contain opacity-25" :style="{ filter: `drop-shadow(0 0 20px ${classColor}80) drop-shadow(0 0 40px ${classColor}40)` }" alt="">
+        <img v-if="character.classIconUrl" :src="character.classIconUrl" class="absolute right-2 sm:right-8 top-1/2 -translate-y-1/2 w-28 h-28 sm:w-48 sm:h-48 object-contain opacity-25" :style="{ filter: `drop-shadow(0 0 20px ${classColor}80) drop-shadow(0 0 40px ${classColor}40)` }" :alt="`Icône ${character.className}`">
 
         <div class="relative z-20 p-5 sm:p-8 space-y-4 sm:space-y-6">
             <div class="flex items-start sm:items-end gap-4 sm:gap-6">
-                <img :src="character.avatarUrl" class="w-20 h-20 sm:w-24 sm:h-24 rounded-xl border-2 shadow-2xl bg-slate-800 object-cover shrink-0" :style="{ borderColor: classColor + '40' }" alt="">
+                <img :src="character.avatarUrl" class="w-20 h-20 sm:w-24 sm:h-24 rounded-xl border-2 shadow-2xl bg-slate-800 object-cover shrink-0" :style="{ borderColor: classColor + '40' }" :alt="`Avatar de ${character.name}`">
                 <div class="min-w-0">
                     <h2 class="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight mb-2" :style="{ color: classColor }">
                         {{ character.name }}
