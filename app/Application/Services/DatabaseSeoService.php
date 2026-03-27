@@ -57,9 +57,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getMountsMeta(?string $categorySlug): array
+    public function getMountsMeta(?string $categorySlug): ?array
     {
         $appUrl = $this->appUrl();
         $builder = WowMount::query()->where('is_active', true);
@@ -70,7 +70,7 @@ class DatabaseSeoService
             $count = $builder->count();
 
             if ($count === 0) {
-                return $this->getMountsMeta(null);
+                return null;
             }
 
             $title = sprintf('Montures WoW %s - Liste complète en français | WowPlanet', $category);
@@ -110,9 +110,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getAchievementsMeta(?string $expansionSlug): array
+    public function getAchievementsMeta(?string $expansionSlug): ?array
     {
         $appUrl = $this->appUrl();
 
@@ -120,7 +120,7 @@ class DatabaseSeoService
             $expansion = ExpansionId::fromSlug($expansionSlug);
 
             if (! $expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
-                return $this->getAchievementsMeta(null);
+                return null;
             }
 
             $count = WowAchievement::query()->where('is_active', true)
@@ -165,9 +165,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getQuestsMeta(?string $expansionSlug, ?string $zoneSlug): array
+    public function getQuestsMeta(?string $expansionSlug, ?string $zoneSlug): ?array
     {
         $appUrl = $this->appUrl();
 
@@ -175,7 +175,7 @@ class DatabaseSeoService
             $expansion = ExpansionId::fromSlug($expansionSlug);
 
             if (! $expansion instanceof \App\Domain\ValueObjects\ExpansionId) {
-                return $this->getQuestsMeta(null, null);
+                return null;
             }
 
             $expansionName = $expansion->toString();
@@ -188,7 +188,7 @@ class DatabaseSeoService
                 $count = $query->count();
 
                 if ($count === 0) {
-                    return $this->getQuestsMeta($expansionSlug, null);
+                    return null;
                 }
 
                 $title = sprintf('Quêtes WoW %s (%s) - %d quêtes en français | WowPlanet', $zoneName, $expansionName, $count);
@@ -245,9 +245,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getPetsMeta(?string $categorySlug): array
+    public function getPetsMeta(?string $categorySlug): ?array
     {
         $appUrl = $this->appUrl();
         $builder = WowPet::query()->where('is_active', true);
@@ -258,7 +258,7 @@ class DatabaseSeoService
             $count = $builder->count();
 
             if ($count === 0) {
-                return $this->getPetsMeta(null);
+                return null;
             }
 
             $title = sprintf('Mascottes WoW %s - Liste complète en français | WowPlanet', $category);
@@ -298,9 +298,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getDecorsMeta(?string $categorySlug): array
+    public function getDecorsMeta(?string $categorySlug): ?array
     {
         $appUrl = $this->appUrl();
         $builder = WowDecor::query()->where('is_active', true);
@@ -311,7 +311,7 @@ class DatabaseSeoService
             $count = $builder->count();
 
             if ($count === 0) {
-                return $this->getDecorsMeta(null);
+                return null;
             }
 
             $title = sprintf('Décorations WoW %s - Liste complète en français | WowPlanet', $category);
@@ -351,9 +351,9 @@ class DatabaseSeoService
     }
 
     /**
-     * @return array<string, string|null>
+     * @return array<string, string|null>|null
      */
-    public function getProfessionsMeta(?string $professionSlug): array
+    public function getProfessionsMeta(?string $professionSlug): ?array
     {
         $appUrl = $this->appUrl();
 
@@ -364,7 +364,7 @@ class DatabaseSeoService
                 ->first();
 
             if (! $profession instanceof WowProfession) {
-                return $this->getProfessionsMeta(null);
+                return null;
             }
 
             $recipeCount = WowRecipe::query()->where('is_active', true)

@@ -26,7 +26,10 @@ class DatabaseController extends Controller
     public function mounts(?string $category = null): View
     {
         $seo = $this->databaseSeoService->getMountsMeta($category);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderMounts($this->appUrl(), $category);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderMounts($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -34,7 +37,10 @@ class DatabaseController extends Controller
     public function achievements(?string $expansion = null): View
     {
         $seo = $this->databaseSeoService->getAchievementsMeta($expansion);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderAchievements($this->appUrl(), $expansion);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderAchievements($this->appUrl(), $expansion) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -42,7 +48,10 @@ class DatabaseController extends Controller
     public function quests(?string $expansion = null, ?string $zone = null): View
     {
         $seo = $this->databaseSeoService->getQuestsMeta($expansion, $zone);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderQuests($this->appUrl(), $expansion, $zone);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderQuests($this->appUrl(), $expansion, $zone) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -50,7 +59,10 @@ class DatabaseController extends Controller
     public function pets(?string $category = null): View
     {
         $seo = $this->databaseSeoService->getPetsMeta($category);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderPets($this->appUrl(), $category);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderPets($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -58,7 +70,10 @@ class DatabaseController extends Controller
     public function decors(?string $category = null): View
     {
         $seo = $this->databaseSeoService->getDecorsMeta($category);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderDecors($this->appUrl(), $category);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderDecors($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -66,7 +81,10 @@ class DatabaseController extends Controller
     public function professions(?string $profession = null): View
     {
         $seo = $this->databaseSeoService->getProfessionsMeta($profession);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderProfessions($this->appUrl(), $profession);
+
+        abort_if($seo === null, 404);
+
+        $seo['serverHtml'] = $this->seoContentRenderer->renderProfessions($this->appUrl(), $profession) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }

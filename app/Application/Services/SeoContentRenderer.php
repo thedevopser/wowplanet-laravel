@@ -77,7 +77,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderMounts(string $appUrl, ?string $categorySlug): string
+    public function renderMounts(string $appUrl, ?string $categorySlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -85,7 +85,7 @@ class SeoContentRenderer
             $category = $this->findCategory($categorySlug, 'mounts');
 
             if ($category === null) {
-                return $this->renderMounts($appUrl, null);
+                return null;
             }
 
             /** @var list<string> $items */
@@ -126,7 +126,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderAchievements(string $appUrl, ?string $expansionSlug): string
+    public function renderAchievements(string $appUrl, ?string $expansionSlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -134,7 +134,7 @@ class SeoContentRenderer
             $expansion = ExpansionId::fromSlug($expansionSlug);
 
             if (! $expansion instanceof ExpansionId) {
-                return $this->renderAchievements($appUrl, null);
+                return null;
             }
 
             /** @var list<string> $items */
@@ -168,7 +168,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderQuests(string $appUrl, ?string $expansionSlug, ?string $zoneSlug): string
+    public function renderQuests(string $appUrl, ?string $expansionSlug, ?string $zoneSlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -176,14 +176,14 @@ class SeoContentRenderer
             $expansion = ExpansionId::fromSlug($expansionSlug);
 
             if (! $expansion instanceof ExpansionId) {
-                return $this->renderQuests($appUrl, null, null);
+                return null;
             }
 
             if ($zoneSlug !== null) {
                 $zoneName = $this->findCategory($zoneSlug, 'quest-zones', $expansion->value);
 
                 if ($zoneName === null) {
-                    return $this->renderQuests($appUrl, $expansionSlug, null);
+                    return null;
                 }
 
                 /** @var list<string> $items */
@@ -244,7 +244,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderPets(string $appUrl, ?string $categorySlug): string
+    public function renderPets(string $appUrl, ?string $categorySlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -252,7 +252,7 @@ class SeoContentRenderer
             $category = $this->findCategory($categorySlug, 'pets');
 
             if ($category === null) {
-                return $this->renderPets($appUrl, null);
+                return null;
             }
 
             /** @var list<string> $items */
@@ -293,7 +293,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderDecors(string $appUrl, ?string $categorySlug): string
+    public function renderDecors(string $appUrl, ?string $categorySlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -301,7 +301,7 @@ class SeoContentRenderer
             $category = $this->findCategory($categorySlug, 'decors');
 
             if ($category === null) {
-                return $this->renderDecors($appUrl, null);
+                return null;
             }
 
             /** @var list<string> $items */
@@ -342,7 +342,7 @@ class SeoContentRenderer
         );
     }
 
-    public function renderProfessions(string $appUrl, ?string $professionSlug): string
+    public function renderProfessions(string $appUrl, ?string $professionSlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
 
@@ -352,7 +352,7 @@ class SeoContentRenderer
                 ->first(fn (WowProfession $wowProfession): bool => $this->slugify($wowProfession->name_fr) === $professionSlug);
 
             if (! $profession instanceof WowProfession) {
-                return $this->renderProfessions($appUrl, null);
+                return null;
             }
 
             $recipeCount = WowRecipe::query()->where('is_active', true)
