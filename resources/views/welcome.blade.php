@@ -11,8 +11,6 @@
     <meta name="robots" content="max-image-preview:large">
     <meta name="content-language" content="fr">
     <link rel="canonical" href="{{ $seo['canonicalUrl'] }}">
-    <link rel="alternate" hreflang="fr" href="{{ $seo['canonicalUrl'] }}">
-    <link rel="alternate" hreflang="x-default" href="{{ $seo['canonicalUrl'] }}">
 
     <meta property="og:type" content="{{ $seo['ogType'] }}">
     <meta property="og:title" content="{{ $seo['ogTitle'] }}">
@@ -42,6 +40,7 @@
     <meta name="msapplication-TileColor" content="#0f172a">
     <meta name="theme-color" content="#0f172a">
 
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" as="style">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"

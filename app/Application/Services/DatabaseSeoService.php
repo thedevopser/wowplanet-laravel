@@ -30,7 +30,7 @@ class DatabaseSeoService
         $professionCount = WowProfession::query()->where('is_active', true)->count();
         $recipeCount = WowRecipe::query()->where('is_active', true)->count();
 
-        $title = 'Base de données WoW en français - Montures, Hauts-faits, Quêtes, Mascottes | WowPlanet';
+        $title = 'Base de données WoW complète | WowPlanet';
         $description = sprintf(
             'Explorez la base de données complète de World of Warcraft entièrement en français : %s montures, %s hauts-faits, %s quêtes, %s mascottes, %s décorations et %d professions (%s recettes). La référence francophone WoW.',
             number_format($mountCount, 0, ',', ' '),
@@ -73,7 +73,7 @@ class DatabaseSeoService
                 return null;
             }
 
-            $title = sprintf('Montures WoW %s - Liste complète en français | WowPlanet', $category);
+            $title = sprintf('Montures WoW %s — %d montures | WowPlanet', $category, $count);
             $description = sprintf(
                 'Découvrez les %d montures %s dans World of Warcraft. Liste complète en français avec source d\'obtention et lien Wowhead.',
                 $count,
@@ -87,7 +87,7 @@ class DatabaseSeoService
             ];
         } else {
             $count = $builder->count();
-            $title = 'Montures WoW - Liste complète des '.$count.' montures en français | WowPlanet';
+            $title = sprintf('Montures WoW — %s montures | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
                 'Toutes les %d montures de World of Warcraft en français. Triées par catégorie avec source d\'obtention, icône et lien Wowhead. La référence francophone.',
                 $count,

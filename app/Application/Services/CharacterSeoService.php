@@ -6,6 +6,10 @@ namespace App\Application\Services;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\CharacterVisit;
+use App\Models\WowAchievement;
+use App\Models\WowMount;
+use App\Models\WowPet;
+use App\Models\WowQuest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Spatie\Sitemap\Sitemap;
@@ -27,13 +31,23 @@ class CharacterSeoService
         $configUrl = config('app.url', '');
         $appUrl = rtrim($configUrl, '/');
 
+        $mountCount = WowMount::query()->where('is_active', true)->count();
+        $achievementCount = WowAchievement::query()->where('is_active', true)->count();
+        $questCount = WowQuest::query()->where('is_active', true)->count();
+        $petCount = WowPet::query()->where('is_active', true)->count();
+
         return [
-            'title' => 'WowPlanet - Suivi de progression World of Warcraft en français',
+            'title' => 'WowPlanet - Suivi de progression WoW en français',
             'description' => 'Analysez votre personnage World of Warcraft en français : quêtes, hauts-faits, montures, mascottes, décorations et professions.'
-                .' Comparez votre progression avec la base de données complète du jeu. Le site francophone de référence pour les joueurs WoW.',
-            'ogTitle' => 'WowPlanet - Suivi de progression World of Warcraft en français',
-            'ogDescription' => 'Suivez la progression de vos personnages WoW en français.'
-                .' Plus de 21 000 quêtes, 8 600 hauts-faits, 1 569 montures et 2 117 mascottes référencées.',
+                .' Comparez votre progression avec la base de données complète du jeu.',
+            'ogTitle' => 'WowPlanet - Suivi de progression WoW en français',
+            'ogDescription' => sprintf(
+                'Suivez la progression de vos personnages WoW en français. %s quêtes, %s hauts-faits, %s montures et %s mascottes référencées.',
+                number_format($questCount, 0, ',', "\u{202f}"),
+                number_format($achievementCount, 0, ',', "\u{202f}"),
+                number_format($mountCount, 0, ',', "\u{202f}"),
+                number_format($petCount, 0, ',', "\u{202f}"),
+            ),
             'ogImage' => $appUrl.'/images/og-default.png',
             'ogUrl' => $appUrl,
             'ogType' => 'website',
