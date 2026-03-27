@@ -29,10 +29,12 @@ describe('router', () => {
         }
     });
 
-    it('catch-all route redirects to home', () => {
+    it('catch-all route renders 404 page', () => {
         const catchAll = router.getRoutes().find(r => r.path === '/:pathMatch(.*)*');
 
-        expect(catchAll.redirect).toBe('/');
+        expect(catchAll.name).toBe('not-found');
+        expect(catchAll.redirect).toBeUndefined();
+        expect(catchAll.meta.title).toBe('Page introuvable - WowPlanet');
     });
 
     it('scrollBehavior returns savedPosition when available', () => {

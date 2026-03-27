@@ -107,7 +107,9 @@ const routes = [
     },
     {
         path: '/:pathMatch(.*)*',
-        redirect: '/',
+        name: 'not-found',
+        component: () => import('./pages/NotFoundPage.vue'),
+        meta: { title: 'Page introuvable - WowPlanet' },
     },
 ];
 
