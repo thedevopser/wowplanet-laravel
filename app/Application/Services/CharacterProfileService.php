@@ -67,7 +67,9 @@ class CharacterProfileService
         $professions = $this->professionProgressAggregator->aggregate($professionsResponse, $characterFaction);
         /** @var array<string, mixed> $equipmentResponseData */
         $equipmentResponseData = is_array($apiData['equipmentResponse'] ?? null) ? $apiData['equipmentResponse'] : [];
-        $equipment = $this->equipmentAggregator->aggregate($equipmentResponseData);
+        /** @var array<int, string> $equipmentIconMap */
+        $equipmentIconMap = $apiData['equipmentIconMap'] ?? [];
+        $equipment = $this->equipmentAggregator->aggregate($equipmentResponseData, $equipmentIconMap);
 
         return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions, $equipment);
     }
@@ -143,6 +145,8 @@ class CharacterProfileService
 
         $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base);
 
+        $equipmentIconMap = $this->fetchEquipmentIcons($equipmentResponse);
+
         return [
             'summary' => $summary,
             'media' => $media,
@@ -160,6 +164,7 @@ class CharacterProfileService
             'mythicKeystoneProfile' => $mythicKeystoneProfile,
             'mythicKeystoneSeasonData' => $mythicKeystoneSeasonData,
             'equipmentResponse' => $equipmentResponse,
+            'equipmentIconMap' => $equipmentIconMap,
         ];
     }
 
@@ -299,6 +304,56 @@ class CharacterProfileService
         }
 
         return $count;
+    }
+
+    /**
+     * @param  array<string, mixed>  $equipmentResponse
+     * @return array<int, string> Map of itemId => iconUrl
+     */
+    private function fetchEquipmentIcons(array $equipmentResponse): array
+    {
+        /** @var list<array<string, mixed>> $equippedItems */
+        $equippedItems = $equipmentResponse['equipped_items'] ?? [];
+
+        if ($equippedItems === []) {
+            return [];
+        }
+
+        $endpoints = [];
+        foreach ($equippedItems as $equippedItem) {
+            /** @var array{id?: int} $itemData */
+            $itemData = $equippedItem['item'] ?? [];
+            $itemId = (int) ($itemData['id'] ?? 0);
+
+            if ($itemId > 0) {
+                $endpoints['item_'.$itemId] = [
+                    'endpoint' => sprintf('data/wow/media/item/%d', $itemId),
+                    'query' => ['namespace' => 'static-'.$this->blizzardApiClient->getRegion()],
+                ];
+            }
+        }
+
+        if ($endpoints === []) {
+            return [];
+        }
+
+        $responses = $this->fetchAsync($endpoints);
+
+        $iconMap = [];
+        foreach ($responses as $key => $response) {
+            $itemId = (int) str_replace('item_', '', $key);
+            /** @var list<array{key?: string, value?: string}> $assets */
+            $assets = $response['assets'] ?? [];
+
+            foreach ($assets as $asset) {
+                if (($asset['key'] ?? '') === 'icon' && isset($asset['value'])) {
+                    $iconMap[$itemId] = $asset['value'];
+                    break;
+                }
+            }
+        }
+
+        return $iconMap;
     }
 
     /**

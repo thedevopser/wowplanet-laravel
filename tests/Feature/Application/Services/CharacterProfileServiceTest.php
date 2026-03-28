@@ -83,6 +83,8 @@ test('get profile returns correct dto', function (): void {
     $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
     $seasonExp->andReturn(0);
 
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+
     $userCharMock = $this->mock(UserCharacterService::class);
     /** @var \Mockery\Expectation $classIconsExp */
     $classIconsExp = $userCharMock->shouldReceive('getClassIcons');
@@ -107,7 +109,8 @@ test('get profile returns correct dto', function (): void {
             'equipped_items' => [
                 [
                     'slot' => ['type' => 'HEAD', 'name' => 'Tête'],
-                    'item' => ['id' => 12345, 'name' => 'Casque du Néant'],
+                    'item' => ['id' => 12345],
+                    'name' => 'Casque du Néant',
                     'quality' => ['type' => 'EPIC', 'name' => 'Épique'],
                     'level' => ['value' => 639],
                     'media' => ['id' => 123456],
@@ -135,7 +138,7 @@ test('get profile returns correct dto', function (): void {
         ->and($characterProfileDTO->equipment)->toHaveCount(1)
         ->and($characterProfileDTO->equipment[0]['slot'])->toBe('HEAD')
         ->and($characterProfileDTO->equipment[0]['item_id'])->toBe(12345)
-        ->and($characterProfileDTO->equipment[0]['icon_url'])->toBe('https://wow.zamimg.com/images/wow/icons/medium/123456.jpg');
+        ->and($characterProfileDTO->equipment[0]['icon_url'])->toBeNull();
 });
 
 test('aggregate progress groups by expansion and zone', function (): void {
@@ -178,6 +181,8 @@ test('aggregate progress groups by expansion and zone', function (): void {
     /** @var \Mockery\Expectation $seasonExp */
     $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
     $seasonExp->andReturn(0);
+
+    $mock->shouldReceive('getRegion')->andReturn('eu');
 
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 
@@ -250,6 +255,8 @@ test('aggregate progress filters quests by character faction', function (): void
     $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
     $seasonExp->andReturn(0);
 
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 
     mockAsyncEndpoints($mock, [
@@ -297,6 +304,8 @@ test('get profile handles decor api 404 gracefully', function (): void {
     /** @var \Mockery\Expectation $seasonExp */
     $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
     $seasonExp->andReturn(0);
+
+    $mock->shouldReceive('getRegion')->andReturn('eu');
 
     $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
 

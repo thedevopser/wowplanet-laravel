@@ -9,23 +9,28 @@ test('aggregate transforms full API response into structured slot array', functi
         'equipped_items' => [
             [
                 'slot' => ['type' => 'HEAD', 'name' => 'Tête'],
-                'item' => ['id' => 12345, 'name' => 'Casque du Néant'],
+                'item' => ['id' => 12345],
+                'name' => 'Casque du Néant',
                 'quality' => ['type' => 'EPIC', 'name' => 'Épique'],
                 'level' => ['value' => 639],
-                'media' => ['id' => 123456],
             ],
             [
                 'slot' => ['type' => 'MAIN_HAND', 'name' => 'Main droite'],
-                'item' => ['id' => 99999, 'name' => 'Épée légendaire'],
+                'item' => ['id' => 99999],
+                'name' => 'Épée légendaire',
                 'quality' => ['type' => 'LEGENDARY', 'name' => 'Légendaire'],
                 'level' => ['value' => 645],
-                'media' => ['id' => 654321],
             ],
         ],
     ];
 
+    $iconMap = [
+        12345 => 'https://render.worldofwarcraft.com/icons/56/inv_helm_123.jpg',
+        99999 => 'https://render.worldofwarcraft.com/icons/56/inv_sword_456.jpg',
+    ];
+
     $aggregator = new EquipmentAggregator;
-    $result = $aggregator->aggregate($apiResponse);
+    $result = $aggregator->aggregate($apiResponse, $iconMap);
 
     expect($result)->toHaveCount(2);
 
@@ -36,7 +41,7 @@ test('aggregate transforms full API response into structured slot array', functi
         ->and($head['name'])->toBe('Casque du Néant')
         ->and($head['item_level'])->toBe(639)
         ->and($head['quality'])->toBe('EPIC')
-        ->and($head['icon_url'])->toBe('https://wow.zamimg.com/images/wow/icons/medium/123456.jpg');
+        ->and($head['icon_url'])->toBe('https://render.worldofwarcraft.com/icons/56/inv_helm_123.jpg');
 
     $weapon = collect($result)->firstWhere('slot', 'MAIN_HAND');
     expect($weapon['quality'])->toBe('LEGENDARY')
@@ -50,12 +55,13 @@ test('aggregate handles empty response', function (): void {
         ->and($aggregator->aggregate(['equipped_items' => []]))->toBe([]);
 });
 
-test('aggregate handles missing media gracefully', function (): void {
+test('aggregate handles missing icon gracefully', function (): void {
     $apiResponse = [
         'equipped_items' => [
             [
                 'slot' => ['type' => 'SHIRT', 'name' => 'Chemise'],
-                'item' => ['id' => 111, 'name' => 'Chemise simple'],
+                'item' => ['id' => 111],
+                'name' => 'Chemise simple',
                 'quality' => ['type' => 'COMMON', 'name' => 'Commun'],
                 'level' => ['value' => 1],
             ],
@@ -70,21 +76,23 @@ test('aggregate handles missing media gracefully', function (): void {
         ->and($result[0]['quality'])->toBe('COMMON');
 });
 
-test('aggregate builds icon_url from media id', function (): void {
+test('aggregate uses icon map to resolve icon_url', function (): void {
     $apiResponse = [
         'equipped_items' => [
             [
                 'slot' => ['type' => 'CHEST', 'name' => 'Torse'],
-                'item' => ['id' => 555, 'name' => 'Plastron'],
+                'item' => ['id' => 555],
+                'name' => 'Plastron',
                 'quality' => ['type' => 'RARE', 'name' => 'Rare'],
                 'level' => ['value' => 600],
-                'media' => ['id' => 987654],
             ],
         ],
     ];
 
-    $aggregator = new EquipmentAggregator;
-    $result = $aggregator->aggregate($apiResponse);
+    $iconMap = [555 => 'https://render.worldofwarcraft.com/icons/56/inv_chest_plate.jpg'];
 
-    expect($result[0]['icon_url'])->toBe('https://wow.zamimg.com/images/wow/icons/medium/987654.jpg');
+    $aggregator = new EquipmentAggregator;
+    $result = $aggregator->aggregate($apiResponse, $iconMap);
+
+    expect($result[0]['icon_url'])->toBe('https://render.worldofwarcraft.com/icons/56/inv_chest_plate.jpg');
 });

@@ -7,7 +7,7 @@
         <AppHeader />
 
         <main id="main-content" class="flex-1 overflow-y-auto">
-            <div class="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+            <div class="max-w-360 mx-auto px-3 sm:px-4 py-6 sm:py-8">
             <div v-if="store.error" role="alert" class="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-lg mb-6">
                 {{ store.error }}
             </div>

@@ -128,6 +128,11 @@ class BlizzardApiClient
         return $this->client;
     }
 
+    public function getRegion(): string
+    {
+        return $this->region;
+    }
+
     public function getCurrentMythicSeasonId(): int
     {
         /** @var int $seasonId */
