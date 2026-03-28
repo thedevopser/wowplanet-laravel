@@ -103,6 +103,17 @@ test('get profile returns correct dto', function (): void {
         'collections/decor' => ['decor_collected' => [['decor' => ['id' => 500]]]],
         '/professions' => ['primaries' => [], 'secondaries' => []],
         '/reputations' => ['reputations' => []],
+        '/equipment' => [
+            'equipped_items' => [
+                [
+                    'slot' => ['type' => 'HEAD', 'name' => 'Tête'],
+                    'item' => ['id' => 12345, 'name' => 'Casque du Néant'],
+                    'quality' => ['type' => 'EPIC', 'name' => 'Épique'],
+                    'level' => ['value' => 639],
+                    'media' => ['id' => 123456],
+                ],
+            ],
+        ],
     ]);
 
     $characterProfileService = resolve(CharacterProfileService::class);
@@ -120,7 +131,11 @@ test('get profile returns correct dto', function (): void {
         ->and($characterProfileDTO->professions)->toBe([])
         ->and($characterProfileDTO->decor)->toHaveCount(1)
         ->and($characterProfileDTO->decor[0]['is_completed'])->toBeTrue()
-        ->and($characterProfileDTO->decor[0]['name'])->toBe('Foyer orné en pierre');
+        ->and($characterProfileDTO->decor[0]['name'])->toBe('Foyer orné en pierre')
+        ->and($characterProfileDTO->equipment)->toHaveCount(1)
+        ->and($characterProfileDTO->equipment[0]['slot'])->toBe('HEAD')
+        ->and($characterProfileDTO->equipment[0]['item_id'])->toBe(12345)
+        ->and($characterProfileDTO->equipment[0]['icon_url'])->toBe('https://wow.zamimg.com/images/wow/icons/medium/123456.jpg');
 });
 
 test('aggregate progress groups by expansion and zone', function (): void {

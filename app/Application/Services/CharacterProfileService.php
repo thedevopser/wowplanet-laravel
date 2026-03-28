@@ -7,6 +7,7 @@ namespace App\Application\Services;
 use App\Application\DTOs\CharacterProfileDTO;
 use App\Application\Services\Progress\AchievementProgressAggregator;
 use App\Application\Services\Progress\CollectionProgressAggregator;
+use App\Application\Services\Progress\EquipmentAggregator;
 use App\Application\Services\Progress\ProfessionProgressAggregator;
 use App\Application\Services\Progress\QuestProgressAggregator;
 use App\Application\Services\Progress\ReputationProgressAggregator;
@@ -24,6 +25,7 @@ class CharacterProfileService
         private readonly CollectionProgressAggregator $collectionProgressAggregator,
         private readonly ProfessionProgressAggregator $professionProgressAggregator,
         private readonly ReputationProgressAggregator $reputationProgressAggregator,
+        private readonly EquipmentAggregator $equipmentAggregator,
         private readonly UserCharacterService $userCharacterService,
     ) {}
 
@@ -63,8 +65,11 @@ class CharacterProfileService
         $pets = $this->collectionProgressAggregator->aggregatePets($characterPetIds);
         $decor = $this->collectionProgressAggregator->aggregateDecor($characterDecorIds);
         $professions = $this->professionProgressAggregator->aggregate($professionsResponse, $characterFaction);
+        /** @var array<string, mixed> $equipmentResponseData */
+        $equipmentResponseData = is_array($apiData['equipmentResponse'] ?? null) ? $apiData['equipmentResponse'] : [];
+        $equipment = $this->equipmentAggregator->aggregate($equipmentResponseData);
 
-        return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions);
+        return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions, $equipment);
     }
 
     private const MAX_ASYNC_RETRIES = 2;
@@ -90,6 +95,7 @@ class CharacterProfileService
             'reputations' => ['endpoint' => $base.'/reputations', 'query' => []],
             'decor' => ['endpoint' => $base.'/collections/decor', 'query' => []],
             'mythicKeystone' => ['endpoint' => $base.'/mythic-keystone-profile', 'query' => []],
+            'equipment' => ['endpoint' => $base.'/equipment', 'query' => []],
         ];
 
         $responses = $this->fetchAsync($endpoints);
@@ -131,6 +137,8 @@ class CharacterProfileService
 
         /** @var array<string, mixed> $mythicKeystoneProfile */
         $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
+        /** @var array<string, mixed> $equipmentResponse */
+        $equipmentResponse = $responses['equipment'] ?? [];
         unset($responses);
 
         $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base);
@@ -151,6 +159,7 @@ class CharacterProfileService
             'reputationsResponse' => $reputationsResponse,
             'mythicKeystoneProfile' => $mythicKeystoneProfile,
             'mythicKeystoneSeasonData' => $mythicKeystoneSeasonData,
+            'equipmentResponse' => $equipmentResponse,
         ];
     }
 
@@ -389,8 +398,9 @@ class CharacterProfileService
      * @param  list<array<string, mixed>>  $pets
      * @param  list<array<string, mixed>>  $decor
      * @param  list<array<string, mixed>>  $professions
+     * @param  list<array{slot: string, slot_name: string, item_id: int, name: string, item_level: int, quality: string, icon_url: string|null}>  $equipment
      */
-    private function buildDto(array $apiData, array $collections, array $mounts, array $pets, array $decor, array $professions): CharacterProfileDTO
+    private function buildDto(array $apiData, array $collections, array $mounts, array $pets, array $decor, array $professions, array $equipment = []): CharacterProfileDTO
     {
         /** @var array<string, mixed> $summary */
         $summary = $apiData['summary'];
@@ -448,6 +458,7 @@ class CharacterProfileService
             mythicKeystone: $this->buildMythicKeystoneData($mythicProfile, $mythicSeason),
             completedQuestIds: is_array($apiData['completedQuestIds'] ?? null) ? array_values(array_filter($apiData['completedQuestIds'], is_int(...))) : [],
             completedAchievementIds: is_array($apiData['completedAchievementIds'] ?? null) ? array_values(array_filter($apiData['completedAchievementIds'], is_int(...))) : [],
+            equipment: $equipment,
         );
     }
 
