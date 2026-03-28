@@ -26,11 +26,7 @@
     <meta name="twitter:image" content="{{ $seo['ogImage'] }}">
 
     @if(!empty($seo['jsonLd']))
-    <script type="application/ld+json">
-        {
-            !!$seo['jsonLd'] !!
-        }
-    </script>
+    <script type="application/ld+json">{!! $seo['jsonLd'] !!}</script>
     @endif
 
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
