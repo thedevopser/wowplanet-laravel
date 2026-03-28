@@ -20,7 +20,28 @@
         <!-- Desktop: Paper Doll (md+) -->
         <div class="hidden md:grid grid-cols-[1fr_auto_1fr] gap-4">
             <div class="space-y-2">
-                <SlotCard v-for="slot in leftSlots" :key="slot" :item="itemBySlot(slot)" :slot-type="slot" />
+                <template v-for="slot in leftSlots" :key="slot">
+                    <component
+                        :is="itemBySlot(slot) ? 'a' : 'div'"
+                        :href="itemBySlot(slot) ? 'https://www.wowhead.com/fr/item=' + itemBySlot(slot).item_id : undefined"
+                        target="_blank"
+                        rel="noopener"
+                        :class="[
+                            'flex items-center gap-3 p-3 rounded-xl border transition-all',
+                            itemBySlot(slot) ? 'bg-slate-800/40 border-white/5 hover:border-red-500/30 hover:bg-slate-800/60' : 'bg-slate-800/20 border-white/5 opacity-40'
+                        ]"
+                    >
+                        <div :class="['w-10 h-10 rounded-lg border overflow-hidden shrink-0', itemBySlot(slot) ? qualityBorder(itemBySlot(slot).quality) : 'border-slate-700']">
+                            <img v-if="itemBySlot(slot)?.icon_url" :src="itemBySlot(slot).icon_url" :alt="itemBySlot(slot).name" class="w-10 h-10 object-cover" loading="lazy" />
+                            <div v-else class="w-10 h-10 bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600">{{ slotNames[slot]?.charAt(0) }}</div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div :class="['text-sm font-bold truncate', itemBySlot(slot) ? qualityText(itemBySlot(slot).quality) : 'text-slate-600']">{{ itemBySlot(slot) ? itemBySlot(slot).name : slotNames[slot] }}</div>
+                            <div class="text-[10px] text-slate-500 font-mono">{{ slotNames[slot] }}</div>
+                        </div>
+                        <div v-if="itemBySlot(slot)" class="text-sm font-mono font-bold text-slate-300 shrink-0">{{ itemBySlot(slot).item_level }}</div>
+                    </component>
+                </template>
             </div>
 
             <div class="flex flex-col items-center justify-center px-4">
@@ -33,12 +54,53 @@
             </div>
 
             <div class="space-y-2">
-                <SlotCard v-for="slot in rightSlots" :key="slot" :item="itemBySlot(slot)" :slot-type="slot" />
+                <template v-for="slot in rightSlots" :key="slot">
+                    <component
+                        :is="itemBySlot(slot) ? 'a' : 'div'"
+                        :href="itemBySlot(slot) ? 'https://www.wowhead.com/fr/item=' + itemBySlot(slot).item_id : undefined"
+                        target="_blank"
+                        rel="noopener"
+                        :class="[
+                            'flex items-center gap-3 p-3 rounded-xl border transition-all',
+                            itemBySlot(slot) ? 'bg-slate-800/40 border-white/5 hover:border-red-500/30 hover:bg-slate-800/60' : 'bg-slate-800/20 border-white/5 opacity-40'
+                        ]"
+                    >
+                        <div :class="['w-10 h-10 rounded-lg border overflow-hidden shrink-0', itemBySlot(slot) ? qualityBorder(itemBySlot(slot).quality) : 'border-slate-700']">
+                            <img v-if="itemBySlot(slot)?.icon_url" :src="itemBySlot(slot).icon_url" :alt="itemBySlot(slot).name" class="w-10 h-10 object-cover" loading="lazy" />
+                            <div v-else class="w-10 h-10 bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600">{{ slotNames[slot]?.charAt(0) }}</div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div :class="['text-sm font-bold truncate', itemBySlot(slot) ? qualityText(itemBySlot(slot).quality) : 'text-slate-600']">{{ itemBySlot(slot) ? itemBySlot(slot).name : slotNames[slot] }}</div>
+                            <div class="text-[10px] text-slate-500 font-mono">{{ slotNames[slot] }}</div>
+                        </div>
+                        <div v-if="itemBySlot(slot)" class="text-sm font-mono font-bold text-slate-300 shrink-0">{{ itemBySlot(slot).item_level }}</div>
+                    </component>
+                </template>
             </div>
 
             <div class="col-span-3 grid grid-cols-2 gap-4 mt-2">
-                <SlotCard :item="itemBySlot('MAIN_HAND')" slot-type="MAIN_HAND" />
-                <SlotCard :item="itemBySlot('OFF_HAND')" slot-type="OFF_HAND" />
+                <template v-for="slot in ['MAIN_HAND', 'OFF_HAND']" :key="slot">
+                    <component
+                        :is="itemBySlot(slot) ? 'a' : 'div'"
+                        :href="itemBySlot(slot) ? 'https://www.wowhead.com/fr/item=' + itemBySlot(slot).item_id : undefined"
+                        target="_blank"
+                        rel="noopener"
+                        :class="[
+                            'flex items-center gap-3 p-3 rounded-xl border transition-all',
+                            itemBySlot(slot) ? 'bg-slate-800/40 border-white/5 hover:border-red-500/30 hover:bg-slate-800/60' : 'bg-slate-800/20 border-white/5 opacity-40'
+                        ]"
+                    >
+                        <div :class="['w-10 h-10 rounded-lg border overflow-hidden shrink-0', itemBySlot(slot) ? qualityBorder(itemBySlot(slot).quality) : 'border-slate-700']">
+                            <img v-if="itemBySlot(slot)?.icon_url" :src="itemBySlot(slot).icon_url" :alt="itemBySlot(slot).name" class="w-10 h-10 object-cover" loading="lazy" />
+                            <div v-else class="w-10 h-10 bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600">{{ slotNames[slot]?.charAt(0) }}</div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div :class="['text-sm font-bold truncate', itemBySlot(slot) ? qualityText(itemBySlot(slot).quality) : 'text-slate-600']">{{ itemBySlot(slot) ? itemBySlot(slot).name : slotNames[slot] }}</div>
+                            <div class="text-[10px] text-slate-500 font-mono">{{ slotNames[slot] }}</div>
+                        </div>
+                        <div v-if="itemBySlot(slot)" class="text-sm font-mono font-bold text-slate-300 shrink-0">{{ itemBySlot(slot).item_level }}</div>
+                    </component>
+                </template>
             </div>
         </div>
 
@@ -133,40 +195,4 @@ const equipmentMap = computed(() => {
 });
 
 const itemBySlot = (slot) => equipmentMap.value[slot] || null;
-
-const SlotCard = {
-    props: {
-        item: { type: Object, default: null },
-        slotType: { type: String, required: true },
-    },
-    setup(props) {
-        const label = computed(() => slotNames[props.slotType] || props.slotType);
-        const textCls = computed(() => props.item ? qualityText(props.item.quality) : 'text-slate-600');
-        const borderCls = computed(() => props.item ? qualityBorder(props.item.quality) : 'border-slate-700');
-
-        return { label, textCls, borderCls };
-    },
-    template: `
-        <component
-            :is="item ? 'a' : 'div'"
-            :href="item ? 'https://www.wowhead.com/fr/item=' + item.item_id : undefined"
-            target="_blank"
-            rel="noopener"
-            :class="[
-                'flex items-center gap-3 p-3 rounded-xl border transition-all',
-                item ? 'bg-slate-800/40 border-white/5 hover:border-red-500/30 hover:bg-slate-800/60' : 'bg-slate-800/20 border-white/5 opacity-40'
-            ]"
-        >
-            <div :class="['w-10 h-10 rounded-lg border overflow-hidden shrink-0', borderCls]">
-                <img v-if="item && item.icon_url" :src="item.icon_url" :alt="item.name" class="w-10 h-10 object-cover" loading="lazy" />
-                <div v-else class="w-10 h-10 bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600">{{ label.charAt(0) }}</div>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div :class="['text-sm font-bold truncate', textCls]">{{ item ? item.name : label }}</div>
-                <div class="text-[10px] text-slate-500 font-mono">{{ label }}</div>
-            </div>
-            <div v-if="item" class="text-sm font-mono font-bold text-slate-300 shrink-0">{{ item.item_level }}</div>
-        </component>
-    `,
-};
 </script>
