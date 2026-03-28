@@ -39,6 +39,7 @@
             <MountsTab v-if="activeTab === 'mounts'" :character="store.character" />
             <PetsTab v-if="activeTab === 'pets'" :character="store.character" />
             <DecorTab v-if="activeTab === 'decor'" :character="store.character" />
+            <EquipmentTab v-if="activeTab === 'equipment'" :character="store.character" />
         </div>
     </div>
 </template>
@@ -59,6 +60,7 @@ import ProfessionsTab from '../components/ProfessionsTab.vue';
 import DecorTab from '../components/DecorTab.vue';
 import ScoreTab from '../components/ScoreTab.vue';
 import MythicPlusTab from '../components/MythicPlusTab.vue';
+import EquipmentTab from '../components/EquipmentTab.vue';
 
 const route = useRoute();
 const store = useCharacterStore();
@@ -92,6 +94,7 @@ const contentTabs = computed(() => [
     { id: 'reputations', label: 'Réputations', count: undefined },
     { id: 'professions', label: 'Métiers', count: store.character?.professions?.length || undefined },
     { id: 'mythicplus', label: 'Mythique+', count: store.character?.mythicKeystone?.rating ? Math.round(store.character.mythicKeystone.rating) : undefined },
+    { id: 'equipment', label: 'Équipement', count: undefined },
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },
     { id: 'decor', label: 'Décorations', count: store.character?.decorCount },
