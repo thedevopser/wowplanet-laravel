@@ -27,7 +27,7 @@ final class SecurityHeaders
             $response->headers->set('Content-Security-Policy',
                 "default-src 'self'; "
                 ."script-src 'self' https://umami.wowplanet.fr https://wow.zamimg.com; "
-                ."style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                ."style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://wow.zamimg.com; "
                 ."font-src 'self' https://fonts.gstatic.com; "
                 ."img-src 'self' https://wow.zamimg.com https://render.worldofwarcraft.com data:; "
                 ."connect-src 'self' https://umami.wowplanet.fr https://nether.wowhead.com; "

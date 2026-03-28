@@ -1,4 +1,6 @@
 import './bootstrap';
+
+window.whTooltips = { colorLinks: true, iconizeLinks: true, renameLinks: false, locale: 'fr' };
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import router from './router';

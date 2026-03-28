@@ -48,7 +48,6 @@
     <script defer src="https://umami.wowplanet.fr/script.js" data-website-id="be8977fd-a0fe-4a4c-867d-d75f83101232"></script>
     @endproduction
 
-    <script>const whTooltips = { colorLinks: true, iconizeLinks: true, renameLinks: false, locale: 'fr' };</script>
     <script src="https://wow.zamimg.com/js/tooltips.js"></script>
 
     <style>
