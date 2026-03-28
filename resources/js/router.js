@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { nextTick } from 'vue';
 import HomePage from './pages/HomePage.vue';
 import CharacterPage from './pages/CharacterPage.vue';
 import MyCharactersPage from './pages/MyCharactersPage.vue';
@@ -126,6 +127,7 @@ router.afterEach((to) => {
     if (to.meta.title) {
         document.title = to.meta.title;
     }
+    nextTick(() => window.$WowheadPower?.refreshLinks());
 });
 
 export default router;

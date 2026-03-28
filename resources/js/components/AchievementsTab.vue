@@ -104,7 +104,9 @@ import { useCharacterStore } from '../stores/character';
 import ExpansionSelector from './ExpansionSelector.vue';
 import SearchFilter from './SearchFilter.vue';
 import CollectionIcon from './CollectionIcon.vue';
+import { useWowheadTooltips } from '../composables/useWowheadTooltips';
 
+useWowheadTooltips();
 const store = useCharacterStore();
 
 const activeExpansion = ref(store.latestExpansionId);

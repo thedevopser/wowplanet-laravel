@@ -133,6 +133,9 @@
 
 <script setup>
 import { computed } from 'vue';
+import { useWowheadTooltips } from '../composables/useWowheadTooltips';
+
+useWowheadTooltips();
 
 const props = defineProps({
     character: { type: Object, required: true },

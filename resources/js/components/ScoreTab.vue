@@ -133,7 +133,9 @@ import { useCharacterStore } from '../stores/character';
 import { computeScore, getScoreColor, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS } from '../utils/scoreCalculator';
 import ScoreRadar from './ScoreRadar.vue';
 import ShareScoreModal from './ShareScoreModal.vue';
+import { useWowheadTooltips } from '../composables/useWowheadTooltips';
 
+useWowheadTooltips();
 const store = useCharacterStore();
 const expandedRec = ref(null);
 const showShareModal = ref(false);

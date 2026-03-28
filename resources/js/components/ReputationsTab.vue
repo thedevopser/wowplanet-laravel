@@ -139,7 +139,9 @@ import { ref, computed, watch } from 'vue';
 import { useCharacterStore } from '../stores/character';
 import ExpansionSelector from './ExpansionSelector.vue';
 import SearchFilter from './SearchFilter.vue';
+import { useWowheadTooltips } from '../composables/useWowheadTooltips';
 
+useWowheadTooltips();
 const store = useCharacterStore();
 
 const activeExpansion = ref(store.latestExpansionId);

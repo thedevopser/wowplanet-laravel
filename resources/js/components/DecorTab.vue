@@ -135,7 +135,9 @@ import { ref, computed, watch } from 'vue';
 import SearchFilter from './SearchFilter.vue';
 import CollectionIcon from './CollectionIcon.vue';
 import { useCharacterStore } from '../stores/character';
+import { useWowheadTooltips } from '../composables/useWowheadTooltips';
 
+useWowheadTooltips();
 const characterStore = useCharacterStore();
 
 const props = defineProps({

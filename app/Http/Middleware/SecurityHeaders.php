@@ -26,11 +26,11 @@ final class SecurityHeaders
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
             $response->headers->set('Content-Security-Policy',
                 "default-src 'self'; "
-                ."script-src 'self' https://umami.wowplanet.fr; "
+                ."script-src 'self' https://umami.wowplanet.fr https://wow.zamimg.com; "
                 ."style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 ."font-src 'self' https://fonts.gstatic.com; "
                 ."img-src 'self' https://wow.zamimg.com https://render.worldofwarcraft.com data:; "
-                ."connect-src 'self' https://umami.wowplanet.fr; "
+                ."connect-src 'self' https://umami.wowplanet.fr https://nether.wowhead.com; "
                 ."frame-ancestors 'none';"
             );
         }
