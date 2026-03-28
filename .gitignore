@@ -37,3 +37,4 @@ docker-compose*.yml
 docker/
 *.sqlite
 docs/
+.superpowers/
