@@ -15,6 +15,7 @@ readonly class CharacterProfileDTO
      * @param  array<string, mixed>|null  $mythicKeystone
      * @param  list<int>  $completedQuestIds
      * @param  list<int>  $completedAchievementIds
+     * @param  list<array{slot: string, slot_name: string, item_id: int, name: string, item_level: int, quality: string, icon_url: string|null}>  $equipment
      */
     public function __construct(
         public string $name,
@@ -41,5 +42,6 @@ readonly class CharacterProfileDTO
         public ?array $mythicKeystone = null,
         public array $completedQuestIds = [],
         public array $completedAchievementIds = [],
+        public array $equipment = [],
     ) {}
 }

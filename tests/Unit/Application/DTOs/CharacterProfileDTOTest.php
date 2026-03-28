@@ -92,3 +92,49 @@ test('it defaults mounts and pets to empty arrays', function (): void {
         ->and($characterProfileDTO->decor)->toBe([])
         ->and($characterProfileDTO->exaltedCount)->toBe(0);
 });
+
+test('it defaults equipment to empty array', function (): void {
+    $characterProfileDTO = new CharacterProfileDTO(
+        name: 'Test',
+        realm: 'Realm',
+        race: 'Human',
+        class: 'Warrior',
+        classId: 1,
+        level: 1,
+        ilvl: 1,
+        faction: 'Alliance',
+        avatarUrl: '',
+        classIconUrl: '',
+        collections: [],
+        mountsCount: 0,
+        petsCount: 0,
+    );
+
+    expect($characterProfileDTO->equipment)->toBe([]);
+});
+
+test('it accepts equipment array', function (): void {
+    $equipment = [
+        ['slot' => 'HEAD', 'slot_name' => 'Tête', 'item_id' => 123, 'name' => 'Casque', 'item_level' => 639, 'quality' => 'EPIC', 'icon_url' => null],
+    ];
+
+    $characterProfileDTO = new CharacterProfileDTO(
+        name: 'Test',
+        realm: 'Realm',
+        race: 'Human',
+        class: 'Warrior',
+        classId: 1,
+        level: 1,
+        ilvl: 1,
+        faction: 'Alliance',
+        avatarUrl: '',
+        classIconUrl: '',
+        collections: [],
+        mountsCount: 0,
+        petsCount: 0,
+        equipment: $equipment,
+    );
+
+    expect($characterProfileDTO->equipment)->toHaveCount(1)
+        ->and($characterProfileDTO->equipment[0]['slot'])->toBe('HEAD');
+});
