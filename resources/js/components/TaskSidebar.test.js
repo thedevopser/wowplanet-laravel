@@ -169,6 +169,30 @@ describe('TaskSidebar', () => {
         expect(wrapper.text()).toContain('Raid');
     });
 
+    it('displays M badge for monthly tasks', async () => {
+        const wrapper = await mountWithPlugins(TaskSidebar, {
+            initialState: {
+                tasks: {
+                    tasks: [
+                        { id: 1, realm_slug: 'hyjal', character_name: 'thrall', name: 'Objectif mensuel', is_completed: false, reset_type: 'monthly' },
+                    ],
+                    sidebarOpen: true,
+                },
+                character: {
+                    userCharacters: [
+                        { name: 'Thrall', realm: { slug: 'hyjal', name: 'Hyjal' }, className: 'Chaman', avatarUrl: '/avatar.jpg' },
+                    ],
+                },
+            },
+        });
+
+        await wrapper.find('[data-testid="character-header"]').trigger('click');
+
+        const tasks = wrapper.findAll('[data-testid="task-item"]');
+        expect(tasks).toHaveLength(1);
+        expect(wrapper.text()).toContain('M');
+    });
+
     // ─── Create task form ───────────────────────────────
 
     it('shows create form when add button is clicked', async () => {

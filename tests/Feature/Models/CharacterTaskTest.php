@@ -93,6 +93,6 @@ test('CharacterTask factory creates valid instance', function (): void {
         ->and($task->realm_slug)->toBeString()
         ->and($task->character_name)->toBeString()
         ->and($task->name)->toBeString()
-        ->and($task->reset_type)->toBeIn(['daily', 'weekly'])
+        ->and($task->reset_type)->toBeIn(['daily', 'weekly', 'monthly'])
         ->and($task->is_completed)->toBeBool();
 });

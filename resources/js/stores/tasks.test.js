@@ -40,16 +40,17 @@ describe('tasks store', () => {
         expect(jainaTasks).toHaveLength(1);
     });
 
-    it('characterTasks sorts daily before weekly', () => {
+    it('characterTasks sorts daily before weekly before monthly', () => {
         const store = useTaskStore();
         store.tasks = [
             { id: 1, realm_slug: 'hyjal', character_name: 'thrall', name: 'Raid hebdo', reset_type: 'weekly', is_completed: false },
             { id: 2, realm_slug: 'hyjal', character_name: 'thrall', name: 'Quête daily', reset_type: 'daily', is_completed: false },
-            { id: 3, realm_slug: 'hyjal', character_name: 'thrall', name: 'Donjon daily', reset_type: 'daily', is_completed: false },
+            { id: 3, realm_slug: 'hyjal', character_name: 'thrall', name: 'Objectif mensuel', reset_type: 'monthly', is_completed: false },
+            { id: 4, realm_slug: 'hyjal', character_name: 'thrall', name: 'Donjon daily', reset_type: 'daily', is_completed: false },
         ];
 
         const tasks = store.characterTasks('hyjal', 'thrall');
-        expect(tasks.map(t => t.reset_type)).toEqual(['daily', 'daily', 'weekly']);
+        expect(tasks.map(t => t.reset_type)).toEqual(['daily', 'daily', 'weekly', 'monthly']);
     });
 
     it('charactersWithTasks returns unique character list', () => {
@@ -219,6 +220,54 @@ describe('tasks store', () => {
         store.applyResets();
 
         expect(store.tasks[0].is_completed).toBe(false);
+    });
+
+    it('applyResets resets monthly tasks completed before 1st of current month 5am', () => {
+        const store = useTaskStore();
+
+        // Completed on the 15th of last month — should be reset
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        lastMonth.setDate(15);
+        lastMonth.setHours(10, 0, 0, 0);
+
+        store.tasks = [
+            {
+                id: 1,
+                reset_type: 'monthly',
+                is_completed: true,
+                completed_at: lastMonth.toISOString(),
+            },
+        ];
+
+        axios.put.mockResolvedValue({ data: { id: 1, is_completed: false, completed_at: null } });
+
+        store.applyResets();
+
+        expect(store.tasks[0].is_completed).toBe(false);
+        expect(store.tasks[0].completed_at).toBeNull();
+    });
+
+    it('applyResets does not reset monthly tasks completed after 1st of current month 5am', () => {
+        const store = useTaskStore();
+
+        // Completed on the 2nd of this month at 10am — should NOT be reset
+        const thisMonth = new Date();
+        thisMonth.setDate(2);
+        thisMonth.setHours(10, 0, 0, 0);
+
+        store.tasks = [
+            {
+                id: 1,
+                reset_type: 'monthly',
+                is_completed: true,
+                completed_at: thisMonth.toISOString(),
+            },
+        ];
+
+        store.applyResets();
+
+        expect(store.tasks[0].is_completed).toBe(true);
     });
 
     // ─── Sidebar persistence ─────────────────────────────

@@ -30,7 +30,10 @@ export const useTaskStore = defineStore('tasks', {
             return (realmSlug, characterName) =>
                 state.tasks
                     .filter(t => t.realm_slug === realmSlug && t.character_name === characterName)
-                    .sort((a, b) => (a.reset_type === 'daily' ? 0 : 1) - (b.reset_type === 'daily' ? 0 : 1));
+                    .sort((a, b) => {
+                    const order = { daily: 0, weekly: 1, monthly: 2 };
+                    return (order[a.reset_type] ?? 3) - (order[b.reset_type] ?? 3);
+                });
         },
 
         pendingCount(state) {
@@ -78,14 +81,17 @@ export const useTaskStore = defineStore('tasks', {
 
         applyResets() {
             const now = new Date();
-            const dailyThreshold = this._getDailyThreshold(now);
-            const weeklyThreshold = this._getWeeklyThreshold(now);
+            const thresholds = {
+                daily: this._getDailyThreshold(now),
+                weekly: this._getWeeklyThreshold(now),
+                monthly: this._getMonthlyThreshold(now),
+            };
 
             for (const task of this.tasks) {
                 if (!task.is_completed || !task.completed_at) continue;
 
                 const completedAt = new Date(task.completed_at);
-                const threshold = task.reset_type === 'daily' ? dailyThreshold : weeklyThreshold;
+                const threshold = thresholds[task.reset_type];
 
                 if (completedAt < threshold) {
                     task.is_completed = false;
@@ -119,6 +125,14 @@ export const useTaskStore = defineStore('tasks', {
             threshold.setDate(threshold.getDate() - daysBack);
             if (now < threshold) {
                 threshold.setDate(threshold.getDate() - 7);
+            }
+            return threshold;
+        },
+
+        _getMonthlyThreshold(now) {
+            const threshold = new Date(now.getFullYear(), now.getMonth(), 1, 5, 0, 0, 0);
+            if (now < threshold) {
+                threshold.setMonth(threshold.getMonth() - 1);
             }
             return threshold;
         },

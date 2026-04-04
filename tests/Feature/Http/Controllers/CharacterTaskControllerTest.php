@@ -65,7 +65,7 @@ test('store validates required fields', function (): void {
     $response->assertStatus(422);
 });
 
-test('store validates reset_type is daily or weekly', function (): void {
+test('store validates reset_type is daily, weekly or monthly', function (): void {
     $response = $this->withSession([
         'blizzard_user_token' => 'fake-token',
         'bnet_user_id' => '111',
@@ -73,7 +73,7 @@ test('store validates reset_type is daily or weekly', function (): void {
         'realm_slug' => 'hyjal',
         'character_name' => 'thrall',
         'name' => 'Test',
-        'reset_type' => 'monthly',
+        'reset_type' => 'yearly',
     ]);
 
     $response->assertStatus(422);

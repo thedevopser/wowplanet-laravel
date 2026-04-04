@@ -40,7 +40,7 @@ class CharacterTaskController extends Controller
             'realm_slug' => ['required', 'string'],
             'character_name' => ['required', 'string'],
             'name' => ['required', 'string', 'max:255'],
-            'reset_type' => ['required', 'in:daily,weekly'],
+            'reset_type' => ['required', 'in:daily,weekly,monthly'],
         ]);
 
         $characterTask = $this->characterTaskService->createTask($bnetUserId, $validated);

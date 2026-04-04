@@ -24,7 +24,7 @@ class CharacterTaskFactory extends Factory
             'realm_slug' => fake()->randomElement(['hyjal', 'dalaran', 'archimonde']),
             'character_name' => strtolower(fake()->firstName()),
             'name' => fake()->randomElement(['Donjon mythique', 'World boss', 'Quête journalière', 'Raid hebdo']),
-            'reset_type' => fake()->randomElement(['daily', 'weekly']),
+            'reset_type' => fake()->randomElement(['daily', 'weekly', 'monthly']),
             'is_completed' => false,
             'completed_at' => null,
             'sort_order' => 0,

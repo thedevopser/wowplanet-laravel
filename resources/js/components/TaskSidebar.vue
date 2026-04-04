@@ -115,11 +115,13 @@
                                 </span>
                                 <span
                                     class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                                    :class="task.reset_type === 'daily'
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : 'bg-blue-500/20 text-blue-400'"
+                                    :class="{
+                                        'bg-emerald-500/20 text-emerald-400': task.reset_type === 'daily',
+                                        'bg-blue-500/20 text-blue-400': task.reset_type === 'weekly',
+                                        'bg-purple-500/20 text-purple-400': task.reset_type === 'monthly',
+                                    }"
                                 >
-                                    {{ task.reset_type === 'daily' ? 'J' : 'H' }}
+                                    {{ { daily: 'J', weekly: 'H', monthly: 'M' }[task.reset_type] }}
                                 </span>
                                 <button
                                     data-testid="delete-task-btn"
@@ -161,10 +163,11 @@
                                     <select
                                         data-testid="task-reset-select"
                                         v-model="formResetType"
-                                        class="flex-1 px-2 py-1.5 text-sm bg-white/5 border border-white/10 rounded-md text-white focus:outline-none focus:border-emerald-500"
+                                        class="flex-1 px-2 py-1.5 text-sm bg-gray-800 border border-white/10 rounded-md text-white focus:outline-none focus:border-emerald-500"
                                     >
                                         <option value="daily" class="bg-gray-800 text-white">Journalier</option>
                                         <option value="weekly" class="bg-gray-800 text-white">Hebdomadaire</option>
+                                        <option value="monthly" class="bg-gray-800 text-white">Mensuel</option>
                                     </select>
                                     <button
                                         type="submit"
