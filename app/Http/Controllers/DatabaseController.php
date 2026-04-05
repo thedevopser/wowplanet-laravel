@@ -4,21 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Application\Services\DatabaseContentRenderer;
 use App\Application\Services\DatabaseSeoService;
-use App\Application\Services\SeoContentRenderer;
 use Illuminate\Contracts\View\View;
 
 class DatabaseController extends Controller
 {
     public function __construct(
         private readonly DatabaseSeoService $databaseSeoService,
-        private readonly SeoContentRenderer $seoContentRenderer,
+        private readonly DatabaseContentRenderer $databaseContentRenderer,
     ) {}
 
     public function index(): View
     {
         $seo = $this->databaseSeoService->getIndexMeta();
-        $seo['serverHtml'] = $this->seoContentRenderer->renderDatabaseIndex($this->appUrl());
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderDatabaseIndex($this->appUrl());
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -29,7 +29,7 @@ class DatabaseController extends Controller
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderMounts($this->appUrl(), $category) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderMounts($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -40,18 +40,18 @@ class DatabaseController extends Controller
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderAchievements($this->appUrl(), $expansion) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderAchievements($this->appUrl(), $expansion) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function quests(?string $expansion = null, ?string $zone = null): View
+    public function quests(?string $expansion = null): View
     {
-        $seo = $this->databaseSeoService->getQuestsMeta($expansion, $zone);
+        $seo = $this->databaseSeoService->getQuestsMeta($expansion);
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderQuests($this->appUrl(), $expansion, $zone) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderQuests($this->appUrl(), $expansion) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -62,7 +62,7 @@ class DatabaseController extends Controller
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderPets($this->appUrl(), $category) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderPets($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -73,7 +73,7 @@ class DatabaseController extends Controller
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderDecors($this->appUrl(), $category) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderDecors($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
@@ -84,9 +84,18 @@ class DatabaseController extends Controller
 
         abort_if($seo === null, 404);
 
-        $seo['serverHtml'] = $this->seoContentRenderer->renderProfessions($this->appUrl(), $profession) ?? '';
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderProfessions($this->appUrl(), $profession) ?? '';
 
         return view('welcome', ['seo' => $seo]);
+    }
+
+    public function sitemap(): \Illuminate\Http\Response
+    {
+        $xml = $this->databaseSeoService->generateSitemap();
+
+        return response($xml, 200, [
+            'Content-Type' => 'application/xml; charset=UTF-8',
+        ]);
     }
 
     private function appUrl(): string

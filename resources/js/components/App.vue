@@ -6,17 +6,21 @@
 
         <AppHeader />
 
-        <main id="main-content" class="flex-1 overflow-y-auto">
-            <div class="max-w-360 mx-auto px-3 sm:px-4 py-6 sm:py-8">
-            <div v-if="store.error" role="alert" class="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-lg mb-6">
-                {{ store.error }}
-            </div>
-
-            <router-view v-slot="{ Component }">
-                <Transition name="page" mode="out-in">
+        <main id="main-content" class="flex-1 overflow-y-auto" :class="isDatabase ? 'flex' : ''">
+            <div v-if="isDatabase" class="flex-1 flex min-h-0">
+                <router-view v-slot="{ Component }">
                     <component :is="Component" />
-                </Transition>
-            </router-view>
+                </router-view>
+            </div>
+            <div v-else class="max-w-360 mx-auto px-3 sm:px-4 py-6 sm:py-8">
+                <div v-if="store.error" role="alert" class="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-lg mb-6">
+                    {{ store.error }}
+                </div>
+                <router-view v-slot="{ Component }">
+                    <Transition name="page" mode="out-in">
+                        <component :is="Component" />
+                    </Transition>
+                </router-view>
             </div>
         </main>
 
@@ -27,14 +31,17 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue';
+import { computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useCharacterStore } from '../stores/character';
 import { useTaskStore } from '../stores/tasks';
 import AppHeader from './AppHeader.vue';
 import AppFooter from './AppFooter.vue';
 import TaskSidebar from './TaskSidebar.vue';
 
+const route = useRoute();
 const store = useCharacterStore();
+const isDatabase = computed(() => route.path.startsWith('/base-de-donnees'));
 const taskStore = useTaskStore();
 
 function applyTheme(theme) {

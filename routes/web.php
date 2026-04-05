@@ -12,13 +12,14 @@ Route::get('/robots.txt', [SeoController::class, 'robots']);
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap']);
 Route::get('/sitemap-pages.xml', [SeoController::class, 'sitemapPages']);
 Route::get('/sitemap-characters.xml', [SeoController::class, 'sitemapCharacters']);
+Route::get('/sitemap-database.xml', [DatabaseController::class, 'sitemap']);
 
 Route::get('/character/{realm}/{name}', [SeoController::class, 'characterPage']);
 
 Route::get('/base-de-donnees', [DatabaseController::class, 'index']);
 Route::get('/base-de-donnees/montures/{category?}', [DatabaseController::class, 'mounts']);
 Route::get('/base-de-donnees/hauts-faits/{expansion?}', [DatabaseController::class, 'achievements']);
-Route::get('/base-de-donnees/quetes/{expansion?}/{zone?}', [DatabaseController::class, 'quests']);
+Route::get('/base-de-donnees/quetes/{expansion?}', [DatabaseController::class, 'quests']);
 Route::get('/base-de-donnees/mascottes/{category?}', [DatabaseController::class, 'pets']);
 Route::get('/base-de-donnees/decorations/{category?}', [DatabaseController::class, 'decors']);
 Route::get('/base-de-donnees/professions/{profession?}', [DatabaseController::class, 'professions']);

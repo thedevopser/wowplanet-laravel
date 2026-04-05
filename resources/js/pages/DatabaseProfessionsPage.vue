@@ -1,29 +1,14 @@
 <template>
     <div class="space-y-6 py-6 sm:py-8">
-        <BreadcrumbNav :crumbs="breadcrumbs" />
-
         <!-- Profession list (when no profession selected) -->
         <template v-if="!activeProfessionSlug">
-            <div class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 blur-3xl -mr-16 -mt-16"></div>
-                <div class="relative z-10">
-                    <div class="flex justify-between items-end mb-4 sm:mb-6">
-                        <div>
-                            <h1 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
-                                <div class="w-2 h-6 sm:h-8 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50"></div>
-                                Professions
-                            </h1>
-                            <p class="text-slate-500 text-xs sm:text-sm md:text-base mt-1">Toutes les professions de World of Warcraft</p>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
-                                {{ totalRecipes.toLocaleString('fr-FR') }}
-                            </div>
-                            <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">recettes</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <DatabasePageHeader
+                title="Professions"
+                subtitle="Toutes les professions de World of Warcraft"
+                :count="totalRecipes"
+                count-label="recettes"
+                accent-color="emerald"
+            />
 
             <!-- Primary professions -->
             <section v-if="primaryProfessions.length">
@@ -81,7 +66,7 @@
                 <button
                     v-for="exp in expansions"
                     :key="exp.slug"
-                    @click="activeExpansion = activeExpansion === exp.slug ? '' : exp.slug"
+                    @click="toggleExpansion(exp.slug)"
                     :class="[
                         'px-3 sm:px-4 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[11px] sm:text-[13px] font-bold transition-all border flex flex-col items-center gap-1',
                         activeExpansion === exp.slug
@@ -99,86 +84,71 @@
                 </button>
             </div>
 
-            <!-- Header card -->
-            <div class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-600/5 blur-3xl -mr-16 -mt-16"></div>
-                <div class="relative z-10">
-                    <div class="flex justify-between items-end mb-4 sm:mb-6">
-                        <div>
-                            <h1 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
-                                <div class="w-2 h-6 sm:h-8 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50"></div>
-                                {{ professionName }}
-                            </h1>
-                            <p class="text-slate-500 text-xs sm:text-sm md:text-base mt-1">{{ activeExpansionName || 'Toutes les extensions' }}</p>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
-                                {{ recipes.length.toLocaleString('fr-FR') }}
-                            </div>
-                            <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">recettes</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <DatabasePageHeader
+                :title="professionName"
+                :subtitle="activeExpansionName || 'Toutes les extensions'"
+                :count="total"
+                count-label="recettes"
+                accent-color="emerald"
+            />
 
             <SearchFilter
                 v-model:search="search"
                 placeholder="Rechercher une recette..."
                 :show-hide-toggle="false"
-            >
-                <template #extra-toggles></template>
-            </SearchFilter>
+                :debounce-ms="300"
+                @search-debounced="onSearchDebounced"
+            />
 
-            <!-- Category groups -->
-            <section v-if="filteredCategories.length">
-                <div class="flex justify-between items-center mb-4 sm:mb-6">
-                    <h2 class="text-xs sm:text-sm font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-4 flex-1">
-                        Catégories
-                        <div class="flex-1 h-px bg-slate-700"></div>
-                    </h2>
-                    <div v-if="totalPages > 1" class="flex items-center gap-2 ml-4">
-                        <button @click="page--" :disabled="page === 1" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
-                            <span class="text-xs text-slate-300">&larr;</span>
-                        </button>
-                        <span class="text-xs sm:text-sm font-mono text-slate-400">{{ page }} / {{ totalPages }}</span>
-                        <button @click="page++" :disabled="page === totalPages" class="w-8 h-8 rounded-lg border border-white/5 flex items-center justify-center hover:bg-slate-800 disabled:opacity-30 transition-colors">
-                            <span class="text-xs text-slate-300">&rarr;</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
-                    <div
-                        v-for="cat in paginatedCategories"
-                        :key="cat.name"
-                        @click="toggleCategory(cat)"
-                        class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 transition-colors group cursor-pointer"
-                    >
-                        <div class="flex justify-between items-start mb-3">
-                            <span class="text-sm md:text-base font-bold text-slate-300 group-hover:text-emerald-400 transition-colors">{{ cat.name }}</span>
-                            <span class="text-[10px] sm:text-xs font-mono text-slate-500">{{ cat.count }}</span>
-                        </div>
-                        <div v-if="expandedCategory === cat.name" class="mt-3 pt-3 border-t border-white/5 space-y-1 max-h-96 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-300">
-                            <div v-for="recipe in cat.items" :key="recipe.id" class="flex items-center gap-3 text-xs sm:text-sm py-1.5">
-                                <a :href="recipe.wowhead_spell_id ? `https://www.wowhead.com/fr/spell=${recipe.wowhead_spell_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(recipe.name_fr)}`" target="_blank" rel="noopener" @click.stop class="text-slate-400 hover:text-emerald-400 hover:underline flex-1 truncate">{{ recipe.name_fr }}</a>
-                                <span v-if="recipe.faction" class="text-[9px] font-mono px-1.5 py-0.5 rounded border" :class="recipe.faction === 'Alliance' ? 'text-blue-400 border-blue-500/30 bg-blue-500/10' : 'text-red-400 border-red-500/30 bg-red-500/10'">{{ recipe.faction }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <!-- Flat table of all recipes -->
+            <div v-if="recipes.length" class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-white/10">
+                            <th class="text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider pb-3">Nom</th>
+                            <th class="text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider pb-3 hidden sm:table-cell">Catégorie</th>
+                            <th class="text-right text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider pb-3 w-24 hidden sm:table-cell">Faction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="recipe in recipes"
+                            :key="recipe.id"
+                            class="border-b border-white/3 even:bg-slate-800/20 hover:bg-slate-800/40 transition-colors"
+                        >
+                            <td class="py-2">
+                                <a :href="recipe.wowhead_spell_id ? `https://www.wowhead.com/fr/spell=${recipe.wowhead_spell_id}` : `https://www.wowhead.com/fr/search?q=${encodeURIComponent(recipe.name_fr)}`" target="_blank" rel="noopener" class="text-slate-300 hover:text-emerald-400 hover:underline">{{ recipe.name_fr }}</a>
+                            </td>
+                            <td class="py-2 text-slate-500 text-xs hidden sm:table-cell">{{ recipe.category_name }}</td>
+                            <td class="py-2 text-right hidden sm:table-cell">
+                                <span
+                                    v-if="recipe.faction"
+                                    class="text-[9px] font-mono px-1.5 py-0.5 rounded border"
+                                    :class="recipe.faction === 'Alliance'
+                                        ? 'text-blue-400 border-blue-500/20 bg-blue-500/10'
+                                        : 'text-red-400 border-red-500/20 bg-red-500/10'"
+                                >{{ recipe.faction }}</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <DatabasePagination
+                :current-page="currentPage"
+                :last-page="lastPage"
+                :total="total"
+                @page-change="onPageChange"
+            />
 
             <div v-if="loading" class="text-center py-12 text-slate-500 text-sm">Chargement...</div>
-            <div v-else-if="filteredCategories.length === 0 && !loading" class="text-center py-8 text-slate-500 text-sm">
+            <div v-else-if="recipes.length === 0 && !loading" class="text-center py-8 text-slate-500 text-sm">
                 Aucun résultat trouvé.
             </div>
         </template>
 
         <div v-if="listLoading" class="text-center py-12 text-slate-500 text-sm">Chargement...</div>
 
-        <div class="text-center text-xs text-slate-600 pt-4">
-            <router-link v-if="activeProfessionSlug" to="/base-de-donnees/professions" class="hover:text-slate-400 transition-colors">&larr; Toutes les professions</router-link>
-            <router-link v-else to="/base-de-donnees" class="hover:text-slate-400 transition-colors">&larr; Retour à la base de données</router-link>
-        </div>
     </div>
 </template>
 
@@ -186,8 +156,9 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import axios from 'axios';
-import BreadcrumbNav from '../components/BreadcrumbNav.vue';
 import SearchFilter from '../components/SearchFilter.vue';
+import DatabasePageHeader from '../components/DatabasePageHeader.vue';
+import DatabasePagination from '../components/DatabasePagination.vue';
 
 const route = useRoute();
 const listLoading = ref(true);
@@ -198,9 +169,10 @@ const recipes = ref([]);
 const expansions = ref([]);
 const professionName = ref('');
 const search = ref('');
-const page = ref(1);
-const itemsPerPage = 8;
-const expandedCategory = ref(null);
+const serverSearch = ref('');
+const currentPage = ref(1);
+const lastPage = ref(1);
+const total = ref(0);
 const activeExpansion = ref('');
 
 const activeProfessionSlug = computed(() => route.params.profession || '');
@@ -213,50 +185,9 @@ const activeExpansionName = computed(() => {
     return exp?.name || '';
 });
 
-const breadcrumbs = computed(() => {
-    const crumbs = [
-        { label: 'Base de données', to: '/base-de-donnees' },
-    ];
-    if (activeProfessionSlug.value) {
-        crumbs.push({ label: 'Professions', to: '/base-de-donnees/professions' });
-        crumbs.push({ label: professionName.value || activeProfessionSlug.value });
-    } else {
-        crumbs.push({ label: 'Professions' });
-    }
-    return crumbs;
-});
-
-const categoryMap = computed(() => {
-    const map = {};
-    for (const recipe of recipes.value) {
-        const cat = recipe.category_name || 'Autre';
-        if (!map[cat]) map[cat] = [];
-        map[cat].push(recipe);
-    }
-    return map;
-});
-
-const filteredCategories = computed(() => {
-    const q = search.value.toLowerCase();
-    return Object.entries(categoryMap.value)
-        .map(([name, catRecipes]) => {
-            const filtered = q ? catRecipes.filter(r => r.name_fr.toLowerCase().includes(q)) : catRecipes;
-            return { name, items: filtered, count: filtered.length };
-        })
-        .filter(c => c.count > 0)
-        .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-});
-
-const paginatedCategories = computed(() => {
-    const start = (page.value - 1) * itemsPerPage;
-    return filteredCategories.value.slice(start, start + itemsPerPage);
-});
-
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredCategories.value.length / itemsPerPage)));
-
-const toggleCategory = (cat) => {
-    expandedCategory.value = expandedCategory.value === cat.name ? null : cat.name;
-};
+function toggleExpansion(slug) {
+    activeExpansion.value = activeExpansion.value === slug ? '' : slug;
+}
 
 async function fetchProfessionList() {
     listLoading.value = true;
@@ -274,12 +205,16 @@ async function fetchProfessionList() {
 async function fetchRecipes() {
     loading.value = true;
     try {
-        const params = { profession: activeProfessionSlug.value };
+        const params = { profession: activeProfessionSlug.value, page: currentPage.value };
         if (activeExpansion.value) params.expansion = activeExpansion.value;
+        if (serverSearch.value) params.search = serverSearch.value;
         const { data } = await axios.get('/api/database/professions/recipes', { params });
         recipes.value = data.items;
         expansions.value = data.expansions;
         professionName.value = data.profession?.name_fr || '';
+        total.value = data.total || 0;
+        lastPage.value = data.last_page || 1;
+        currentPage.value = data.current_page || 1;
     } catch {
         recipes.value = [];
     } finally {
@@ -287,10 +222,22 @@ async function fetchRecipes() {
     }
 }
 
+function onPageChange(page) {
+    currentPage.value = page;
+    fetchRecipes();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function onSearchDebounced(value) {
+    serverSearch.value = value;
+    currentPage.value = 1;
+    fetchRecipes();
+}
+
 watch(() => route.params.profession, () => {
-    page.value = 1;
+    currentPage.value = 1;
     search.value = '';
-    expandedCategory.value = null;
+    serverSearch.value = '';
     activeExpansion.value = '';
     if (activeProfessionSlug.value) {
         fetchRecipes();
@@ -300,17 +247,12 @@ watch(() => route.params.profession, () => {
 });
 
 watch(activeExpansion, () => {
-    page.value = 1;
+    currentPage.value = 1;
     search.value = '';
-    expandedCategory.value = null;
+    serverSearch.value = '';
     if (activeProfessionSlug.value) {
         fetchRecipes();
     }
-});
-
-watch(search, () => {
-    page.value = 1;
-    expandedCategory.value = null;
 });
 
 onMounted(() => {

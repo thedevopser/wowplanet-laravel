@@ -77,20 +77,19 @@ test('it returns achievements meta', function (): void {
         ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/hauts-faits/the-war-within');
 });
 
-test('it returns quests meta with zone', function (): void {
+test('it returns quests meta by expansion', function (): void {
     WowQuest::factory()->count(3)->create([
         'expansion_id' => 10,
         'zone_name' => 'Dornogal',
     ]);
 
     $databaseSeoService = resolve(DatabaseSeoService::class);
-    $meta = $databaseSeoService->getQuestsMeta('the-war-within', 'dornogal');
+    $meta = $databaseSeoService->getQuestsMeta('the-war-within');
 
     expect($meta)->toHaveKeys(seoKeys())
-        ->and($meta['title'])->toContain('Dornogal')
         ->and($meta['title'])->toContain('The War Within')
         ->and($meta['description'])->toContain('3')
-        ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/quetes/the-war-within/dornogal');
+        ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/quetes/the-war-within');
 });
 
 test('it returns pets meta', function (): void {

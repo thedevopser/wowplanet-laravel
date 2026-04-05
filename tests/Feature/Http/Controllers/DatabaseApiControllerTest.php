@@ -103,10 +103,10 @@ test('it filters achievements by expansion slug', function (): void {
 
     $data = $response->json();
     expect($data['items'])->toHaveCount(3)
-        ->and($data['total'])->toBe(5);
+        ->and($data['total'])->toBe(3);
 });
 
-test('it returns quests with zones for expansion', function (): void {
+test('it returns quests filtered by expansion', function (): void {
     WowQuest::factory()->count(2)->create(['expansion_id' => 10, 'zone_name' => 'Dornogal']);
     WowQuest::factory()->create(['expansion_id' => 10, 'zone_name' => 'Azj-Kahet']);
     WowQuest::factory()->create(['expansion_id' => 0, 'zone_name' => 'Durotar']);
@@ -117,12 +117,7 @@ test('it returns quests with zones for expansion', function (): void {
 
     $data = $response->json();
     expect($data['items'])->toHaveCount(3)
-        ->and($data['total'])->toBe(4)
-        ->and($data['zones'])->toHaveCount(2);
-
-    $zoneNames = array_column($data['zones'], 'name');
-    expect($zoneNames)->toContain('Azj-Kahet')
-        ->toContain('Dornogal');
+        ->and($data['total'])->toBe(3);
 });
 
 test('it returns pets with categories', function (): void {

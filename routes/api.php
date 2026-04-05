@@ -18,6 +18,7 @@ Route::middleware('throttle:api')->group(function (): void {
     Route::get('/database/decors', [DatabaseApiController::class, 'decors']);
     Route::get('/database/professions', [DatabaseApiController::class, 'professions']);
     Route::get('/database/professions/recipes', [DatabaseApiController::class, 'professionRecipes']);
+    Route::get('/database/subcategories/{section}', [DatabaseApiController::class, 'subcategories']);
 });
 
 Route::middleware('throttle:authenticated')->group(function (): void {

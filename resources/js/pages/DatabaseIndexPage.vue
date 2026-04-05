@@ -1,7 +1,5 @@
 <template>
     <div class="space-y-8 py-6 sm:py-8">
-        <BreadcrumbNav :crumbs="[{ label: 'Base de données' }]" />
-
         <div class="text-center max-w-3xl mx-auto">
             <h1 class="text-3xl sm:text-4xl md:text-5xl font-black mb-4">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Base de données WoW</span>
@@ -85,7 +83,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
-import BreadcrumbNav from '../components/BreadcrumbNav.vue';
 import CategoryIcon from '../components/CategoryIcon.vue';
 
 const counts = ref({});

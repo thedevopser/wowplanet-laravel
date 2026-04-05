@@ -17,6 +17,9 @@ const mockData = {
         { slug: 'the-war-within', name: 'The War Within', count: 200 },
     ],
     total: 5123,
+    current_page: 1,
+    last_page: 103,
+    per_page: 50,
 };
 
 const routes = [
@@ -53,12 +56,12 @@ describe('DatabaseAchievementsPage', () => {
         });
         await flushPromises();
 
-        expect(axios.get).toHaveBeenCalledWith('/api/database/achievements', { params: {} });
+        expect(axios.get).toHaveBeenCalledWith('/api/database/achievements', { params: { page: 1 } });
         expect(wrapper.text()).toContain('Exploration');
         expect(wrapper.text()).toContain('JcJ');
     });
 
-    it('search filters items by name', async () => {
+    it('search triggers server-side fetch', async () => {
         const router = createMockRouter({ routes });
         const wrapper = await mountWithPlugins(DatabaseAchievementsPage, {
             router,
@@ -70,11 +73,13 @@ describe('DatabaseAchievementsPage', () => {
         expect(wrapper.text()).toContain('Exploration');
         expect(wrapper.text()).toContain('JcJ');
 
-        wrapper.vm.search = 'gladiateur';
+        // Simulate debounced search event
+        wrapper.vm.onSearchDebounced('gladiateur');
         await flushPromises();
 
-        expect(wrapper.text()).toContain('JcJ');
-        expect(wrapper.text()).not.toContain('Exploration');
+        expect(axios.get).toHaveBeenCalledWith('/api/database/achievements', {
+            params: { page: 1, search: 'gladiateur' },
+        });
     });
 
     it('handles API error', async () => {

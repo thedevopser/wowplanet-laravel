@@ -251,6 +251,7 @@ class CharacterSeoService
 
             return SitemapIndex::create()
                 ->add($appUrl.'/sitemap-pages.xml')
+                ->add($appUrl.'/sitemap-database.xml')
                 ->add($appUrl.'/sitemap-characters.xml')
                 ->render();
         });
@@ -289,17 +290,6 @@ class CharacterSeoService
                     ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
                     ->setPriority(1.0),
             );
-
-        $databaseSeoService = resolve(DatabaseSeoService::class);
-
-        foreach ($databaseSeoService->getSitemapUrls() as $entry) {
-            $sitemap->add(
-                Url::create($entry['url'])
-                    ->setLastModificationDate($now)
-                    ->setChangeFrequency(Url::CHANGE_FREQUENCY_WEEKLY)
-                    ->setPriority(0.7),
-            );
-        }
 
         $sitemap->add(
             Url::create($appUrl.'/privacy')

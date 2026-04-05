@@ -167,7 +167,7 @@ class DatabaseSeoService
     /**
      * @return array<string, string|null>|null
      */
-    public function getQuestsMeta(?string $expansionSlug, ?string $zoneSlug): ?array
+    public function getQuestsMeta(?string $expansionSlug): ?array
     {
         $appUrl = $this->appUrl();
 
@@ -179,52 +179,27 @@ class DatabaseSeoService
             }
 
             $expansionName = $expansion->toString();
-            $query = WowQuest::query()->where('is_active', true)
-                ->where('expansion_id', $expansion->value);
+            $count = WowQuest::query()->where('is_active', true)
+                ->where('expansion_id', $expansion->value)
+                ->count();
 
-            if ($zoneSlug !== null) {
-                $zoneName = $this->deSlugifyCategory($zoneSlug, 'quest-zones', $expansion->value);
-                $query->where('zone_name', $zoneName);
-                $count = $query->count();
-
-                if ($count === 0) {
-                    return null;
-                }
-
-                $title = sprintf('Quêtes %s (%s) — %d quêtes | WowPlanet', $zoneName, $expansionName, $count);
-                $description = sprintf(
-                    '%d quêtes de %s (%s) en français. Vérifiez votre progression et trouvez les quêtes manquantes.',
-                    $count,
-                    $zoneName,
-                    $expansionName,
-                );
-                $canonicalUrl = $appUrl.'/base-de-donnees/quetes/'.$expansionSlug.'/'.$zoneSlug;
-                $breadcrumbs = [
-                    ['Base de données', $appUrl.'/base-de-donnees'],
-                    ['Quêtes', $appUrl.'/base-de-donnees/quetes'],
-                    [$expansionName, $appUrl.'/base-de-donnees/quetes/'.$expansionSlug],
-                    [$zoneName, $canonicalUrl],
-                ];
-            } else {
-                $count = $query->count();
-                $title = sprintf('Quêtes WoW %s — %d quêtes | WowPlanet', $expansionName, $count);
-                $description = sprintf(
-                    'Toutes les %d quêtes de %s dans World of Warcraft en français. Triées par zone avec liens Wowhead.',
-                    $count,
-                    $expansionName,
-                );
-                $canonicalUrl = $appUrl.'/base-de-donnees/quetes/'.$expansionSlug;
-                $breadcrumbs = [
-                    ['Base de données', $appUrl.'/base-de-donnees'],
-                    ['Quêtes', $appUrl.'/base-de-donnees/quetes'],
-                    [$expansionName, $canonicalUrl],
-                ];
-            }
+            $title = sprintf('Quêtes WoW %s — %d quêtes | WowPlanet', $expansionName, $count);
+            $description = sprintf(
+                'Toutes les %d quêtes de %s dans World of Warcraft en français. Triées par zone avec liens Wowhead.',
+                $count,
+                $expansionName,
+            );
+            $canonicalUrl = $appUrl.'/base-de-donnees/quetes/'.$expansionSlug;
+            $breadcrumbs = [
+                ['Base de données', $appUrl.'/base-de-donnees'],
+                ['Quêtes', $appUrl.'/base-de-donnees/quetes'],
+                [$expansionName, $canonicalUrl],
+            ];
         } else {
             $count = WowQuest::query()->where('is_active', true)->count();
             $title = sprintf('Quêtes WoW — %s quêtes | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
             $description = sprintf(
-                'Toutes les %s quêtes de World of Warcraft en français. Triées par extension et zone. La référence francophone.',
+                'Toutes les %s quêtes de World of Warcraft en français. Triées par extension. La référence francophone.',
                 number_format($count, 0, ',', ' '),
             );
             $canonicalUrl = $appUrl.'/base-de-donnees/quetes';
@@ -500,26 +475,32 @@ class DatabaseSeoService
                     'label' => 'quest-'.$slug,
                     'lastmod' => null,
                 ];
-
-                /** @var list<string> $zones */
-                $zones = WowQuest::query()->where('is_active', true)
-                    ->where('expansion_id', $id)
-                    ->whereNotNull('zone_name')
-                    ->distinct()
-                    ->pluck('zone_name')
-                    ->all();
-
-                foreach ($zones as $zone) {
-                    $urls[] = [
-                        'url' => $appUrl.'/base-de-donnees/quetes/'.$slug.'/'.$this->slugify($zone),
-                        'label' => 'quest-'.$slug.'-'.$zone,
-                        'lastmod' => null,
-                    ];
-                }
             }
         }
 
         return $urls;
+    }
+
+    public function generateSitemap(): string
+    {
+        /** @var string $xml */
+        $xml = \Illuminate\Support\Facades\Cache::remember('sitemap_database_xml', 86400, function (): string {
+            $sitemap = \Spatie\Sitemap\Sitemap::create();
+            $now = now();
+
+            foreach ($this->getSitemapUrls() as $entry) {
+                $sitemap->add(
+                    \Spatie\Sitemap\Tags\Url::create($entry['url'])
+                        ->setLastModificationDate($now)
+                        ->setChangeFrequency(\Spatie\Sitemap\Tags\Url::CHANGE_FREQUENCY_WEEKLY)
+                        ->setPriority(0.7),
+                );
+            }
+
+            return $sitemap->render();
+        });
+
+        return $xml;
     }
 
     private function slugify(string $text): string
@@ -536,7 +517,7 @@ class DatabaseSeoService
         return trim($slug, '-');
     }
 
-    private function deSlugifyCategory(string $slug, string $context, ?int $expansionId = null): string
+    private function deSlugifyCategory(string $slug, string $context): string
     {
         /** @var list<string> $candidates */
         $candidates = match ($context) {
@@ -557,12 +538,6 @@ class DatabaseSeoService
                 ->all(),
             'professions' => WowProfession::query()->where('is_active', true)
                 ->pluck('name_fr')
-                ->all(),
-            'quest-zones' => WowQuest::query()->where('is_active', true)
-                ->when($expansionId !== null, fn ($q) => $q->where('expansion_id', $expansionId))
-                ->whereNotNull('zone_name')
-                ->distinct()
-                ->pluck('zone_name')
                 ->all(),
             default => [],
         };

@@ -18,6 +18,9 @@ const mockData = {
     ],
     zones: [],
     total: 24000,
+    current_page: 1,
+    last_page: 480,
+    per_page: 50,
 };
 
 const routes = [
@@ -52,7 +55,7 @@ describe('DatabaseQuestsPage', () => {
         });
         await flushPromises();
 
-        expect(axios.get).toHaveBeenCalledWith('/api/database/quests', { params: {} });
+        expect(axios.get).toHaveBeenCalledWith('/api/database/quests', { params: { page: 1 } });
     });
 
     it('displays zone groups when data has items with zone_name', async () => {
@@ -68,7 +71,7 @@ describe('DatabaseQuestsPage', () => {
         expect(wrapper.text()).toContain('Forêt d\'Elwynn');
     });
 
-    it('search filters items', async () => {
+    it('search triggers server-side fetch', async () => {
         const router = createMockRouter({ routes });
         const wrapper = await mountWithPlugins(DatabaseQuestsPage, {
             router,
@@ -80,11 +83,13 @@ describe('DatabaseQuestsPage', () => {
         expect(wrapper.text()).toContain('Durotar');
         expect(wrapper.text()).toContain('Forêt d\'Elwynn');
 
-        wrapper.vm.search = 'hurlevent';
+        // Simulate debounced search event
+        wrapper.vm.onSearchDebounced('hurlevent');
         await flushPromises();
 
-        expect(wrapper.text()).toContain('Forêt d\'Elwynn');
-        expect(wrapper.text()).not.toContain('Durotar');
+        expect(axios.get).toHaveBeenCalledWith('/api/database/quests', {
+            params: { page: 1, search: 'hurlevent' },
+        });
     });
 
     it('handles API error', async () => {

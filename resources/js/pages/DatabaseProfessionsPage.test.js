@@ -26,6 +26,10 @@ const mockRecipeData = {
         { slug: 'the-war-within', name: 'The War Within', count: 100 },
     ],
     profession: { name_fr: 'Forge' },
+    total: 3,
+    current_page: 1,
+    last_page: 1,
+    per_page: 50,
 };
 
 const routes = [
@@ -83,7 +87,7 @@ describe('DatabaseProfessionsPage', () => {
         await flushPromises();
 
         expect(axios.get).toHaveBeenCalledWith('/api/database/professions/recipes', {
-            params: { profession: 'forge' },
+            params: { profession: 'forge', page: 1 },
         });
         expect(wrapper.text()).toContain('Forge');
         expect(wrapper.text()).toContain('Armes');

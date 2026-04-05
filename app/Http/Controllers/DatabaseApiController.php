@@ -53,10 +53,22 @@ class DatabaseApiController extends Controller
             }
         }
 
+        /** @var string|null $search */
+        $search = $request->query('search');
+        if ($search !== null && $search !== '') {
+            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
+        }
+
+        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
+        $lengthAwarePaginator = $builder->paginate($perPage);
+
         return response()->json([
-            'items' => $builder->get(),
+            'items' => $lengthAwarePaginator->items(),
             'expansions' => $this->buildExpansionList(WowAchievement::class),
-            'total' => WowAchievement::query()->where('is_active', true)->count(),
+            'total' => $lengthAwarePaginator->total(),
+            'current_page' => $lengthAwarePaginator->currentPage(),
+            'last_page' => $lengthAwarePaginator->lastPage(),
+            'per_page' => $lengthAwarePaginator->perPage(),
         ]);
     }
 
@@ -64,14 +76,11 @@ class DatabaseApiController extends Controller
     {
         /** @var string|null $expansionSlug */
         $expansionSlug = $request->query('expansion');
-        /** @var string|null $zoneSlug */
-        $zoneSlug = $request->query('zone');
 
         $builder = WowQuest::query()->where('is_active', true)
             ->select(['id', 'name_fr', 'expansion_id', 'zone_name', 'faction'])
             ->orderBy('name_fr');
 
-        $expansion = null;
         if ($expansionSlug !== null && $expansionSlug !== '') {
             $expansion = ExpansionId::fromSlug($expansionSlug);
             if ($expansion instanceof ExpansionId) {
@@ -79,35 +88,22 @@ class DatabaseApiController extends Controller
             }
         }
 
-        if ($zoneSlug !== null && $zoneSlug !== '' && $expansion instanceof ExpansionId) {
-            $zoneName = $this->deSlugify($zoneSlug, 'quests', $expansion->value);
-            $builder->where('zone_name', $zoneName);
+        /** @var string|null $search */
+        $search = $request->query('search');
+        if ($search !== null && $search !== '') {
+            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
         }
 
-        $zones = [];
-        if ($expansion instanceof ExpansionId) {
-            /** @var array<int, array{zone_name: string, items_count: int}> $rawZones */
-            $rawZones = WowQuest::query()->where('is_active', true)
-                ->where('expansion_id', $expansion->value)
-                ->whereNotNull('zone_name')
-                ->selectRaw('zone_name, COUNT(*) as items_count')
-                ->groupBy('zone_name')
-                ->orderBy('zone_name')
-                ->get()
-                ->toArray();
-
-            $zones = array_map(fn (array $row): array => [
-                'name' => $row['zone_name'],
-                'slug' => $this->slugify($row['zone_name']),
-                'count' => $row['items_count'],
-            ], $rawZones);
-        }
+        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
+        $lengthAwarePaginator = $builder->paginate($perPage);
 
         return response()->json([
-            'items' => $builder->get(),
+            'items' => $lengthAwarePaginator->items(),
             'expansions' => $this->buildExpansionList(WowQuest::class),
-            'zones' => $zones,
-            'total' => WowQuest::query()->where('is_active', true)->count(),
+            'total' => $lengthAwarePaginator->total(),
+            'current_page' => $lengthAwarePaginator->currentPage(),
+            'last_page' => $lengthAwarePaginator->lastPage(),
+            'per_page' => $lengthAwarePaginator->perPage(),
         ]);
     }
 
@@ -205,15 +201,64 @@ class DatabaseApiController extends Controller
             }
         }
 
+        /** @var string|null $search */
+        $search = $request->query('search');
+        if ($search !== null && $search !== '') {
+            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
+        }
+
+        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
+        $lengthAwarePaginator = $builder->paginate($perPage);
+
         return response()->json([
-            'items' => $builder->get(),
+            'items' => $lengthAwarePaginator->items(),
             'expansions' => $this->buildExpansionList(WowRecipe::class, $profession->id),
             'profession' => [
                 'id' => $profession->id,
                 'name_fr' => $profession->name_fr,
                 'type' => $profession->type,
             ],
+            'total' => $lengthAwarePaginator->total(),
+            'current_page' => $lengthAwarePaginator->currentPage(),
+            'last_page' => $lengthAwarePaginator->lastPage(),
+            'per_page' => $lengthAwarePaginator->perPage(),
         ]);
+    }
+
+    public function subcategories(string $section): JsonResponse
+    {
+        $items = match ($section) {
+            'mounts' => $this->buildCategoryList(WowMount::class),
+            'pets' => $this->buildCategoryList(WowPet::class),
+            'decors' => $this->buildCategoryList(WowDecor::class),
+            'achievements' => array_map(fn (array $e): array => [
+                'name' => $e['name'],
+                'slug' => $e['slug'],
+                'count' => $e['count'],
+            ], $this->buildExpansionList(WowAchievement::class)),
+            'quests' => array_map(fn (array $e): array => [
+                'name' => $e['name'],
+                'slug' => $e['slug'],
+                'count' => $e['count'],
+            ], $this->buildExpansionList(WowQuest::class)),
+            'professions' => WowProfession::query()->where('is_active', true)
+                ->select(['id', 'name_fr', 'type'])
+                ->orderBy('name_fr')
+                ->get()
+                ->map(fn (WowProfession $wowProfession): array => [
+                    'name' => $wowProfession->name_fr,
+                    'slug' => $this->slugify($wowProfession->name_fr),
+                    'count' => WowRecipe::query()->where('is_active', true)
+                        ->where('profession_id', $wowProfession->id)->count(),
+                    'type' => $wowProfession->type,
+                ])
+                ->all(),
+            default => null,
+        };
+
+        abort_if($items === null, 404);
+
+        return response()->json(['items' => $items]);
     }
 
     public function counts(): JsonResponse
@@ -295,7 +340,7 @@ class DatabaseApiController extends Controller
         return trim($slug, '-');
     }
 
-    private function deSlugify(string $slug, string $context, ?int $expansionId = null): string
+    private function deSlugify(string $slug, string $context): string
     {
         /** @var list<string> $candidates */
         $candidates = match ($context) {
@@ -316,12 +361,6 @@ class DatabaseApiController extends Controller
                 ->all(),
             'professions' => WowProfession::query()->where('is_active', true)
                 ->pluck('name_fr')
-                ->all(),
-            'quests' => WowQuest::query()->where('is_active', true)
-                ->when($expansionId !== null, fn ($q) => $q->where('expansion_id', $expansionId))
-                ->whereNotNull('zone_name')
-                ->distinct()
-                ->pluck('zone_name')
                 ->all(),
             default => [],
         };
