@@ -1,23 +1,37 @@
 <template>
     <div class="space-y-6">
-        <!-- Header card -->
-        <div class="card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden">
+        <!-- Header card (collapsible) -->
+        <button
+            @click="equipmentExpanded = !equipmentExpanded"
+            class="w-full card-glass rounded-2xl sm:rounded-3xl border p-5 sm:p-8 relative overflow-hidden text-left transition-all"
+            :class="equipmentExpanded ? '' : 'hover:border-white/10'"
+        >
             <div class="absolute top-0 right-0 w-32 h-32 bg-red-600/5 blur-3xl -mr-16 -mt-16"></div>
             <div class="relative z-10">
-                <div class="flex justify-between items-end mb-2">
+                <div class="flex justify-between items-center">
                     <h3 class="text-xl sm:text-2xl lg:text-3xl font-black text-white flex items-center gap-3">
                         <div class="w-2 h-6 sm:h-8 bg-red-500 rounded-full shadow-lg shadow-red-500/50"></div>
                         Équipement
                     </h3>
-                    <div class="text-right">
-                        <div class="text-2xl sm:text-3xl font-black text-red-400 font-mono">{{ character.ilvl }}</div>
-                        <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">ilvl équipé</div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-right">
+                            <div class="text-2xl sm:text-3xl font-black text-red-400 font-mono">{{ character.ilvl }}</div>
+                            <div class="text-[10px] sm:text-xs text-slate-500 font-mono uppercase font-bold">ilvl équipé</div>
+                        </div>
+                        <svg
+                            class="w-5 h-5 text-slate-400 transition-transform shrink-0"
+                            :class="equipmentExpanded ? 'rotate-180' : ''"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
                     </div>
                 </div>
             </div>
-        </div>
+        </button>
 
         <!-- Desktop: Paper Doll (md+) -->
+        <template v-if="equipmentExpanded">
         <div class="hidden md:grid grid-cols-[1fr_auto_1fr] gap-4">
             <div class="space-y-2">
                 <template v-for="slot in leftSlots" :key="slot">
@@ -128,18 +142,25 @@
                 <span v-if="itemBySlot(slot)" class="text-xs font-mono text-slate-400 shrink-0">{{ itemBySlot(slot).item_level }}</span>
             </component>
         </div>
+        </template>
+
+        <!-- Talent Tree (collapsible) -->
+        <TalentTreeSection :realm="character.realm" :name="character.name" />
     </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useWowheadTooltips } from '../composables/useWowheadTooltips';
+import TalentTreeSection from './TalentTreeSection.vue';
 
 useWowheadTooltips();
 
 const props = defineProps({
     character: { type: Object, required: true },
 });
+
+const equipmentExpanded = ref(true);
 
 const QUALITY_TEXT = {
     POOR: 'text-slate-500',

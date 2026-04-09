@@ -4,10 +4,12 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterTaskController;
 use App\Http\Controllers\DatabaseApiController;
+use App\Http\Controllers\TalentController;
 use App\Http\Controllers\UserCharacterController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:api')->group(function (): void {
+    Route::get('/character/{realm}/{name}/talents', [TalentController::class, 'show']);
     Route::get('/character/{realm}/{name}', [CharacterController::class, 'show']);
 
     Route::get('/database/counts', [DatabaseApiController::class, 'counts']);
