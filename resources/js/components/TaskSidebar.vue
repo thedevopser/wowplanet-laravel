@@ -74,7 +74,7 @@
                                 {{ char.character_name.charAt(0).toUpperCase() }}
                             </div>
                             <div class="flex-1 text-left">
-                                <div class="text-sm font-medium text-white">{{ getCharacterInfo(char)?.name || char.character_name }}</div>
+                                <div class="text-sm font-medium text-white">{{ capitalize(getCharacterInfo(char)?.name || char.character_name) }}</div>
                                 <div class="text-xs text-gray-400">{{ getCharacterInfo(char)?.realm?.name || char.realm_slug }}</div>
                             </div>
                             <span class="text-xs text-emerald-400 font-medium">
@@ -193,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTaskStore } from '../stores/tasks';
 import { useCharacterStore } from '../stores/character';
@@ -201,6 +201,12 @@ import { useCharacterStore } from '../stores/character';
 const taskStore = useTaskStore();
 const characterStore = useCharacterStore();
 const route = useRoute();
+
+onMounted(() => {
+    if (characterStore.isAuthenticated && !characterStore.userCharacters.length) {
+        characterStore.fetchUserCharacters();
+    }
+});
 
 const currentCharacter = computed(() => {
     if (route.name !== 'character' || !route.params.realm || !route.params.name) return null;
@@ -246,8 +252,13 @@ function isExpanded(realm, name) {
 
 function getCharacterInfo(char) {
     return characterStore.userCharacters.find(
-        c => c.realm?.slug === char.realm_slug && c.name?.toLowerCase() === char.character_name
+        c => c.realmSlug === char.realm_slug && c.name?.toLowerCase() === char.character_name
     );
+}
+
+function capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function showFormFor(realm, name) {
