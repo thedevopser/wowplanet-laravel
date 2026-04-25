@@ -131,6 +131,33 @@ test('build excludes JOUEUR factions', function (): void {
     expect($map)->not->toHaveKey(996);
 });
 
+test('build excludes Hunt season factions (Midnight)', function (): void {
+    // Blizzard French typography uses NBSP (U+00A0) before the season number
+    $nbsp = "\u{00A0}";
+    factionWriteCsv([
+        ['2698', 'Midnight', '0', '-1'],
+        ['2764', 'Traque saison'.$nbsp.'1', '2698', '536'],
+        ['2900', 'Traque saison 2', '2698', '537'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map)->not->toHaveKey(2764)
+        ->and($map)->not->toHaveKey(2900);
+});
+
+test('build keeps Traquesabres faction (not a Hunt season variant)', function (): void {
+    factionWriteCsv([
+        ['2104', 'Battle for Azeroth', '0', '-1'],
+        ['1850', 'Traquesabres', '2104', '0'],
+    ]);
+
+    $map = $this->mapper->build();
+
+    expect($map)->toHaveKey(1850)
+        ->and($map[1850])->toBe(7);
+});
+
 test('build handles circular parent references without infinite loop', function (): void {
     factionWriteCsv([
         ['100', 'Faction A', '200', '0'],

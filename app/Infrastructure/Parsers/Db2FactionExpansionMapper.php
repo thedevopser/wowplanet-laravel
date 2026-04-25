@@ -354,6 +354,12 @@ class Db2FactionExpansionMapper
             return true;
         }
 
+        // Hunt season factions (Midnight) — same issue: API does not return them.
+        // \h matches NBSP (U+00A0) used by Blizzard French typography.
+        if (preg_match('/^Traque\h+saison\h+\d+$/u', $name) === 1) {
+            return true;
+        }
+
         return str_contains($name, 'DEPRECATED') || str_contains($name, '[DNT]') || str_contains($name, 'JOUEUR');
     }
 }
