@@ -32,6 +32,7 @@ coverage/
 
 # Docker
 Dockerfile
+compose*.yml
 docker-compose*.yml
 .dockerignore
 docker/
