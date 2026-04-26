@@ -229,6 +229,103 @@ test('aggregate handles renown without max renown map entry', function (): void 
         ->and($result[9]['factions'][0]['completed'])->toBeFalse();
 });
 
+test('aggregate does not count Midnight Niveau X friendship as completed', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2744 => 11],
+        namesMap: [2744 => 'Valeera Sanguinar'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 2744, 'name' => 'Valeera Sanguinar'],
+                'standing' => ['name' => 'Niveau 41', 'tier' => 40, 'value' => 1838, 'max' => 88625, 'raw' => 1662898],
+            ],
+        ],
+    ]);
+
+    expect($result[11]['completed'])->toBe(0)
+        ->and($result[11]['factions'][0]['completed'])->toBeFalse()
+        ->and($result[11]['factions'][0]['tier'])->toBe(40)
+        ->and($result[11]['factions'][0]['max'])->toBe(88625);
+});
+
+test('aggregate does not count Brann Barbe-de-Bronze level as completed', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2640 => 10],
+        namesMap: [2640 => 'Brann Barbe-de-Bronze'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 2640, 'name' => 'Brann Barbe-de-Bronze'],
+                'standing' => ['name' => 'Niveau 81', 'tier' => 80, 'value' => 64033, 'max' => 166000, 'raw' => 5872433],
+            ],
+        ],
+    ]);
+
+    expect($result[10]['completed'])->toBe(0)
+        ->and($result[10]['factions'][0]['completed'])->toBeFalse();
+});
+
+test('aggregate counts paragon-capped exalted as completed', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2413 => 8],
+        namesMap: [2413 => 'Cour des Moissonneurs'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 2413, 'name' => 'Cour des Moissonneurs'],
+                'standing' => ['name' => 'Exalté', 'tier' => 7, 'value' => 0, 'max' => 0, 'raw' => 42000],
+            ],
+        ],
+    ]);
+
+    expect($result[8]['completed'])->toBe(1)
+        ->and($result[8]['factions'][0]['completed'])->toBeTrue();
+});
+
+test('aggregate counts Génie tier 8 as completed', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2601 => 10],
+        namesMap: [2601 => 'La Tisserande'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 2601, 'name' => 'La Tisserande'],
+                'standing' => ['name' => 'Génie', 'tier' => 8, 'value' => 0, 'max' => 0, 'raw' => 20000],
+            ],
+        ],
+    ]);
+
+    expect($result[10]['completed'])->toBe(1)
+        ->and($result[10]['factions'][0]['completed'])->toBeTrue();
+});
+
+test('aggregate counts Légende tier 4 with max=0 as completed', function (): void {
+    $reputationProgressAggregator = makeAggregator(
+        buildMap: [2553 => 9],
+        namesMap: [2553 => 'Soridormi'],
+    );
+
+    $result = $reputationProgressAggregator->aggregate([
+        'reputations' => [
+            [
+                'faction' => ['id' => 2553, 'name' => 'Soridormi'],
+                'standing' => ['name' => 'Légende', 'tier' => 4, 'value' => 0, 'max' => 0, 'raw' => 42000],
+            ],
+        ],
+    ]);
+
+    expect($result[9]['completed'])->toBe(1)
+        ->and($result[9]['factions'][0]['completed'])->toBeTrue();
+});
+
 // ─── New tests: unstarted factions ──────────────────────────
 
 test('aggregate mixes started and unstarted factions in same expansion', function (): void {

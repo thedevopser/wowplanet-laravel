@@ -9,8 +9,6 @@ use App\Infrastructure\Parsers\Db2FactionExpansionMapper;
 
 class ReputationProgressAggregator
 {
-    private const EXALTED_TIER = 7;
-
     public function __construct(
         private readonly Db2FactionExpansionMapper $db2FactionExpansionMapper,
         private readonly AddonDataParser $addonDataParser,
@@ -135,18 +133,14 @@ class ReputationProgressAggregator
      */
     private function isCompleted(int $factionId, int $tier, int $max, int $renownLevel, array $maxRenownMap): bool
     {
-        // Traditional exalted (tier 7+)
-        if ($tier >= self::EXALTED_TIER) {
+        // Renown au cap : renown reste à max>0 par palier, on compare via DB2
+        if ($renownLevel > 0 && isset($maxRenownMap[$factionId]) && $renownLevel >= $maxRenownMap[$factionId]) {
             return true;
         }
 
-        // Traditional exalted edge case (max=0, tier>0)
-        if ($max === 0 && $tier > 0) {
-            return true;
-        }
-
-        // Renown max: compare renown_level against known max from DB2
-        return $renownLevel > 0 && isset($maxRenownMap[$factionId]) && $renownLevel >= $maxRenownMap[$factionId];
+        // Tous les autres systèmes (exalted, friendship maxée, paragon, "Niveau X" Midnight) :
+        // l'API renvoie max=0 quand la progression est au cap.
+        return $max === 0 && $tier > 0;
     }
 
     /**
