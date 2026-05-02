@@ -12,6 +12,7 @@
         "spatie/laravel-sitemap": "^7.3"
     },
     "require-dev": {
+        "dedoc/scramble": "^0.13.22",
         "driftingly/rector-laravel": "^2.1",
         "fakerphp/faker": "^1.23",
         "larastan/larastan": "^3.9",

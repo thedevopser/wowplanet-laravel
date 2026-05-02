@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DatabaseController;
+use App\Http\Controllers\DocsController;
 use App\Http\Controllers\SeoController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,4 +29,9 @@ Route::get('/faq', [SeoController::class, 'faqPage']);
 Route::get('/cgu', [SeoController::class, 'cguPage']);
 Route::get('/privacy', [SeoController::class, 'privacyPage']);
 
-Route::get('/{any?}', [SeoController::class, 'spa'])->where('any', '^(?!api/).*$');
+if (app()->isLocal()) {
+    Route::get('/docs', [DocsController::class, 'index']);
+    Route::get('/docs/{path}', [DocsController::class, 'file'])->where('path', '.+\.md');
+}
+
+Route::get('/{any?}', [SeoController::class, 'spa'])->where('any', '^(?!api/|docs/).*$');
