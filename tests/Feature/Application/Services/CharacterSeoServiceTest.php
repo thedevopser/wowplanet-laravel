@@ -74,7 +74,7 @@ test('generate sitemap index returns valid xml', function (): void {
     expect($xml)->toStartWith('<?xml')
         ->toContain('sitemapindex')
         ->toContain('sitemap-pages.xml')
-        ->toContain('sitemap-characters.xml');
+        ->not->toContain('sitemap-characters.xml');
 
     $parsed = simplexml_load_string($xml);
     expect($parsed)->not->toBeFalse('Sitemap index XML should be parseable');

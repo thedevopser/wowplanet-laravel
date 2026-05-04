@@ -107,6 +107,7 @@ class SeoController extends Controller
             'Allow: /',
             'Allow: /base-de-donnees/',
             'Disallow: /api/',
+            'Disallow: /character/',
             'Disallow: /auth/',
             'Disallow: /admin',
             'Disallow: /my-characters',

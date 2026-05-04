@@ -252,7 +252,6 @@ class CharacterSeoService
             return SitemapIndex::create()
                 ->add($appUrl.'/sitemap-pages.xml')
                 ->add($appUrl.'/sitemap-database.xml')
-                ->add($appUrl.'/sitemap-characters.xml')
                 ->render();
         });
 

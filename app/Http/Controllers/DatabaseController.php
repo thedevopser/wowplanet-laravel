@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Application\Services\DatabaseContentRenderer;
 use App\Application\Services\DatabaseSeoService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 
 class DatabaseController extends Controller
 {
@@ -23,66 +24,78 @@ class DatabaseController extends Controller
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function mounts(?string $category = null): View
+    public function mounts(?string $category = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getMountsMeta($category);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/montures', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderMounts($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function achievements(?string $expansion = null): View
+    public function achievements(?string $expansion = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getAchievementsMeta($expansion);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/hauts-faits', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderAchievements($this->appUrl(), $expansion) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function quests(?string $expansion = null): View
+    public function quests(?string $expansion = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getQuestsMeta($expansion);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/quetes', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderQuests($this->appUrl(), $expansion) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function pets(?string $category = null): View
+    public function pets(?string $category = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getPetsMeta($category);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/mascottes', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderPets($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function decors(?string $category = null): View
+    public function decors(?string $category = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getDecorsMeta($category);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/decorations', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderDecors($this->appUrl(), $category) ?? '';
 
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function professions(?string $profession = null): View
+    public function professions(?string $profession = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getProfessionsMeta($profession);
 
-        abort_if($seo === null, 404);
+        if ($seo === null) {
+            return redirect('/base-de-donnees/professions', 301);
+        }
 
         $seo['serverHtml'] = $this->databaseContentRenderer->renderProfessions($this->appUrl(), $profession) ?? '';
 
