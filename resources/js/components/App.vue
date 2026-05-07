@@ -27,6 +27,7 @@
         <AppFooter />
 
         <TaskSidebar v-if="store.isAuthenticated" />
+        <SessionExpiredBanner />
     </div>
 </template>
 
@@ -35,14 +36,18 @@ import { computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCharacterStore } from '../stores/character';
 import { useTaskStore } from '../stores/tasks';
+import { useAuthGuard } from '../composables/useAuthGuard';
 import AppHeader from './AppHeader.vue';
 import AppFooter from './AppFooter.vue';
 import TaskSidebar from './TaskSidebar.vue';
+import SessionExpiredBanner from './SessionExpiredBanner.vue';
 
 const route = useRoute();
 const store = useCharacterStore();
 const isDatabase = computed(() => route.path.startsWith('/base-de-donnees'));
 const taskStore = useTaskStore();
+
+useAuthGuard();
 
 function applyTheme(theme) {
     document.documentElement.classList.toggle('dark', theme === 'dark');

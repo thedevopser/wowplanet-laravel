@@ -8,6 +8,7 @@ export const useCharacterStore = defineStore('character', {
         error: null,
         isAuthenticated: false,
         isAdmin: false,
+        sessionExpired: false,
         userCharacters: [],
         classIcons: {},
         loadingCharacters: false,
@@ -112,6 +113,19 @@ export const useCharacterStore = defineStore('character', {
             } catch {
                 // fallback: icons stay empty, UI will show initial letter
             }
+        },
+
+        handleSessionExpired() {
+            if (!this.isAuthenticated) return;
+            this.isAuthenticated = false;
+            this.isAdmin = false;
+            this.userCharacters = [];
+            this.error = null;
+            this.sessionExpired = true;
+        },
+
+        clearSessionExpired() {
+            this.sessionExpired = false;
         },
 
         async logout() {

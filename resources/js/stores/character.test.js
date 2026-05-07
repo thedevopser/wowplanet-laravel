@@ -206,4 +206,54 @@ describe('useCharacterStore', () => {
             expect(store.character).toBeNull();
         });
     });
+
+    describe('handleSessionExpired', () => {
+        it('vide l\'état auth et lève le flag sessionExpired', () => {
+            const store = useCharacterStore();
+            store.isAuthenticated = true;
+            store.isAdmin = true;
+            store.userCharacters = [{ id: 1, name: 'Thrall' }];
+            store.error = 'une erreur';
+
+            store.handleSessionExpired();
+
+            expect(store.isAuthenticated).toBe(false);
+            expect(store.isAdmin).toBe(false);
+            expect(store.userCharacters).toEqual([]);
+            expect(store.error).toBeNull();
+            expect(store.sessionExpired).toBe(true);
+        });
+
+        it('est no-op si l\'utilisateur n\'est pas authentifié', () => {
+            const store = useCharacterStore();
+            store.isAuthenticated = false;
+            store.sessionExpired = false;
+
+            store.handleSessionExpired();
+
+            expect(store.sessionExpired).toBe(false);
+        });
+
+        it('ne lève pas sessionExpired en double si appelé en rafale', () => {
+            const store = useCharacterStore();
+            store.isAuthenticated = true;
+
+            store.handleSessionExpired();
+            store.handleSessionExpired();
+
+            expect(store.sessionExpired).toBe(true);
+            expect(store.isAuthenticated).toBe(false);
+        });
+    });
+
+    describe('clearSessionExpired', () => {
+        it('remet sessionExpired à false', () => {
+            const store = useCharacterStore();
+            store.sessionExpired = true;
+
+            store.clearSessionExpired();
+
+            expect(store.sessionExpired).toBe(false);
+        });
+    });
 });
