@@ -87,10 +87,8 @@ describe('AppHeader', () => {
 
     it('contient un lien Discord dans la nav desktop', async () => {
         const wrapper = await mountWithPlugins(AppHeader);
-        const discordLinks = wrapper.findAll('a[href="https://discord.gg/wa49gGF8cr"]');
-        expect(discordLinks.length).toBeGreaterThanOrEqual(1);
-        const desktopLink = discordLinks.find(l => l.classes().includes('hidden') === false);
-        expect(desktopLink).toBeDefined();
+        const desktopNav = wrapper.find('.hidden.sm\\:flex');
+        expect(desktopNav.find('a[href="https://discord.gg/wa49gGF8cr"]').exists()).toBe(true);
     });
 
     it('contient un lien Discord accessible sur mobile', async () => {
