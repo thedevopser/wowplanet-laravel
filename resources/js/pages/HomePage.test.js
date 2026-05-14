@@ -12,6 +12,15 @@ describe('HomePage', () => {
         expect(wrapper.text()).toContain('Suivez votre progression');
     });
 
+    it('ne montre pas le flux de recherche manuelle dans le CTA', async () => {
+        const wrapper = await mountWithPlugins(HomePage, {
+            initialState: { character: { isAuthenticated: false } },
+        });
+
+        expect(wrapper.text()).not.toContain('Royaume');
+        expect(wrapper.text()).not.toContain('Personnage');
+    });
+
     it('shows Battle.net login CTA when not authenticated', async () => {
         const wrapper = await mountWithPlugins(HomePage, {
             initialState: { character: { isAuthenticated: false } },
