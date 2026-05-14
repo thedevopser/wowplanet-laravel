@@ -84,4 +84,18 @@ describe('AppHeader', () => {
 
         expect(store.logout).toHaveBeenCalled();
     });
+
+    it('contient un lien Discord dans la nav desktop', async () => {
+        const wrapper = await mountWithPlugins(AppHeader);
+        const discordLinks = wrapper.findAll('a[href="https://discord.gg/wa49gGF8cr"]');
+        expect(discordLinks.length).toBeGreaterThanOrEqual(1);
+        const desktopLink = discordLinks.find(l => l.classes().includes('hidden') === false);
+        expect(desktopLink).toBeDefined();
+    });
+
+    it('contient un lien Discord accessible sur mobile', async () => {
+        const wrapper = await mountWithPlugins(AppHeader);
+        const mobileDiscord = wrapper.find('a[href="https://discord.gg/wa49gGF8cr"][aria-label="Rejoindre le Discord WowPlanet"]');
+        expect(mobileDiscord.exists()).toBe(true);
+    });
 });
