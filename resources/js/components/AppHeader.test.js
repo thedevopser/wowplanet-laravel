@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nextTick } from 'vue';
-import { flushPromises } from '@vue/test-utils';
 import { mountWithPlugins } from '../tests/helpers';
 import AppHeader from './AppHeader.vue';
 import { useCharacterStore } from '../stores/character';
@@ -36,39 +35,6 @@ describe('AppHeader', () => {
         });
 
         expect(wrapper.find('a[href="/auth/blizzard/redirect"]').exists()).toBe(false);
-    });
-
-    it('renders search inputs', async () => {
-        const wrapper = await mountWithPlugins(AppHeader);
-        const inputs = wrapper.findAll('input[type="text"]');
-
-        expect(inputs.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('has default realm set to Dalaran', async () => {
-        const wrapper = await mountWithPlugins(AppHeader);
-        const realmInput = wrapper.find('input[placeholder="Royaume"]');
-
-        expect(realmInput.element.value).toBe('Dalaran');
-    });
-
-    it('navigates to character page on search', async () => {
-        const wrapper = await mountWithPlugins(AppHeader);
-        const router = wrapper.__router;
-
-        const realmInputs = wrapper.findAll('input[placeholder="Royaume"]');
-        const nameInputs = wrapper.findAll('input[placeholder*="Nom"]');
-
-        await realmInputs[0].setValue('hyjal');
-        await nameInputs[0].setValue('arthas');
-
-        const searchBtn = wrapper.findAll('button').find(btn => btn.text().includes('Rechercher'));
-        await searchBtn.trigger('click');
-        await flushPromises();
-
-        expect(router.currentRoute.value.name).toBe('character');
-        expect(router.currentRoute.value.params.realm).toBe('hyjal');
-        expect(router.currentRoute.value.params.name).toBe('arthas');
     });
 
     it('calls logout on disconnect click', async () => {

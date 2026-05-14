@@ -106,34 +106,6 @@
                         <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                     </button>
 
-                    <!-- Desktop search inline (lg+) -->
-                    <div class="hidden lg:flex items-center gap-3">
-                        <div class="w-px h-6 bg-white/10"></div>
-                        <input
-                            v-model="search.realm"
-                            type="text"
-                            placeholder="Royaume"
-                            aria-label="Royaume du serveur"
-                            list="realm-suggestions"
-                            class="bg-slate-800/80 border-none rounded-md px-3 py-1.5 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500 w-32"
-                        >
-                        <input
-                            v-model="search.name"
-                            type="text"
-                            placeholder="Nom du personnage"
-                            aria-label="Nom du personnage"
-                            @keyup.enter="searchCharacter"
-                            class="bg-slate-800/80 border-none rounded-md px-3 py-1.5 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500 w-44"
-                        >
-                        <button
-                            @click="searchCharacter"
-                            :disabled="store.loading"
-                            aria-label="Lancer la recherche"
-                            class="btn-gradient text-white font-semibold px-4 py-1.5 rounded-md text-sm shadow-lg shadow-blue-500/10"
-                        >
-                            {{ store.loading ? 'Recherche...' : 'Rechercher' }}
-                        </button>
-                    </div>
                 </div>
 
                 <!-- Mobile right controls (< sm) -->
@@ -258,78 +230,10 @@
                         {{ store.theme === 'dark' ? 'Mode clair' : 'Mode sombre' }}
                     </button>
                 </div>
-                <div class="space-y-2">
-                    <div class="flex gap-2">
-                        <input
-                            v-model="search.realm"
-                            type="text"
-                            placeholder="Royaume"
-                            aria-label="Royaume du serveur"
-                            list="realm-suggestions"
-                            class="flex-1 min-w-0 bg-slate-800/80 border-none rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500"
-                        >
-                        <input
-                            v-model="search.name"
-                            type="text"
-                            placeholder="Personnage"
-                            aria-label="Nom du personnage"
-                            @keyup.enter="searchCharacter(); mobileMenuOpen = false"
-                            class="flex-1 min-w-0 bg-slate-800/80 border-none rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500"
-                        >
-                    </div>
-                    <button
-                        @click="searchCharacter(); mobileMenuOpen = false"
-                        :disabled="store.loading"
-                        aria-label="Lancer la recherche"
-                        class="w-full btn-gradient text-white font-semibold px-4 py-2 rounded-md text-sm shadow-lg shadow-blue-500/10"
-                    >
-                        {{ store.loading ? 'Recherche...' : 'Rechercher' }}
-                    </button>
-                </div>
             </div>
             </Transition>
 
-            <!-- Tablet search row (sm to lg) -->
-            <div class="hidden sm:flex lg:hidden pb-3 gap-2">
-                <input
-                    v-model="search.realm"
-                    type="text"
-                    placeholder="Royaume"
-                    aria-label="Royaume du serveur"
-                    class="flex-1 min-w-0 bg-slate-800/80 border-none rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500"
-                >
-                <input
-                    v-model="search.name"
-                    type="text"
-                    placeholder="Nom du personnage"
-                    aria-label="Nom du personnage"
-                    @keyup.enter="searchCharacter"
-                    class="flex-1 min-w-0 bg-slate-800/80 border-none rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 text-sm placeholder-slate-500"
-                >
-                <button
-                    @click="searchCharacter"
-                    :disabled="store.loading"
-                    aria-label="Lancer la recherche"
-                    class="btn-gradient text-white font-semibold px-4 py-2 rounded-md text-sm shadow-lg shadow-blue-500/10 shrink-0"
-                >
-                    {{ store.loading ? '...' : 'Rechercher' }}
-                </button>
-            </div>
         </div>
-        <datalist id="realm-suggestions">
-            <option value="Dalaran" />
-            <option value="Hyjal" />
-            <option value="Archimonde" />
-            <option value="Ysondre" />
-            <option value="Kael'thas" />
-            <option value="Elune" />
-            <option value="Sargeras" />
-            <option value="Cho'gall" />
-            <option value="Illidan" />
-            <option value="Khaz Modan" />
-            <option value="Ner'zhul" />
-            <option value="Connected Dalaran" />
-        </datalist>
     </header>
 </template>
 
@@ -342,14 +246,7 @@ const router = useRouter();
 const route = useRoute();
 const store = useCharacterStore();
 
-const search = ref({ realm: 'Dalaran', name: '' });
 const mobileMenuOpen = ref(false);
-
-const searchCharacter = () => {
-    if (search.value.name && search.value.realm) {
-        router.push({ name: 'character', params: { realm: search.value.realm.toLowerCase(), name: search.value.name.toLowerCase() } });
-    }
-};
 
 const handleLogout = async () => {
     await store.logout();
