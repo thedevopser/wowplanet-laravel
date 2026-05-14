@@ -34,10 +34,12 @@ describe('DiscordBanner', () => {
         expect(wrapper.find('[data-testid="discord-banner"]').exists()).toBe(false);
     });
 
-    it('enregistre dans localStorage au clic sur Rejoindre', async () => {
+    it('enregistre dans localStorage et masque la bannière au clic sur Rejoindre', async () => {
         const wrapper = mount(DiscordBanner);
         await wrapper.find(`a[href="${DISCORD_URL}"]`).trigger('click');
         expect(localStorage.getItem('discord_banner_dismissed')).toBe('1');
+        await nextTick();
+        expect(wrapper.find('[data-testid="discord-banner"]').exists()).toBe(false);
     });
 
     it('émet dismissed au clic ✕', async () => {
