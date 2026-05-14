@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { RouterLinkStub } from '@vue/test-utils';
 import { mountWithPlugins } from '../tests/helpers';
 import HomePage from './HomePage.vue';
 
 describe('HomePage', () => {
+    beforeEach(() => localStorage.clear());
+
     it('renders the hero section', async () => {
         const wrapper = await mountWithPlugins(HomePage);
 
