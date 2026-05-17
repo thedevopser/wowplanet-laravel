@@ -96,6 +96,7 @@ class AdminController extends Controller
             'fields.*.name' => ['required_with:fields', 'string', 'max:256'],
             'fields.*.value' => ['required_with:fields', 'string', 'max:1024'],
             'fields.*.inline' => ['nullable', 'boolean'],
+            'footer' => ['nullable', 'string', 'max:2048'],
         ]);
 
         /** @var string $title */
@@ -121,6 +122,12 @@ class AdminController extends Controller
         $fields = $request->input('fields');
         if ($fields !== null) {
             $embed['fields'] = $fields;
+        }
+
+        /** @var string|null $footer */
+        $footer = $request->input('footer');
+        if ($footer !== null && $footer !== '') {
+            $embed['footer'] = ['text' => $footer];
         }
 
         $success = $this->adminService->sendDiscordEmbed($channel, $embed);

@@ -249,6 +249,17 @@
                     </div>
                 </div>
 
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Footer</label>
+                    <input
+                        v-model="discord.footer"
+                        type="text"
+                        maxlength="2048"
+                        class="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500"
+                        placeholder="Texte affiché en bas de l'embed"
+                    >
+                </div>
+
                 <!-- Preview -->
                 <div v-if="discord.title || discord.description" class="p-4 rounded-lg border-l-4" :style="{ borderColor: currentColorHex, backgroundColor: 'rgba(30,33,36,0.9)' }">
                     <p v-if="discord.title" class="font-semibold text-white text-sm mb-1">{{ discord.title }}</p>
@@ -258,6 +269,9 @@
                             <p class="text-xs font-semibold text-white">{{ field.name }}</p>
                             <p class="text-xs text-slate-400">{{ field.value }}</p>
                         </div>
+                    </div>
+                    <div v-if="discord.footer" class="mt-3 pt-2 border-t border-white/10">
+                        <p class="text-[10px] text-slate-500">{{ discord.footer }}</p>
                     </div>
                 </div>
 
@@ -441,6 +455,7 @@ const discord = reactive({
     description: '',
     color: 3447003,
     fields: [],
+    footer: '',
 });
 
 const discordLoading = ref(false);
@@ -475,6 +490,9 @@ const sendDiscord = async () => {
         if (filledFields.length) {
             payload.fields = filledFields;
         }
+        if (discord.footer) {
+            payload.footer = discord.footer;
+        }
 
         const response = await axios.post('/api/admin/discord', payload);
         discordResult.value = response.data.success;
@@ -483,6 +501,7 @@ const sendDiscord = async () => {
             discord.title = '';
             discord.description = '';
             discord.fields = [];
+            discord.footer = '';
         }
     } catch {
         discordResult.value = false;
