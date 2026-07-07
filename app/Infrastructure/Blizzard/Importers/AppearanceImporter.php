@@ -143,6 +143,7 @@ final class AppearanceImporter
             if ($appearanceId <= 0) {
                 continue;
             }
+
             if ($itemId <= 0) {
                 continue;
             }
@@ -203,6 +204,7 @@ final class AppearanceImporter
             if ($id <= 0) {
                 continue;
             }
+
             if (! isset($needed[$id])) {
                 continue;
             }
@@ -211,6 +213,7 @@ final class AppearanceImporter
             if ($name === '') {
                 continue;
             }
+
             if ($this->isPlaceholderName($name)) {
                 continue;
             }
@@ -274,6 +277,7 @@ final class AppearanceImporter
             if ($id <= 0) {
                 continue;
             }
+
             if (! isset($needed[$id])) {
                 continue;
             }

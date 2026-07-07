@@ -44,6 +44,7 @@
                         <option value="pets">Mascottes</option>
                         <option value="professions">Professions</option>
                         <option value="decor">Decorations</option>
+                        <option value="appearances">Garde-robe</option>
                     </select>
                 </div>
 
@@ -67,6 +68,7 @@
                         <option value="pets">Mascottes</option>
                         <option value="professions">Professions</option>
                         <option value="decor">Decorations</option>
+                        <option value="appearances">Garde-robe</option>
                     </select>
                     <span class="text-red-400 text-xs">Attention : supprime et reimporte les donnees</span>
                 </div>
