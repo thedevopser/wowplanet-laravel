@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Services\Progress\CollectionProgressAggregator;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -54,6 +55,39 @@ test('aggregateDecor returns decor list with completion status and category', fu
     expect($torche['is_completed'])->toBeFalse();
     expect($torche['category'])->toBe('Midnight');
     expect($torche['source'])->toBe('Vendor');
+});
+
+test('aggregateAppearances returns per-slot completed/total counters', function (): void {
+    WowAppearance::factory()->create(['id' => 1, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 2, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 3, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 4, 'slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 5, 'slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 6, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => false]);
+
+    $aggregator = new CollectionProgressAggregator;
+    // débloqué : 2 têtes actives + 1 tête inactive (ignorée) + 1 id inconnu (ignoré)
+    $result = $aggregator->aggregateAppearances([1, 2, 6, 999]);
+
+    $head = collect($result)->firstWhere('slot', 'HEAD');
+    $weapon = collect($result)->firstWhere('slot', 'WEAPON');
+
+    expect($head['total'])->toBe(3)
+        ->and($head['completed'])->toBe(2)
+        ->and($head['category'])->toBe('Armure')
+        ->and($weapon['total'])->toBe(2)
+        ->and($weapon['completed'])->toBe(0);
+});
+
+test('aggregateAppearances returns zero completed when nothing unlocked', function (): void {
+    WowAppearance::factory()->create(['slot' => 'HEAD', 'is_active' => true]);
+
+    $aggregator = new CollectionProgressAggregator;
+    $result = $aggregator->aggregateAppearances([]);
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['completed'])->toBe(0)
+        ->and($result[0]['total'])->toBe(1);
 });
 
 test('aggregateMounts returns empty array when no mounts exist', function (): void {

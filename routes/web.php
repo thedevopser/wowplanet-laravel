@@ -23,6 +23,7 @@ Route::get('/base-de-donnees/hauts-faits/{expansion?}', [DatabaseController::cla
 Route::get('/base-de-donnees/quetes/{expansion?}', [DatabaseController::class, 'quests']);
 Route::get('/base-de-donnees/mascottes/{category?}', [DatabaseController::class, 'pets']);
 Route::get('/base-de-donnees/decorations/{category?}', [DatabaseController::class, 'decors']);
+Route::get('/base-de-donnees/garde-robe/{slot?}', [DatabaseController::class, 'appearances']);
 Route::get('/base-de-donnees/professions/{profession?}', [DatabaseController::class, 'professions']);
 
 Route::get('/faq', [SeoController::class, 'faqPage']);

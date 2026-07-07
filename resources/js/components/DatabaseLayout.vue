@@ -189,6 +189,17 @@ const sections = [
         pillActiveClass: 'bg-violet-500/15 border-violet-500/30 text-violet-400',
     },
     {
+        key: 'appearances',
+        path: '/base-de-donnees/garde-robe',
+        label: 'Garde-robe',
+        shortLabel: 'Garde-robe',
+        icon: 'transmog',
+        countKey: 'appearances',
+        activeClass: 'bg-violet-600/10 text-violet-300',
+        subActiveClass: 'text-violet-400 font-semibold',
+        pillActiveClass: 'bg-violet-500/15 border-violet-500/30 text-violet-400',
+    },
+    {
         key: 'professions',
         path: '/base-de-donnees/professions',
         label: 'Professions',

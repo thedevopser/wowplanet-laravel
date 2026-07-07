@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -36,6 +37,65 @@ test('it returns counts for all collections', function (): void {
             'professions' => 1,
             'recipes' => 2,
         ]);
+});
+
+test('it counts only active appearances', function (): void {
+    WowAppearance::factory()->count(3)->create(['is_active' => true]);
+    WowAppearance::factory()->count(2)->create(['is_active' => false]);
+
+    $response = $this->getJson('/api/database/counts');
+
+    $response->assertOk()->assertJson(['appearances' => 3]);
+});
+
+test('it returns active appearances paginated with slots', function (): void {
+    WowAppearance::factory()->count(2)->create(['slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->count(3)->create(['slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['slot' => 'HEAD', 'is_active' => false]); // exclu
+
+    $response = $this->getJson('/api/database/appearances?per_page=2');
+
+    $response->assertOk();
+
+    $data = $response->json();
+    expect($data['items'])->toHaveCount(2)
+        ->and($data['total'])->toBe(5)
+        ->and($data['last_page'])->toBe(3)
+        ->and($data['current_page'])->toBe(1);
+
+    $slotSlugs = array_column($data['slots'], 'slug');
+    expect($slotSlugs)->toContain('head')->toContain('weapon');
+});
+
+test('it filters appearances by slot slug', function (): void {
+    WowAppearance::factory()->count(2)->create(['slot' => 'HEAD', 'name_fr' => 'Casque', 'is_active' => true]);
+    WowAppearance::factory()->create(['slot' => 'WEAPON', 'name_fr' => 'Épée', 'is_active' => true]);
+
+    $response = $this->getJson('/api/database/appearances?slot=head');
+
+    $response->assertOk();
+
+    $data = $response->json();
+    expect($data['items'])->toHaveCount(2)
+        ->and($data['total'])->toBe(2);
+
+    $names = array_column($data['items'], 'name_fr');
+    expect($names)->not->toContain('Épée');
+});
+
+test('it filters appearances by quality and search', function (): void {
+    WowAppearance::factory()->create(['name_fr' => 'Casque épique', 'quality' => 4, 'is_active' => true]);
+    WowAppearance::factory()->create(['name_fr' => 'Casque rare', 'quality' => 3, 'is_active' => true]);
+    WowAppearance::factory()->create(['name_fr' => 'Bottes épiques', 'quality' => 4, 'is_active' => true]);
+
+    $byQuality = $this->getJson('/api/database/appearances?quality=4')->json();
+    expect($byQuality['total'])->toBe(2);
+
+    $bySearch = $this->getJson('/api/database/appearances?search=Casque')->json();
+    expect($bySearch['total'])->toBe(2);
+
+    $combined = $this->getJson('/api/database/appearances?quality=4&search=Casque')->json();
+    expect($combined['total'])->toBe(1);
 });
 
 test('it returns mounts with categories', function (): void {

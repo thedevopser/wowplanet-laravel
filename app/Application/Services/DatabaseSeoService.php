@@ -6,6 +6,7 @@ namespace App\Application\Services;
 
 use App\Domain\ValueObjects\ExpansionId;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -328,6 +329,59 @@ class DatabaseSeoService
     /**
      * @return array<string, string|null>|null
      */
+    public function getAppearancesMeta(?string $slotSlug): ?array
+    {
+        $appUrl = $this->appUrl();
+        $builder = WowAppearance::query()->where('is_active', true);
+
+        if ($slotSlug !== null) {
+            $slot = $this->deSlugifyCategory($slotSlug, 'appearances');
+            $builder->where('slot', $slot);
+            $count = $builder->count();
+
+            if ($count === 0) {
+                return null;
+            }
+
+            $title = sprintf('Transmogrification WoW %s — %d apparences | WowPlanet', $slot, $count);
+            $description = sprintf(
+                '%d apparences d\'équipement %s WoW en français. Icône et lien Wowhead pour chaque apparence transmog.',
+                $count,
+                $slot,
+            );
+            $canonicalUrl = $appUrl.'/base-de-donnees/garde-robe/'.$slotSlug;
+            $breadcrumbs = [
+                ['Base de données', $appUrl.'/base-de-donnees'],
+                ['Garde-robe', $appUrl.'/base-de-donnees/garde-robe'],
+                [$slot, $canonicalUrl],
+            ];
+        } else {
+            $count = $builder->count();
+            $title = sprintf('Transmogrification WoW — %s apparences | WowPlanet', number_format($count, 0, ',', "\u{202f}"));
+            $description = sprintf(
+                'Toutes les %d apparences d\'équipement (transmog) de World of Warcraft en français. Classées par emplacement avec lien Wowhead.',
+                $count,
+            );
+            $canonicalUrl = $appUrl.'/base-de-donnees/garde-robe';
+            $breadcrumbs = [
+                ['Base de données', $appUrl.'/base-de-donnees'],
+                ['Garde-robe', $canonicalUrl],
+            ];
+        }
+
+        return $this->buildSeoArray($title, $description, $canonicalUrl, $appUrl, 'website', $this->buildJsonLd([
+            '@type' => 'CollectionPage',
+            'name' => $title,
+            'url' => $canonicalUrl,
+            'description' => $description,
+            'inLanguage' => 'fr',
+            'breadcrumb' => $this->buildBreadcrumbJsonLd($appUrl, $breadcrumbs),
+        ], $appUrl));
+    }
+
+    /**
+     * @return array<string, string|null>|null
+     */
     public function getProfessionsMeta(?string $professionSlug): ?array
     {
         $appUrl = $this->appUrl();
@@ -398,6 +452,7 @@ class DatabaseSeoService
         $urls[] = ['url' => $appUrl.'/base-de-donnees/quetes', 'label' => 'quests', 'lastmod' => null];
         $urls[] = ['url' => $appUrl.'/base-de-donnees/mascottes', 'label' => 'pets', 'lastmod' => null];
         $urls[] = ['url' => $appUrl.'/base-de-donnees/decorations', 'label' => 'decors', 'lastmod' => null];
+        $urls[] = ['url' => $appUrl.'/base-de-donnees/garde-robe', 'label' => 'appearances', 'lastmod' => null];
         $urls[] = ['url' => $appUrl.'/base-de-donnees/professions', 'label' => 'professions', 'lastmod' => null];
 
         /** @var list<string> $mountCategories */
@@ -441,6 +496,21 @@ class DatabaseSeoService
             $urls[] = [
                 'url' => $appUrl.'/base-de-donnees/decorations/'.$this->slugify($decorCategory),
                 'label' => 'decor-'.$decorCategory,
+                'lastmod' => null,
+            ];
+        }
+
+        /** @var list<string> $appearanceSlots */
+        $appearanceSlots = WowAppearance::query()->where('is_active', true)
+            ->whereNotNull('slot')
+            ->distinct()
+            ->pluck('slot')
+            ->all();
+
+        foreach ($appearanceSlots as $appearanceSlot) {
+            $urls[] = [
+                'url' => $appUrl.'/base-de-donnees/garde-robe/'.$this->slugify($appearanceSlot),
+                'label' => 'appearance-'.$appearanceSlot,
                 'lastmod' => null,
             ];
         }
@@ -535,6 +605,11 @@ class DatabaseSeoService
                 ->whereNotNull('category')
                 ->distinct()
                 ->pluck('category')
+                ->all(),
+            'appearances' => WowAppearance::query()->where('is_active', true)
+                ->whereNotNull('slot')
+                ->distinct()
+                ->pluck('slot')
                 ->all(),
             'professions' => WowProfession::query()->where('is_active', true)
                 ->pluck('name_fr')

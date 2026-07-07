@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -91,6 +92,12 @@ class WowDataImportCommand extends Command
             $this->newLine();
         }
 
+        if ($type === 'all' || $type === 'appearances') {
+            $this->info('Importing Appearances (transmog) from DB2...');
+            $blizzardBatchImporter->importAppearances();
+            $this->newLine();
+        }
+
         $this->info('Import Complete!');
         $this->displayStats();
     }
@@ -108,6 +115,7 @@ class WowDataImportCommand extends Command
                 ['Professions', WowProfession::query()->count(), WowProfession::query()->where('is_active', true)->count(), '—'],
                 ['Recipes', WowRecipe::query()->count(), WowRecipe::query()->where('is_active', true)->count(), '—'],
                 ['Decor', WowDecor::query()->count(), WowDecor::query()->where('is_active', true)->count(), WowDecor::query()->whereNotNull('icon_url')->count()],
+                ['Appearances', WowAppearance::query()->count(), WowAppearance::query()->where('is_active', true)->count(), WowAppearance::query()->whereNotNull('icon_url')->count()],
             ]
         );
     }

@@ -48,6 +48,8 @@ class CharacterProfileService
         $characterPetIds = $apiData['characterPetIds'];
         /** @var list<int> $characterDecorIds */
         $characterDecorIds = $apiData['characterDecorIds'];
+        /** @var list<int> $characterAppearanceIds */
+        $characterAppearanceIds = $apiData['characterAppearanceIds'];
         /** @var array<string, mixed> $professionsResponse */
         $professionsResponse = $apiData['professionsResponse'];
         /** @var array<string, mixed> $reputationsResponse */
@@ -64,6 +66,7 @@ class CharacterProfileService
         $mounts = $this->collectionProgressAggregator->aggregateMounts($characterMountIds);
         $pets = $this->collectionProgressAggregator->aggregatePets($characterPetIds);
         $decor = $this->collectionProgressAggregator->aggregateDecor($characterDecorIds);
+        $appearances = $this->collectionProgressAggregator->aggregateAppearances($characterAppearanceIds);
         $professions = $this->professionProgressAggregator->aggregate($professionsResponse, $characterFaction);
         /** @var array<string, mixed> $equipmentResponseData */
         $equipmentResponseData = is_array($apiData['equipmentResponse'] ?? null) ? $apiData['equipmentResponse'] : [];
@@ -71,7 +74,7 @@ class CharacterProfileService
         $equipmentIconMap = $apiData['equipmentIconMap'] ?? [];
         $equipment = $this->equipmentAggregator->aggregate($equipmentResponseData, $equipmentIconMap);
 
-        return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions, $equipment);
+        return $this->buildDto($apiData, $collections, $mounts, $pets, $decor, $professions, $equipment, $appearances);
     }
 
     private const MAX_ASYNC_RETRIES = 2;
@@ -96,6 +99,7 @@ class CharacterProfileService
             'professions' => ['endpoint' => $base.'/professions', 'query' => []],
             'reputations' => ['endpoint' => $base.'/reputations', 'query' => []],
             'decor' => ['endpoint' => $base.'/collections/decor', 'query' => []],
+            'transmogs' => ['endpoint' => $base.'/collections/transmogs', 'query' => []],
             'mythicKeystone' => ['endpoint' => $base.'/mythic-keystone-profile', 'query' => []],
             'equipment' => ['endpoint' => $base.'/equipment', 'query' => []],
         ];
@@ -118,6 +122,8 @@ class CharacterProfileService
         $reputationsResponse = $responses['reputations'] ?? [];
         /** @var array<string, mixed> $decorResponse */
         $decorResponse = $responses['decor'] ?? [];
+        /** @var array<string, mixed> $transmogsResponse */
+        $transmogsResponse = $responses['transmogs'] ?? [];
 
         /** @var list<array{id: int}> $questsList */
         $questsList = $questsResponse['quests'] ?? [];
@@ -136,6 +142,9 @@ class CharacterProfileService
         /** @var list<array{decor: array{id: int}}> $decorList */
         $decorList = $decorResponse['decor_collected'] ?? [];
         unset($decorResponse);
+        /** @var list<array<string, mixed>> $transmogSlots */
+        $transmogSlots = $transmogsResponse['slots'] ?? [];
+        unset($transmogsResponse);
 
         /** @var array<string, mixed> $mythicKeystoneProfile */
         $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
@@ -158,6 +167,7 @@ class CharacterProfileService
             'characterMountIds' => array_map(fn (array $m): int => $m['mount']['id'], $mountsList),
             'characterPetIds' => array_map(fn (array $p): int => $p['species']['id'], $petsList),
             'characterDecorIds' => array_map(fn (array $d): int => $d['decor']['id'], $decorList),
+            'characterAppearanceIds' => $this->extractAppearanceIds($transmogSlots),
             'achievementPoints' => $achievementPoints,
             'professionsResponse' => $professionsResponse,
             'reputationsResponse' => $reputationsResponse,
@@ -257,6 +267,28 @@ class CharacterProfileService
             || str_contains($message, '504')
             || str_contains($message, 'timed out')
             || str_contains($message, 'cURL error');
+    }
+
+    /**
+     * Aplatit les apparences transmog débloquées : slots[].appearances[].id
+     * (ids item-appearance = PK du référentiel wow_appearances).
+     *
+     * @param  list<array<string, mixed>>  $transmogSlots
+     * @return list<int>
+     */
+    private function extractAppearanceIds(array $transmogSlots): array
+    {
+        $ids = [];
+        foreach ($transmogSlots as $transmogSlot) {
+            $appearances = is_array($transmogSlot['appearances'] ?? null) ? $transmogSlot['appearances'] : [];
+            foreach ($appearances as $appearance) {
+                if (is_array($appearance) && is_numeric($appearance['id'] ?? null)) {
+                    $ids[] = (int) $appearance['id'];
+                }
+            }
+        }
+
+        return $ids;
     }
 
     /**
@@ -454,8 +486,9 @@ class CharacterProfileService
      * @param  list<array<string, mixed>>  $decor
      * @param  list<array<string, mixed>>  $professions
      * @param  list<array{slot: string, slot_name: string, item_id: int, name: string, item_level: int, quality: string, icon_url: string|null}>  $equipment
+     * @param  list<array{slot: string, category: string|null, total: int, completed: int}>  $appearances
      */
-    private function buildDto(array $apiData, array $collections, array $mounts, array $pets, array $decor, array $professions, array $equipment = []): CharacterProfileDTO
+    private function buildDto(array $apiData, array $collections, array $mounts, array $pets, array $decor, array $professions, array $equipment = [], array $appearances = []): CharacterProfileDTO
     {
         /** @var array<string, mixed> $summary */
         $summary = $apiData['summary'];
@@ -514,6 +547,8 @@ class CharacterProfileService
             completedQuestIds: is_array($apiData['completedQuestIds'] ?? null) ? array_values(array_filter($apiData['completedQuestIds'], is_int(...))) : [],
             completedAchievementIds: is_array($apiData['completedAchievementIds'] ?? null) ? array_values(array_filter($apiData['completedAchievementIds'], is_int(...))) : [],
             equipment: $equipment,
+            appearances: $appearances,
+            appearancesCount: array_sum(array_column($appearances, 'completed')),
         );
     }
 

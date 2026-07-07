@@ -32,6 +32,7 @@ test('command truncates and reimports all with --force', function (): void {
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
     $this->importerMock->shouldReceive('importMounts')->once();
     $this->importerMock->shouldReceive('importPets')->once();
+    $this->importerMock->shouldReceive('importAppearances')->once();
 
     $this->artisan('app:wow-data-refresh', ['--force' => true])
         ->assertSuccessful()

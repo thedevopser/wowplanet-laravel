@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Blizzard;
 
 use App\Infrastructure\Blizzard\Importers\AchievementImporter;
+use App\Infrastructure\Blizzard\Importers\AppearanceImporter;
 use App\Infrastructure\Blizzard\Importers\DecorImporter;
 use App\Infrastructure\Blizzard\Importers\MountImporter;
 use App\Infrastructure\Blizzard\Importers\PetImporter;
@@ -20,6 +21,7 @@ class BlizzardBatchImporter
         private readonly PetImporter $petImporter,
         private readonly DecorImporter $decorImporter,
         private readonly ProfessionImporter $professionImporter,
+        private readonly AppearanceImporter $appearanceImporter,
     ) {}
 
     public function importAchievements(): void
@@ -58,6 +60,11 @@ class BlizzardBatchImporter
     public function importDecor(): void
     {
         $this->decorImporter->import();
+    }
+
+    public function importAppearances(): void
+    {
+        $this->appearanceImporter->import();
     }
 
     /**
