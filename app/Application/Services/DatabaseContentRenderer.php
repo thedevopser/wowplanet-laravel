@@ -6,6 +6,7 @@ namespace App\Application\Services;
 
 use App\Domain\ValueObjects\ExpansionId;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -358,6 +359,64 @@ class DatabaseContentRenderer
         );
     }
 
+    public function renderAppearances(string $appUrl, ?string $slotSlug): ?string
+    {
+        $dbUrl = $appUrl.'/base-de-donnees';
+
+        if ($slotSlug !== null) {
+            $slot = $this->findCategory($slotSlug, 'appearances');
+
+            if ($slot === null) {
+                return null;
+            }
+
+            /** @var list<array{name: string, url: string}> $items */
+            $items = WowAppearance::query()->where('is_active', true)
+                ->where('slot', $slot)
+                ->select(['name_fr', 'item_id'])
+                ->orderBy('name_fr')
+                ->get()
+                ->map(fn (WowAppearance $wowAppearance): array => [
+                    'name' => $wowAppearance->name_fr,
+                    'url' => $wowAppearance->item_id
+                        ? 'https://www.wowhead.com/fr/item='.$wowAppearance->item_id
+                        : 'https://www.wowhead.com/fr/search?q='.urlencode($wowAppearance->name_fr),
+                ])
+                ->all();
+
+            return $this->wrap(
+                sprintf('<h1>Transmogrification WoW %s — %d apparences</h1>', e($slot), count($items))
+                .$this->breadcrumb($appUrl, [
+                    ['Base de données', $dbUrl],
+                    ['Garde-robe', $dbUrl.'/garde-robe'],
+                    [$slot, $dbUrl.'/garde-robe/'.$slotSlug],
+                ])
+                .sprintf('<p>Retrouvez les %d apparences d\'équipement %s de World of Warcraft en français.</p>', count($items), e($slot))
+                .$this->itemList($items),
+            );
+        }
+
+        /** @var array<string, int> $slots */
+        $slots = WowAppearance::query()->where('is_active', true)
+            ->whereNotNull('slot')
+            ->selectRaw('slot, count(*) as total')
+            ->groupBy('slot')
+            ->pluck('total', 'slot')
+            ->all();
+
+        $count = WowAppearance::query()->where('is_active', true)->count();
+
+        return $this->wrap(
+            sprintf('<h1>Transmogrification WoW — Liste complète des %s apparences en français</h1>', number_format($count, 0, ',', "\u{202f}"))
+            .$this->breadcrumb($appUrl, [
+                ['Base de données', $dbUrl],
+                ['Garde-robe', $dbUrl.'/garde-robe'],
+            ])
+            .'<p>Toutes les apparences d\'équipement (transmog) de World of Warcraft en français, classées par emplacement.</p>'
+            .$this->categoryLinks($dbUrl.'/garde-robe', $slots),
+        );
+    }
+
     public function renderProfessions(string $appUrl, ?string $professionSlug): ?string
     {
         $dbUrl = $appUrl.'/base-de-donnees';
@@ -556,6 +615,8 @@ class DatabaseContentRenderer
                 ->whereNotNull('category')->distinct()->pluck('category')->all(),
             'decors' => WowDecor::query()->where('is_active', true)
                 ->whereNotNull('category')->distinct()->pluck('category')->all(),
+            'appearances' => WowAppearance::query()->where('is_active', true)
+                ->whereNotNull('slot')->distinct()->pluck('slot')->all(),
             default => [],
         };
 

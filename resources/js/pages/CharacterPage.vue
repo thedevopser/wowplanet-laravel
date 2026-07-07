@@ -7,9 +7,7 @@
         <!-- Content Type Tabs -->
         <div class="space-y-6">
             <div class="relative">
-            <div v-if="canScrollLeft" class="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-slate-900 to-transparent z-10 pointer-events-none"></div>
-            <div v-if="canScrollRight" class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-900 to-transparent z-10 pointer-events-none"></div>
-            <div ref="tabsContainer" @scroll="updateScrollIndicators" role="tablist" aria-label="Sections du personnage" class="flex gap-1 sm:gap-2 border-b border-white/10 pb-1 overflow-x-auto no-scrollbar">
+            <div ref="tabsContainer" role="tablist" aria-label="Sections du personnage" class="flex flex-wrap gap-1 sm:gap-2 border-b border-white/10 pb-1">
                 <button
                     v-for="tab in contentTabs"
                     :key="tab.id"
@@ -39,6 +37,7 @@
             <MountsTab v-if="activeTab === 'mounts'" :character="store.character" />
             <PetsTab v-if="activeTab === 'pets'" :character="store.character" />
             <DecorTab v-if="activeTab === 'decor'" :character="store.character" />
+            <TransmogTab v-if="activeTab === 'transmog'" :character="store.character" />
             <EquipmentTab v-if="activeTab === 'equipment'" :character="store.character" />
         </div>
     </div>
@@ -58,6 +57,7 @@ import MountsTab from '../components/MountsTab.vue';
 import PetsTab from '../components/PetsTab.vue';
 import ProfessionsTab from '../components/ProfessionsTab.vue';
 import DecorTab from '../components/DecorTab.vue';
+import TransmogTab from '../components/TransmogTab.vue';
 import ScoreTab from '../components/ScoreTab.vue';
 import MythicPlusTab from '../components/MythicPlusTab.vue';
 import EquipmentTab from '../components/EquipmentTab.vue';
@@ -98,6 +98,7 @@ const contentTabs = computed(() => [
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },
     { id: 'decor', label: 'Décorations', count: store.character?.decorCount },
+    { id: 'transmog', label: 'Garde-robe', count: store.character?.appearancesCount },
 ]);
 
 const loadCharacter = () => {

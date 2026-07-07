@@ -43,13 +43,14 @@ export const useDatabaseSidebarStore = defineStore('databaseSidebar', {
         },
 
         async expandActiveSection(routePath) {
-            const sectionKeys = ['mounts', 'achievements', 'quests', 'pets', 'decors', 'professions'];
+            const sectionKeys = ['mounts', 'achievements', 'quests', 'pets', 'decors', 'appearances', 'professions'];
             const pathMap = {
                 '/base-de-donnees/montures': 'mounts',
                 '/base-de-donnees/hauts-faits': 'achievements',
                 '/base-de-donnees/quetes': 'quests',
                 '/base-de-donnees/mascottes': 'pets',
                 '/base-de-donnees/decorations': 'decors',
+                '/base-de-donnees/garde-robe': 'appearances',
                 '/base-de-donnees/professions': 'professions',
             };
 

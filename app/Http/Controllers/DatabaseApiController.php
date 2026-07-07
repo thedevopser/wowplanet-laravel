@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\ValueObjects\ExpansionId;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -18,6 +19,31 @@ use Illuminate\Http\Request;
 
 class DatabaseApiController extends Controller
 {
+    /**
+     * Libellés FR des slots transmog (clé = valeur stockée en base).
+     *
+     * @var array<string, string>
+     */
+    private const SLOT_LABELS = [
+        'HEAD' => 'Tête',
+        'SHOULDER' => 'Épaules',
+        'SHIRT' => 'Chemise',
+        'CHEST' => 'Torse',
+        'WAIST' => 'Ceinture',
+        'LEGS' => 'Jambes',
+        'FEET' => 'Pieds',
+        'WRIST' => 'Poignets',
+        'HAND' => 'Mains',
+        'CLOAK' => 'Cape',
+        'TABARD' => 'Tabard',
+        'WEAPON' => 'Arme',
+        'SHIELD' => 'Bouclier',
+        'RANGED' => 'Distance',
+        'TWOHWEAPON' => 'Arme à deux mains',
+        'WEAPONOFFHAND' => 'Arme en main gauche',
+        'HOLDABLE' => 'Tenu en main gauche',
+    ];
+
     public function mounts(Request $request): JsonResponse
     {
         $builder = WowMount::query()->where('is_active', true)
@@ -145,6 +171,43 @@ class DatabaseApiController extends Controller
         ]);
     }
 
+    public function appearances(Request $request): JsonResponse
+    {
+        $builder = WowAppearance::query()->where('is_active', true)
+            ->select(['id', 'name_fr', 'slot', 'category', 'quality', 'item_id', 'icon_url'])
+            ->orderBy('name_fr');
+
+        /** @var string|null $slot */
+        $slot = $request->query('slot');
+        if ($slot !== null && $slot !== '') {
+            $builder->where('slot', $this->deSlugify($slot, 'appearances'));
+        }
+
+        /** @var string|null $quality */
+        $quality = $request->query('quality');
+        if ($quality !== null && $quality !== '') {
+            $builder->where('quality', (int) $quality);
+        }
+
+        /** @var string|null $search */
+        $search = $request->query('search');
+        if ($search !== null && $search !== '') {
+            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
+        }
+
+        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
+        $lengthAwarePaginator = $builder->paginate($perPage);
+
+        return response()->json([
+            'items' => $lengthAwarePaginator->items(),
+            'slots' => $this->buildSlotList(),
+            'total' => $lengthAwarePaginator->total(),
+            'current_page' => $lengthAwarePaginator->currentPage(),
+            'last_page' => $lengthAwarePaginator->lastPage(),
+            'per_page' => $lengthAwarePaginator->perPage(),
+        ]);
+    }
+
     public function professions(): JsonResponse
     {
         $result = WowProfession::query()->where('is_active', true)
@@ -231,6 +294,7 @@ class DatabaseApiController extends Controller
             'mounts' => $this->buildCategoryList(WowMount::class),
             'pets' => $this->buildCategoryList(WowPet::class),
             'decors' => $this->buildCategoryList(WowDecor::class),
+            'appearances' => $this->buildSlotList(),
             'achievements' => array_map(fn (array $e): array => [
                 'name' => $e['name'],
                 'slug' => $e['slug'],
@@ -269,9 +333,33 @@ class DatabaseApiController extends Controller
             'quests' => WowQuest::query()->where('is_active', true)->count(),
             'pets' => WowPet::query()->where('is_active', true)->count(),
             'decors' => WowDecor::query()->where('is_active', true)->count(),
+            'appearances' => WowAppearance::query()->where('is_active', true)->count(),
             'professions' => WowProfession::query()->where('is_active', true)->count(),
             'recipes' => WowRecipe::query()->where('is_active', true)->count(),
         ]);
+    }
+
+    /**
+     * Liste des slots transmog pour la sous-navigation (ex: Tête, Épaules…).
+     *
+     * @return list<array{name: string, slug: string, count: int}>
+     */
+    private function buildSlotList(): array
+    {
+        /** @var array<int, array{slot: string, items_count: int}> $rawSlots */
+        $rawSlots = WowAppearance::query()->where('is_active', true)
+            ->whereNotNull('slot')
+            ->selectRaw('slot, COUNT(*) as items_count')
+            ->groupBy('slot')
+            ->orderBy('slot')
+            ->get()
+            ->toArray();
+
+        return array_values(array_map(fn (array $row): array => [
+            'name' => self::SLOT_LABELS[$row['slot']] ?? $row['slot'],
+            'slug' => $this->slugify($row['slot']),
+            'count' => $row['items_count'],
+        ], $rawSlots));
     }
 
     /**
@@ -358,6 +446,11 @@ class DatabaseApiController extends Controller
                 ->whereNotNull('category')
                 ->distinct()
                 ->pluck('category')
+                ->all(),
+            'appearances' => WowAppearance::query()->where('is_active', true)
+                ->whereNotNull('slot')
+                ->distinct()
+                ->pluck('slot')
                 ->all(),
             'professions' => WowProfession::query()->where('is_active', true)
                 ->pluck('name_fr')

@@ -16,6 +16,7 @@ readonly class CharacterProfileDTO
      * @param  list<int>  $completedQuestIds
      * @param  list<int>  $completedAchievementIds
      * @param  list<array{slot: string, slot_name: string, item_id: int, name: string, item_level: int, quality: string, icon_url: string|null}>  $equipment
+     * @param  list<array{slot: string, category: string|null, total: int, completed: int}>  $appearances
      */
     public function __construct(
         public string $name,
@@ -43,5 +44,7 @@ readonly class CharacterProfileDTO
         public array $completedQuestIds = [],
         public array $completedAchievementIds = [],
         public array $equipment = [],
+        public array $appearances = [],
+        public int $appearancesCount = 0,
     ) {}
 }

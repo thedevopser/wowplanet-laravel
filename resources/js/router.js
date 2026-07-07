@@ -50,6 +50,7 @@ const routes = [
             { path: 'quetes/:expansion?', name: 'database-quests', component: () => import('./pages/DatabaseQuestsPage.vue'), meta: { title: 'Quêtes WoW | WowPlanet' } },
             { path: 'mascottes/:category?', name: 'database-pets', component: () => import('./pages/DatabasePetsPage.vue'), meta: { title: 'Mascottes WoW | WowPlanet' } },
             { path: 'decorations/:category?', name: 'database-decors', component: () => import('./pages/DatabaseDecorsPage.vue'), meta: { title: 'Décorations WoW | WowPlanet' } },
+            { path: 'garde-robe/:slot?', name: 'database-transmog', component: () => import('./pages/DatabaseTransmogPage.vue'), meta: { title: 'Transmogrification WoW | WowPlanet' } },
             { path: 'professions/:profession?', name: 'database-professions', component: () => import('./pages/DatabaseProfessionsPage.vue'), meta: { title: 'Professions WoW | WowPlanet' } },
         ],
     },

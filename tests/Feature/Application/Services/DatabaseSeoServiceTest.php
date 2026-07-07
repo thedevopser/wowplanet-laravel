@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\Services\DatabaseSeoService;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -127,6 +128,38 @@ test('it returns professions meta', function (): void {
         ->and($meta['title'])->toContain('Forge')
         ->and($meta['title'])->toContain('10')
         ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/professions/forge');
+});
+
+test('it returns appearances meta', function (): void {
+    WowAppearance::factory()->count(7)->create(['slot' => 'HEAD', 'is_active' => true]);
+
+    $databaseSeoService = resolve(DatabaseSeoService::class);
+    $meta = $databaseSeoService->getAppearancesMeta(null);
+
+    expect($meta)->toHaveKeys(seoKeys())
+        ->and($meta['title'])->toContain('Transmogrification')
+        ->and($meta['title'])->toContain('7')
+        ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/garde-robe');
+});
+
+test('it returns appearances meta filtered by slot', function (): void {
+    WowAppearance::factory()->count(2)->create(['slot' => 'HEAD', 'is_active' => true]);
+    WowAppearance::factory()->create(['slot' => 'WEAPON', 'is_active' => true]);
+
+    $databaseSeoService = resolve(DatabaseSeoService::class);
+    $meta = $databaseSeoService->getAppearancesMeta('head');
+
+    expect($meta)->toHaveKeys(seoKeys())
+        ->and($meta['description'])->toContain('2')
+        ->and($meta['canonicalUrl'])->toContain('/base-de-donnees/garde-robe/head');
+});
+
+test('it returns null appearances meta for empty slot', function (): void {
+    WowAppearance::factory()->create(['slot' => 'HEAD', 'is_active' => true]);
+
+    $databaseSeoService = resolve(DatabaseSeoService::class);
+
+    expect($databaseSeoService->getAppearancesMeta('inexistant'))->toBeNull();
 });
 
 test('it builds valid JSON-LD', function (): void {

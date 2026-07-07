@@ -89,6 +89,19 @@ class DatabaseController extends Controller
         return view('welcome', ['seo' => $seo]);
     }
 
+    public function appearances(?string $slot = null): View|RedirectResponse
+    {
+        $seo = $this->databaseSeoService->getAppearancesMeta($slot);
+
+        if ($seo === null) {
+            return redirect('/base-de-donnees/garde-robe', 301);
+        }
+
+        $seo['serverHtml'] = $this->databaseContentRenderer->renderAppearances($this->appUrl(), $slot) ?? '';
+
+        return view('welcome', ['seo' => $seo]);
+    }
+
     public function professions(?string $profession = null): View|RedirectResponse
     {
         $seo = $this->databaseSeoService->getProfessionsMeta($profession);

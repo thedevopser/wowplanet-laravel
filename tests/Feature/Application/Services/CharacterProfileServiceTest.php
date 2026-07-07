@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Application\Services\CharacterProfileService;
 use App\Application\Services\UserCharacterService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Models\WowAppearance;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -139,6 +140,61 @@ test('get profile returns correct dto', function (): void {
         ->and($characterProfileDTO->equipment[0]['slot'])->toBe('HEAD')
         ->and($characterProfileDTO->equipment[0]['item_id'])->toBe(12345)
         ->and($characterProfileDTO->equipment[0]['icon_url'])->toBeNull();
+});
+
+test('get profile aggregates unlocked transmog appearances by slot', function (): void {
+    WowAppearance::factory()->create(['id' => 321, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 322, 'slot' => 'HEAD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 400, 'slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+
+    $mock = $this->mock(BlizzardApiClient::class);
+
+    /** @var \Mockery\Expectation $profileExp */
+    $profileExp = $mock->shouldReceive('get');
+    $profileExp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 600,
+        'faction' => ['name' => 'Horde'],
+    ]);
+
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'quests/completed' => ['quests' => []],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        'collections/transmogs' => [
+            'slots' => [
+                ['slot' => ['type' => 'HEAD'], 'appearances' => [['id' => 321], ['id' => 999]]],
+                ['slot' => ['type' => 'WEAPON'], 'appearances' => []],
+            ],
+        ],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+    ]);
+
+    $characterProfileService = resolve(CharacterProfileService::class);
+    $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
+
+    $head = collect($characterProfileDTO->appearances)->firstWhere('slot', 'HEAD');
+    $weapon = collect($characterProfileDTO->appearances)->firstWhere('slot', 'WEAPON');
+
+    expect($head['total'])->toBe(2)
+        ->and($head['completed'])->toBe(1) // id 321 compté, id 999 inconnu ignoré
+        ->and($weapon['total'])->toBe(1)
+        ->and($weapon['completed'])->toBe(0)
+        ->and($characterProfileDTO->appearancesCount)->toBe(1);
 });
 
 test('aggregate progress groups by expansion and zone', function (): void {

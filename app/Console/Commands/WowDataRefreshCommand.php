@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
+use App\Models\WowAppearance;
 use App\Models\WowMount;
 use App\Models\WowPet;
 use App\Models\WowQuest;
@@ -77,6 +78,13 @@ class WowDataRefreshCommand extends Command
             $this->newLine();
         }
 
+        if ($type === 'all' || $type === 'appearances') {
+            $this->info('Truncating wow_appearances...');
+            WowAppearance::query()->truncate();
+            $blizzardBatchImporter->importAppearances();
+            $this->newLine();
+        }
+
         $this->info('Refresh Complete!');
         $this->displayStats();
     }
@@ -91,6 +99,7 @@ class WowDataRefreshCommand extends Command
                 ['Achievements', WowAchievement::query()->count()],
                 ['Mounts', WowMount::query()->count()],
                 ['Pets', WowPet::query()->count()],
+                ['Appearances', WowAppearance::query()->count()],
             ]
         );
     }

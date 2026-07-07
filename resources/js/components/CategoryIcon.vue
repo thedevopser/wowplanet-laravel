@@ -43,6 +43,11 @@
             <polyline points="9 22 9 12 15 12 15 22" />
         </template>
 
+        <!-- Garde-robe / transmog: tunique -->
+        <template v-else-if="category === 'transmog' || category === 'appearances'">
+            <path d="M8 2l4 3 4-3 4 4-3 3v11a1 1 0 01-1 1H8a1 1 0 01-1-1V9L4 6z" />
+        </template>
+
         <!-- Professions: marteau -->
         <template v-else-if="category === 'professions'">
             <path

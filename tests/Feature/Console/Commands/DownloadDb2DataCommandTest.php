@@ -21,7 +21,7 @@ test('it downloads DB2 CSV files', function (): void {
     $this->artisan('app:download-db2')
         ->assertExitCode(0);
 
-    Http::assertSentCount(20); // 16 DB2 tables + 4 SimpleArmory JSONs
+    Http::assertSentCount(24); // 20 DB2 tables + 4 SimpleArmory JSONs
 });
 
 test('it handles download failures gracefully', function (): void {
