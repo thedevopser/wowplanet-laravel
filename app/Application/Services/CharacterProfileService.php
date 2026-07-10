@@ -10,10 +10,12 @@ use App\Application\Services\Progress\CollectionProgressAggregator;
 use App\Application\Services\Progress\EquipmentAggregator;
 use App\Application\Services\Progress\ProfessionProgressAggregator;
 use App\Application\Services\Progress\QuestProgressAggregator;
+use App\Application\Services\Progress\RaidProgressAggregator;
 use App\Application\Services\Progress\ReputationProgressAggregator;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\Utils;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class CharacterProfileService
@@ -25,6 +27,7 @@ class CharacterProfileService
         private readonly CollectionProgressAggregator $collectionProgressAggregator,
         private readonly ProfessionProgressAggregator $professionProgressAggregator,
         private readonly ReputationProgressAggregator $reputationProgressAggregator,
+        private readonly RaidProgressAggregator $raidProgressAggregator,
         private readonly EquipmentAggregator $equipmentAggregator,
         private readonly UserCharacterService $userCharacterService,
     ) {}
@@ -81,6 +84,8 @@ class CharacterProfileService
 
     private const RETRY_DELAY_S = 3;
 
+    private const RAID_NAMES_TTL_S = 604800;
+
     /**
      * @return array<string, mixed>
      */
@@ -101,6 +106,7 @@ class CharacterProfileService
             'decor' => ['endpoint' => $base.'/collections/decor', 'query' => []],
             'transmogs' => ['endpoint' => $base.'/collections/transmogs', 'query' => []],
             'mythicKeystone' => ['endpoint' => $base.'/mythic-keystone-profile', 'query' => []],
+            'raids' => ['endpoint' => $base.'/encounters/raids', 'query' => []],
             'equipment' => ['endpoint' => $base.'/equipment', 'query' => []],
         ];
 
@@ -150,6 +156,8 @@ class CharacterProfileService
         $mythicKeystoneProfile = $responses['mythicKeystone'] ?? [];
         /** @var array<string, mixed> $equipmentResponse */
         $equipmentResponse = $responses['equipment'] ?? [];
+        /** @var array<string, mixed> $raidsResponse */
+        $raidsResponse = $responses['raids'] ?? [];
         unset($responses);
 
         $mythicKeystoneSeasonData = $this->fetchCurrentMythicSeason($base);
@@ -173,6 +181,8 @@ class CharacterProfileService
             'reputationsResponse' => $reputationsResponse,
             'mythicKeystoneProfile' => $mythicKeystoneProfile,
             'mythicKeystoneSeasonData' => $mythicKeystoneSeasonData,
+            'raidsResponse' => $raidsResponse,
+            'raidNames' => $this->fetchRaidNames($raidsResponse),
             'equipmentResponse' => $equipmentResponse,
             'equipmentIconMap' => $equipmentIconMap,
         ];
@@ -389,6 +399,93 @@ class CharacterProfileService
     }
 
     /**
+     * Résout les noms FR des raids/boss du tier courant via les données statiques
+     * journal-instance (l'endpoint encounters/raids du profil ne les localise pas).
+     *
+     * @param  array<string, mixed>  $raidsResponse
+     * @return array<int, array{name: string, encounters: array<int, string>}>
+     */
+    private function fetchRaidNames(array $raidsResponse): array
+    {
+        $instanceIds = $this->currentSeasonInstanceIds($raidsResponse);
+        if ($instanceIds === []) {
+            return [];
+        }
+
+        $region = $this->blizzardApiClient->getRegion();
+        $nameMap = [];
+
+        foreach ($instanceIds as $instanceId) {
+            try {
+                /** @var array<string, mixed> $data */
+                $data = Cache::remember(
+                    'raid_journal_instance:'.$instanceId,
+                    self::RAID_NAMES_TTL_S,
+                    fn (): array => $this->blizzardApiClient->get(
+                        'data/wow/journal-instance/'.$instanceId,
+                        ['namespace' => 'static-'.$region],
+                    ),
+                );
+            } catch (\Throwable $throwable) {
+                Log::debug('Raid journal-instance fetch failed: '.$throwable->getMessage());
+
+                continue;
+            }
+
+            /** @var list<array{id?: int, name?: string}> $encounters */
+            $encounters = $data['encounters'] ?? [];
+            $encounterNames = [];
+            foreach ($encounters as $encounter) {
+                $encounterId = (int) ($encounter['id'] ?? 0);
+                if ($encounterId > 0) {
+                    $encounterNames[$encounterId] = (string) ($encounter['name'] ?? '');
+                }
+            }
+
+            $nameMap[$instanceId] = [
+                'name' => is_string($data['name'] ?? null) ? $data['name'] : '',
+                'encounters' => $encounterNames,
+            ];
+        }
+
+        return $nameMap;
+    }
+
+    /**
+     * @param  array<string, mixed>  $raidsResponse
+     * @return list<int>
+     */
+    private function currentSeasonInstanceIds(array $raidsResponse): array
+    {
+        /** @var list<array<string, mixed>> $expansions */
+        $expansions = $raidsResponse['expansions'] ?? [];
+
+        foreach ($expansions as $expansion) {
+            /** @var array{id?: int} $expansionData */
+            $expansionData = $expansion['expansion'] ?? [];
+            if ((int) ($expansionData['id'] ?? 0) !== RaidProgressAggregator::CURRENT_SEASON_EXPANSION_ID) {
+                continue;
+            }
+
+            /** @var list<array<string, mixed>> $instances */
+            $instances = $expansion['instances'] ?? [];
+            $ids = [];
+            foreach ($instances as $instance) {
+                /** @var array{id?: int} $instanceData */
+                $instanceData = $instance['instance'] ?? [];
+                $id = (int) ($instanceData['id'] ?? 0);
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+
+            return $ids;
+        }
+
+        return [];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function fetchCurrentMythicSeason(string $base): array
@@ -521,6 +618,12 @@ class CharacterProfileService
         /** @var array<string, mixed> $mythicSeason */
         $mythicSeason = $apiData['mythicKeystoneSeasonData'] ?? [];
 
+        /** @var array<string, mixed> $raidsResponse */
+        $raidsResponse = is_array($apiData['raidsResponse'] ?? null) ? $apiData['raidsResponse'] : [];
+        /** @var array<int, array{name?: string, encounters?: array<int, string>}> $raidNames */
+        $raidNames = is_array($apiData['raidNames'] ?? null) ? $apiData['raidNames'] : [];
+        $raids = $this->raidProgressAggregator->aggregate($raidsResponse, $raidNames);
+
         return new CharacterProfileDTO(
             name: is_string($summary['name'] ?? null) ? $summary['name'] : '',
             realm: (string) ($realmData['name'] ?? ''),
@@ -549,7 +652,35 @@ class CharacterProfileService
             equipment: $equipment,
             appearances: $appearances,
             appearancesCount: array_sum(array_column($appearances, 'completed')),
+            raids: $raids,
+            raidsCount: $this->countRaidBosses($raids),
         );
+    }
+
+    /**
+     * Compte les boss vaincus à la difficulté la plus haute atteinte,
+     * cumulé sur les raids du tier courant (badge de l'onglet).
+     *
+     * @param  list<array<string, mixed>>|null  $raids
+     */
+    private function countRaidBosses(?array $raids): int
+    {
+        if ($raids === null) {
+            return 0;
+        }
+
+        $total = 0;
+        foreach ($raids as $raid) {
+            /** @var list<array{completed_count?: int}> $modes */
+            $modes = $raid['modes'] ?? [];
+            // Les modes sont triés par difficulté croissante : le dernier est le plus élevé.
+            $highestMode = end($modes);
+            if (is_array($highestMode)) {
+                $total += (int) ($highestMode['completed_count'] ?? 0);
+            }
+        }
+
+        return $total;
     }
 
     /**

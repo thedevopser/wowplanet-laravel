@@ -13,6 +13,7 @@ readonly class CharacterProfileDTO
      * @param  list<array<string, mixed>>  $professions
      * @param  list<array<string, mixed>>  $decor
      * @param  array<string, mixed>|null  $mythicKeystone
+     * @param  list<array<string, mixed>>|null  $raids
      * @param  list<int>  $completedQuestIds
      * @param  list<int>  $completedAchievementIds
      * @param  list<array{slot: string, slot_name: string, item_id: int, name: string, item_level: int, quality: string, icon_url: string|null}>  $equipment
@@ -46,5 +47,7 @@ readonly class CharacterProfileDTO
         public array $equipment = [],
         public array $appearances = [],
         public int $appearancesCount = 0,
+        public ?array $raids = null,
+        public int $raidsCount = 0,
     ) {}
 }
