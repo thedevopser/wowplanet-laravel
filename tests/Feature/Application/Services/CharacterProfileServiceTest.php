@@ -336,6 +336,206 @@ test('aggregate progress filters quests by character faction', function (): void
         ->and($classicData['quests']['completed'])->toBe(2);
 });
 
+test('get profile exposes current season raid progression', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
+
+    $summary = [
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 620,
+        'faction' => ['name' => 'Horde'],
+    ];
+
+    // journal-instance résout les noms FR ; le profil renvoie le résumé.
+    /** @var \Mockery\Expectation $profileExp */
+    $profileExp = $mock->shouldReceive('get');
+    $profileExp->andReturnUsing(function (string $endpoint) use ($summary): array {
+        if (str_contains($endpoint, 'journal-instance/1307')) {
+            return [
+                'name' => 'La Flèche du Vide',
+                'encounters' => [['id' => 2733, 'name' => 'Empereur Averzian']],
+            ];
+        }
+
+        return $summary;
+    });
+
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'quests/completed' => ['quests' => []],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+        'encounters/raids' => [
+            'expansions' => [
+                [
+                    'expansion' => ['id' => 516, 'name' => 'Midnight'],
+                    'instances' => [
+                        [
+                            'instance' => ['id' => 1307, 'name' => 'The Voidspire'],
+                            'modes' => [[
+                                'difficulty' => ['type' => 'LFR', 'name' => 'Raids'],
+                                'status' => ['type' => 'COMPLETE'],
+                                'progress' => ['completed_count' => 6, 'total_count' => 6, 'encounters' => []],
+                            ]],
+                        ],
+                    ],
+                ],
+                [
+                    'expansion' => ['id' => 505, 'name' => 'Current Season'],
+                    'instances' => [
+                        [
+                            'instance' => ['id' => 1307, 'name' => 'The Voidspire'],
+                            'modes' => [[
+                                'difficulty' => ['type' => 'MYTHIC', 'name' => 'Mythique'],
+                                'status' => ['type' => 'IN_PROGRESS'],
+                                'progress' => [
+                                    'completed_count' => 3,
+                                    'total_count' => 6,
+                                    'encounters' => [
+                                        ['encounter' => ['id' => 2733, 'name' => 'Imperator Averzian'], 'completed_count' => 1, 'last_kill_timestamp' => 1775411018000],
+                                    ],
+                                ],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $characterProfileService = resolve(CharacterProfileService::class);
+    $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
+
+    expect($characterProfileDTO->raids)->toHaveCount(1)
+        ->and($characterProfileDTO->raids[0]['instance_name'])->toBe('La Flèche du Vide')
+        ->and($characterProfileDTO->raids[0]['modes'][0]['difficulty_type'])->toBe('MYTHIC')
+        ->and($characterProfileDTO->raids[0]['modes'][0]['completed_count'])->toBe(3)
+        ->and($characterProfileDTO->raids[0]['modes'][0]['encounters'][0]['name'])->toBe('Empereur Averzian')
+        ->and($characterProfileDTO->raidsCount)->toBe(3);
+});
+
+test('get profile falls back to raw raid names when journal-instance lookup fails', function (): void {
+    $summary = [
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 620,
+        'faction' => ['name' => 'Horde'],
+    ];
+
+    $mock = $this->mock(BlizzardApiClient::class);
+
+    /** @var \Mockery\Expectation $profileExp */
+    $profileExp = $mock->shouldReceive('get');
+    $profileExp->andReturnUsing(function (string $endpoint) use ($summary): array {
+        throw_if(str_contains($endpoint, 'journal-instance'), \RuntimeException::class, 'static data unavailable');
+
+        return $summary;
+    });
+
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'quests/completed' => ['quests' => []],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+        'encounters/raids' => [
+            'expansions' => [
+                [
+                    'expansion' => ['id' => 505, 'name' => 'Current Season'],
+                    'instances' => [
+                        [
+                            'instance' => ['id' => 1307, 'name' => 'The Voidspire'],
+                            'modes' => [[
+                                'difficulty' => ['type' => 'LFR', 'name' => 'Raids'],
+                                'status' => ['type' => 'COMPLETE'],
+                                'progress' => [
+                                    'completed_count' => 1,
+                                    'total_count' => 1,
+                                    'encounters' => [
+                                        ['encounter' => ['id' => 2733, 'name' => 'Imperator Averzian'], 'completed_count' => 1, 'last_kill_timestamp' => 1775411018000],
+                                    ],
+                                ],
+                            ]],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $characterProfileService = resolve(CharacterProfileService::class);
+    $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
+
+    expect($characterProfileDTO->raids)->toHaveCount(1)
+        ->and($characterProfileDTO->raids[0]['instance_name'])->toBe('The Voidspire')
+        ->and($characterProfileDTO->raids[0]['modes'][0]['encounters'][0]['name'])->toBe('Imperator Averzian');
+});
+
+test('get profile has null raids when no current season progression', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
+
+    /** @var \Mockery\Expectation $profileExp */
+    $profileExp = $mock->shouldReceive('get');
+    $profileExp->andReturn([
+        'name' => 'Thrall',
+        'realm' => ['name' => 'Hyjal'],
+        'race' => ['name' => 'Orc'],
+        'character_class' => ['id' => 7, 'name' => 'Chaman'],
+        'level' => 80,
+        'equipped_item_level' => 620,
+        'faction' => ['name' => 'Horde'],
+    ]);
+
+    /** @var \Mockery\Expectation $seasonExp */
+    $seasonExp = $mock->shouldReceive('getCurrentMythicSeasonId');
+    $seasonExp->andReturn(0);
+    $mock->shouldReceive('getRegion')->andReturn('eu');
+    $this->mock(UserCharacterService::class)->shouldReceive('getClassIcons')->andReturn([]);
+
+    mockAsyncEndpoints($mock, [
+        'character-media' => ['assets' => [['key' => 'avatar', 'value' => '']]],
+        'quests/completed' => ['quests' => []],
+        'achievements' => ['achievements' => []],
+        'collections/mounts' => ['mounts' => []],
+        'collections/pets' => ['pets' => []],
+        'collections/decor' => ['decor_collected' => []],
+        '/professions' => ['primaries' => [], 'secondaries' => []],
+        '/reputations' => ['reputations' => []],
+        'encounters/raids' => [],
+    ]);
+
+    $characterProfileService = resolve(CharacterProfileService::class);
+    $characterProfileDTO = $characterProfileService->getProfile('hyjal', 'thrall');
+
+    expect($characterProfileDTO->raids)->toBeNull()
+        ->and($characterProfileDTO->raidsCount)->toBe(0);
+});
+
 test('get profile handles decor api 404 gracefully', function (): void {
     WowDecor::factory()->create([
         'id' => 500,
