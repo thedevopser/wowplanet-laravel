@@ -121,7 +121,6 @@ Génère les métadonnées SEO et sitemaps pour le rendu côté serveur.
 | `meta(Request)` | `GET /api/seo/meta` | Métadonnées (title, description, og:image, JSON-LD) pour n'importe quelle URL. |
 | `sitemapIndex()` | `GET /sitemap.xml` | Sitemap index XML. |
 | `pagesSitemap()` | `GET /sitemap-pages.xml` | Sitemap des pages statiques. |
-| `charactersSitemap()` | `GET /sitemap-characters.xml` | Sitemap des personnages visités. |
 | `databaseSitemap()` | `GET /sitemap-database.xml` | Sitemap des pages de base de données. |
 
 ---
