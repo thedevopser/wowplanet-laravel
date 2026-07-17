@@ -3,7 +3,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
+        "build": "vite build && vite build --ssr",
         "dev": "vite",
         "test": "vitest run",
         "test:watch": "vitest"
@@ -22,6 +22,7 @@
         "vitest": "^4.0.18"
     },
     "dependencies": {
+        "@inertiajs/vue3": "^3.6.1",
         "@vitejs/plugin-vue": "^6.0.4",
         "dompurify": "^3.3.3",
         "marked": "^17.0.4",
