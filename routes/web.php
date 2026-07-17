@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\SeoController;
@@ -15,7 +16,7 @@ Route::get('/sitemap-pages.xml', [SeoController::class, 'sitemapPages']);
 Route::get('/sitemap-characters.xml', [SeoController::class, 'sitemapCharacters']);
 Route::get('/sitemap-database.xml', [DatabaseController::class, 'sitemap']);
 
-Route::get('/character/{realm}/{name}', [SeoController::class, 'characterPage']);
+Route::get('/character/{realm}/{name}', [CharacterController::class, 'page']);
 
 Route::get('/base-de-donnees', [DatabaseController::class, 'index']);
 Route::get('/base-de-donnees/montures/{category?}', [DatabaseController::class, 'mounts']);

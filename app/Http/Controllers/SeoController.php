@@ -7,7 +7,6 @@ namespace App\Http\Controllers;
 use App\Application\Services\CharacterSeoService;
 use App\Application\Services\SeoContentRenderer;
 use Illuminate\Contracts\View\View;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 
 class SeoController extends Controller
@@ -49,26 +48,6 @@ class SeoController extends Controller
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function characterPage(string $realm, string $name): View|RedirectResponse
-    {
-        $normalizedRealm = mb_strtolower($realm);
-        $normalizedName = mb_strtolower($name);
-
-        if ($realm !== $normalizedRealm || $name !== $normalizedName) {
-            return redirect(sprintf('/character/%s/%s', $normalizedRealm, $normalizedName), 301);
-        }
-
-        $seo = $this->characterSeoService->getCharacterMeta($realm, $name);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderCharacter(
-            $this->appUrl(),
-            $this->characterSeoService->getCachedCharacterData($realm, $name),
-            $realm,
-            $name,
-        );
-
-        return view('welcome', ['seo' => $seo]);
-    }
-
     public function sitemap(): Response
     {
         $xml = $this->characterSeoService->generateSitemapIndex();
@@ -106,8 +85,8 @@ class SeoController extends Controller
             'User-agent: *',
             'Allow: /',
             'Allow: /base-de-donnees/',
+            'Allow: /character/',
             'Disallow: /api/',
-            'Disallow: /character/',
             'Disallow: /auth/',
             'Disallow: /admin',
             'Disallow: /my-characters',

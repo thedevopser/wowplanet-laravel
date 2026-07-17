@@ -23,38 +23,6 @@ test('spa returns home page', function (): void {
     $this->get('/')->assertOk();
 });
 
-test('character page redirects to lowercase url', function (): void {
-    $this->get('/character/HYJAL/THRALL')
-        ->assertRedirect('/character/hyjal/thrall')
-        ->assertStatus(301);
-});
-
-test('character page returns view for valid character', function (): void {
-    $mock = $this->mock(CharacterSeoService::class);
-    /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('getCharacterMeta');
-    $exp->once()->with('hyjal', 'thrall')->andReturn([
-        'title' => 'Thrall - Hyjal | WowPlanet',
-        'description' => 'Test',
-        'ogTitle' => 'Thrall',
-        'ogDescription' => 'Test',
-        'ogImage' => 'https://example.com/avatar.jpg',
-        'ogUrl' => 'https://example.com/character/hyjal/thrall',
-        'ogType' => 'profile',
-        'canonicalUrl' => 'https://example.com/character/hyjal/thrall',
-        'jsonLd' => '{}',
-    ]);
-    /** @var \Mockery\Expectation $expCached */
-    $expCached = $mock->shouldReceive('getCachedCharacterData');
-    $expCached->once()->with('hyjal', 'thrall')->andReturn([
-        'name' => 'Thrall',
-        'realm' => 'Hyjal',
-        'found' => false,
-    ]);
-
-    $this->get('/character/hyjal/thrall')->assertOk();
-});
-
 test('sitemap returns xml', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */
@@ -76,6 +44,8 @@ test('robots returns plain text', function (): void {
     expect($content)->toBeString()
         ->toContain('User-agent: *')
         ->toContain('Disallow: /api/')
+        ->toContain('Allow: /character/')
+        ->not->toContain('Disallow: /character/')
         ->toContain('Sitemap:');
 });
 

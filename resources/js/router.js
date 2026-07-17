@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { nextTick } from 'vue';
+import { showNavigationLoader } from './utils/navigationLoader';
 import HomePage from './pages/HomePage.vue';
-import CharacterPage from './pages/CharacterPage.vue';
 import MyCharactersPage from './pages/MyCharactersPage.vue';
 import ClassStatsPage from './pages/ClassStatsPage.vue';
 import AccountScorePage from './pages/AccountScorePage.vue';
@@ -17,10 +17,17 @@ const routes = [
         meta: { title: 'WowPlanet - Suivi de progression World of Warcraft' },
     },
     {
+        // La page personnage est désormais servie par Inertia (rendu serveur).
+        // Toute navigation client depuis le SPA legacy force un chargement complet.
         path: '/character/:realm/:name',
         name: 'character',
-        component: CharacterPage,
-        meta: { title: 'Chargement...' },
+        meta: { title: 'Personnage - WowPlanet' },
+        beforeEnter: (to) => {
+            showNavigationLoader();
+            window.location.href = to.fullPath;
+            return false;
+        },
+        component: { render: () => null },
     },
     {
         path: '/my-characters',

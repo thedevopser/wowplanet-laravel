@@ -2,10 +2,30 @@
 
 declare(strict_types=1);
 
+use App\Application\DTOs\CharacterProfileDTO;
 use App\Application\Services\CharacterSeoService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\CharacterVisit;
 use Illuminate\Support\Facades\Cache;
+
+function makeProfileDTO(array $overrides = []): CharacterProfileDTO
+{
+    return new CharacterProfileDTO(
+        name: $overrides['name'] ?? 'Thrall',
+        realm: $overrides['realm'] ?? 'Hyjal',
+        race: $overrides['race'] ?? 'Orc',
+        class: $overrides['class'] ?? 'Chaman',
+        classId: 7,
+        level: $overrides['level'] ?? 80,
+        ilvl: $overrides['ilvl'] ?? 620,
+        faction: $overrides['faction'] ?? 'Horde',
+        avatarUrl: $overrides['avatarUrl'] ?? 'https://example.com/avatar.jpg',
+        classIconUrl: 'https://example.com/class.jpg',
+        collections: [],
+        mountsCount: 0,
+        petsCount: 0,
+    );
+}
 
 test('get home meta returns correct structure', function (): void {
     $this->mock(BlizzardApiClient::class);
@@ -22,45 +42,25 @@ test('get home meta returns correct structure', function (): void {
         ->and((string) $meta['title'])->toContain('WowPlanet');
 });
 
-test('get character meta returns cached data', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('get');
-    $exp->andReturn([
-        'name' => 'Thrall',
-        'realm' => ['name' => 'Hyjal'],
-        'level' => 80,
-        'race' => ['name' => 'Orc'],
-        'character_class' => ['name' => 'Chaman'],
-        'faction' => ['name' => 'Horde'],
-        'equipped_item_level' => 620,
-        'assets' => [['key' => 'avatar', 'value' => 'https://example.com/avatar.jpg']],
-    ]);
-
+test('build character meta returns structure from profile', function (): void {
     $characterSeoService = resolve(CharacterSeoService::class);
 
-    Cache::flush();
-    $meta = $characterSeoService->getCharacterMeta('hyjal', 'thrall');
+    $meta = $characterSeoService->buildCharacterMeta(makeProfileDTO(), 'hyjal', 'thrall');
 
     expect((string) $meta['title'])->toContain('Thrall')
         ->and($meta['ogType'])->toBe('profile')
-        ->and($meta['jsonLd'])->not->toBeNull();
+        ->and($meta['jsonLd'])->not->toBeNull()
+        ->and((string) $meta['ogImage'])->toContain('avatar.jpg')
+        ->and((string) $meta['canonicalUrl'])->toContain('/character/hyjal/thrall');
 });
 
-test('get character meta handles api error', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('get');
-    $exp->andThrow(new Exception('API Error'));
-
+test('build not found character meta returns null jsonLd', function (): void {
     $characterSeoService = resolve(CharacterSeoService::class);
 
-    Cache::flush();
-    $meta = $characterSeoService->getCharacterMeta('hyjal', 'unknown');
+    $meta = $characterSeoService->buildNotFoundCharacterMeta('hyjal', 'unknown');
 
     expect((string) $meta['title'])->toContain('Unknown')
+        ->and($meta['ogType'])->toBe('profile')
         ->and($meta['jsonLd'])->toBeNull();
 });
 
@@ -110,26 +110,10 @@ test('generate characters sitemap returns valid xml', function (): void {
     expect($parsed)->not->toBeFalse('Characters sitemap XML should be parseable');
 });
 
-test('get character meta tracks visit', function (): void {
-    $mock = $this->mock(BlizzardApiClient::class);
-
-    /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('get');
-    $exp->andReturn([
-        'name' => 'Thrall',
-        'realm' => ['name' => 'Hyjal'],
-        'level' => 80,
-        'race' => ['name' => 'Orc'],
-        'character_class' => ['name' => 'Chaman'],
-        'faction' => ['name' => 'Horde'],
-        'equipped_item_level' => 620,
-        'assets' => [],
-    ]);
-
+test('build character meta tracks visit', function (): void {
     $characterSeoService = resolve(CharacterSeoService::class);
 
-    Cache::flush();
-    $characterSeoService->getCharacterMeta('hyjal', 'thrall');
+    $characterSeoService->buildCharacterMeta(makeProfileDTO(), 'hyjal', 'thrall');
 
     $this->assertDatabaseHas('character_visits', [
         'realm_slug' => 'hyjal',

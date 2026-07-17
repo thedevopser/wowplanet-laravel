@@ -39,40 +39,6 @@ class SeoContentRenderer
         );
     }
 
-    /**
-     * @param  array<string, string|int|bool>  $charData
-     */
-    public function renderCharacter(string $appUrl, array $charData, string $realm, string $name): string
-    {
-        if (empty($charData['found'])) {
-            return $this->wrap(
-                sprintf('<h1>%s — %s</h1>', e(ucfirst($name)), e(ucfirst($realm)))
-                .'<p>Profil du personnage World of Warcraft sur WowPlanet.</p>',
-            );
-        }
-
-        return $this->wrap(
-            sprintf(
-                '<h1>%s — %s %s niveau %s | %s</h1>',
-                e((string) $charData['name']),
-                e((string) ($charData['race'] ?? '')),
-                e((string) ($charData['class'] ?? '')),
-                e((string) ($charData['level'] ?? '')),
-                e((string) $charData['realm']),
-            )
-            .sprintf(
-                '<p>%s, %s %s niveau %s (ilvl %s) sur %s (%s). Consultez sa progression : quêtes, hauts-faits, montures et mascottes.</p>',
-                e((string) $charData['name']),
-                e((string) ($charData['race'] ?? '')),
-                e((string) ($charData['class'] ?? '')),
-                e((string) ($charData['level'] ?? '')),
-                e((string) ($charData['ilvl'] ?? '')),
-                e((string) $charData['realm']),
-                e((string) ($charData['faction'] ?? '')),
-            ),
-        );
-    }
-
     private function wrap(string $content): string
     {
         return $content;

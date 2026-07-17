@@ -34,6 +34,11 @@
 
     @vite(['resources/css/app.css', 'resources/js/inertia.js'])
     @inertiaHead
+
+    {{-- JSON-LD (données structurées) rendu côté serveur depuis les props de la page. --}}
+    @if (! empty($page['props']['meta']['jsonLd']))
+    <script type="application/ld+json">{!! $page['props']['meta']['jsonLd'] !!}</script>
+    @endif
 </head>
 
 <body class="antialiased">
