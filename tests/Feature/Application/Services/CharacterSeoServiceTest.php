@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Application\Services\CharacterSeoService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Models\CharacterVisit;
 use Illuminate\Support\Facades\Cache;
 
 test('get home meta returns correct structure', function (): void {
@@ -78,36 +77,6 @@ test('generate sitemap index returns valid xml', function (): void {
 
     $parsed = simplexml_load_string($xml);
     expect($parsed)->not->toBeFalse('Sitemap index XML should be parseable');
-});
-
-test('generate characters sitemap returns valid xml', function (): void {
-    CharacterVisit::factory()->create([
-        'realm_slug' => 'hyjal',
-        'character_name' => 'thrall',
-        'last_visited_at' => now()->subDay(),
-    ]);
-
-    CharacterVisit::factory()->create([
-        'realm_slug' => 'dalaran',
-        'character_name' => 'jaina',
-        'last_visited_at' => now()->subDays(2),
-    ]);
-
-    $this->mock(BlizzardApiClient::class);
-
-    Cache::flush();
-    $characterSeoService = resolve(CharacterSeoService::class);
-    $xml = $characterSeoService->generateCharactersSitemap();
-
-    expect($xml)->toStartWith('<?xml')
-        ->toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"')
-        ->toContain('/character/hyjal/thrall')
-        ->toContain('/character/dalaran/jaina')
-        ->toContain('<changefreq>daily</changefreq>')
-        ->toContain('<priority>0.8</priority>');
-
-    $parsed = simplexml_load_string($xml);
-    expect($parsed)->not->toBeFalse('Characters sitemap XML should be parseable');
 });
 
 test('get character meta tracks visit', function (): void {

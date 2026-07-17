@@ -79,7 +79,6 @@ Génère les métadonnées SEO et les sitemaps pour les pages personnage et les 
 | `getCharacterMeta` | `string $realm, string $name` | `array<string, string\|null>` | Méta OG + Twitter pour un personnage. Appelle l'API si nécessaire, cache le résultat. |
 | `generateSitemapIndex` | — | `string` | Génère le sitemap index XML. |
 | `generatePagesSitemap` | — | `string` | Génère le sitemap des pages statiques. |
-| `generateCharactersSitemap` | — | `string` | Génère le sitemap des personnages visités. |
 
 ---
 
