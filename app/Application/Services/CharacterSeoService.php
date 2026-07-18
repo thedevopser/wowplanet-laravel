@@ -220,14 +220,6 @@ class CharacterSeoService
         return $xml;
     }
 
-    public function generateCharactersSitemap(): string
-    {
-        /** @var string $xml */
-        $xml = Cache::remember('sitemap_characters_xml', 3600, fn (): string => $this->buildCharactersSitemap()->render());
-
-        return $xml;
-    }
-
     private function buildPagesSitemap(): Sitemap
     {
         /** @var string $configUrl */
@@ -262,34 +254,6 @@ class CharacterSeoService
                 ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
                 ->setPriority(0.3),
         );
-
-        return $sitemap;
-    }
-
-    private function buildCharactersSitemap(): Sitemap
-    {
-        /** @var string $configUrl */
-        $configUrl = config('app.url', '');
-        $appUrl = rtrim($configUrl, '/');
-
-        $sitemap = Sitemap::create();
-
-        /** @var \Illuminate\Database\Eloquent\Collection<int, CharacterVisit> $recentVisits */
-        $recentVisits = CharacterVisit::query()
-            ->where('last_visited_at', '>=', now()->subDays(90))
-            ->latest('last_visited_at')
-            ->get();
-
-        foreach ($recentVisits as $recentVisit) {
-            /** @var \Carbon\Carbon $lastVisitedAt */
-            $lastVisitedAt = $recentVisit->last_visited_at;
-            $sitemap->add(
-                Url::create($appUrl.'/character/'.$recentVisit->realm_slug.'/'.$recentVisit->character_name)
-                    ->setLastModificationDate($lastVisitedAt)
-                    ->setChangeFrequency(Url::CHANGE_FREQUENCY_DAILY)
-                    ->setPriority(0.8),
-            );
-        }
 
         return $sitemap;
     }

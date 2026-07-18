@@ -73,15 +73,6 @@ class SeoController extends Controller
         ]);
     }
 
-    public function sitemapCharacters(): Response
-    {
-        $xml = $this->characterSeoService->generateCharactersSitemap();
-
-        return response($xml, 200, [
-            'Content-Type' => 'application/xml; charset=UTF-8',
-        ]);
-    }
-
     public function robots(): Response
     {
         /** @var string $configUrl */

@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Application\DTOs\CharacterProfileDTO;
 use App\Application\Services\CharacterSeoService;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Models\CharacterVisit;
 use Illuminate\Support\Facades\Cache;
 
 function makeProfileDTO(array $overrides = []): CharacterProfileDTO

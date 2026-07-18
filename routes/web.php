@@ -15,7 +15,6 @@ Route::get('/auth/blizzard/callback', [AuthController::class, 'callback']);
 Route::get('/robots.txt', [SeoController::class, 'robots']);
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap']);
 Route::get('/sitemap-pages.xml', [SeoController::class, 'sitemapPages']);
-Route::get('/sitemap-characters.xml', [SeoController::class, 'sitemapCharacters']);
 Route::get('/sitemap-database.xml', [DatabaseController::class, 'sitemap']);
 
 Route::get('/', [SeoController::class, 'home']);
