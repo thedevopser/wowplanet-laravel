@@ -1,5 +1,9 @@
 <template>
     <div class="space-y-8 animate-in fade-in duration-500">
+        <Head>
+            <title>Administration - WowPlanet</title>
+        </Head>
+
         <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-3xl md:text-4xl font-black mb-3">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-red-300 via-red-400 to-red-600">Administration</span>
@@ -294,10 +298,17 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { useCharacterStore } from '../stores/character';
+import { Head } from '@inertiajs/vue3';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import axios from 'axios';
@@ -307,14 +318,9 @@ marked.setOptions({
     gfm: true,
 });
 
-const router = useRouter();
-const store = useCharacterStore();
-
+// L'accès admin est garanti côté serveur (AdminController@page redirige les
+// non-admins) ; aucune garde client nécessaire ici.
 onMounted(() => {
-    if (!store.isAdmin) {
-        router.push('/');
-        return;
-    }
     fetchStatus();
 });
 

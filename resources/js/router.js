@@ -48,12 +48,7 @@ const routes = [
     inertiaBridge('privacy', '/privacy', 'Politique de confidentialité - WowPlanet'),
     inertiaBridge('cgu', '/cgu', 'CGU - WowPlanet'),
     inertiaBridge('faq', '/faq', 'FAQ - WowPlanet'),
-    {
-        path: '/admin',
-        name: 'admin',
-        component: () => import('./pages/AdminPage.vue'),
-        meta: { title: 'Administration - WowPlanet' },
-    },
+    inertiaBridge('admin', '/admin', 'Administration - WowPlanet'),
     {
         path: '/:pathMatch(.*)*',
         name: 'not-found',
