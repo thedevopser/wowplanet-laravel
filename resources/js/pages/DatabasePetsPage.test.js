@@ -1,91 +1,55 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
-import { mountWithPlugins, createMockRouter } from '../tests/helpers';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/base-de-donnees/mascottes', props: {} }),
+    router: { get: vi.fn(), visit: vi.fn(), on: vi.fn() },
+}));
+
 import DatabasePetsPage from './DatabasePetsPage.vue';
-import axios from 'axios';
+import { mountWithPlugins } from '../tests/helpers';
 
-vi.mock('axios');
-
-const mockData = {
-    items: [
-        { id: 1, name_fr: 'Louveteau noir', source: 'Vendeur', icon_url: '', creature_id: 200 },
-        { id: 2, name_fr: 'Perroquet vert', source: 'Vendeur', icon_url: '', creature_id: 201 },
-        { id: 3, name_fr: 'Whelpling rouge', source: 'Drop', icon_url: '', creature_id: 202 },
-    ],
-    categories: [
-        { slug: 'aquatic', name: 'Aquatique', count: 40 },
-        { slug: 'beast', name: 'Bête', count: 60 },
-    ],
-    total: 1800,
+const meta = {
+    title: 'Mascottes WoW | WowPlanet',
+    description: 'Mascottes',
+    ogTitle: 'Mascottes', ogDescription: 'Mascottes', ogImage: '', ogUrl: '', ogType: 'website',
+    canonicalUrl: 'https://example.com/base-de-donnees/mascottes', jsonLd: null,
 };
 
-const routes = [
-    { path: '/base-de-donnees/mascottes/:category?', component: DatabasePetsPage },
-    { path: '/base-de-donnees', component: { template: '<div/>' } },
+const items = [
+    { id: 1, name_fr: 'Petit dragon', source: 'Vendeur', icon_url: '', creature_id: 100 },
+    { id: 2, name_fr: 'Chaton', source: 'Quête', icon_url: '', creature_id: 101 },
 ];
 
+const categories = [{ slug: 'wild', name: 'Sauvages', count: 30 }];
+
+function mountPage(props = {}) {
+    return mountWithPlugins(DatabasePetsPage, {
+        props: { meta, category: null, items, categories, total: 1800, ...props },
+        stubs: { SearchFilter: true, CollectionIcon: true },
+    });
+}
+
 describe('DatabasePetsPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        axios.get.mockResolvedValue({ data: mockData });
-    });
-
-    it('renders heading "Mascottes"', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabasePetsPage, {
-            router,
-            initialRoute: '/base-de-donnees/mascottes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
+    it('renders heading and displays items from props', async () => {
+        const wrapper = await mountPage();
         expect(wrapper.text()).toContain('Mascottes');
+        expect(wrapper.text()).toContain('Petit dragon');
+        expect(wrapper.text()).toContain('Chaton');
     });
 
-    it('fetches data and displays source groups', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabasePetsPage, {
-            router,
-            initialRoute: '/base-de-donnees/mascottes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
+    it('search filters items by name', async () => {
+        const wrapper = await mountPage();
+        wrapper.vm.search = 'chaton';
+        await wrapper.vm.$nextTick();
 
-        expect(axios.get).toHaveBeenCalledWith('/api/database/pets', { params: {} });
-        expect(wrapper.text()).toContain('Vendeur');
-        expect(wrapper.text()).toContain('Drop');
+        expect(wrapper.text()).toContain('Chaton');
+        expect(wrapper.text()).not.toContain('Petit dragon');
     });
 
-    it('search filters items', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabasePetsPage, {
-            router,
-            initialRoute: '/base-de-donnees/mascottes',
-            stubs: { BreadcrumbNav: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Vendeur');
-        expect(wrapper.text()).toContain('Drop');
-
-        wrapper.vm.search = 'whelpling';
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Drop');
-        expect(wrapper.text()).not.toContain('Vendeur');
-    });
-
-    it('handles API error', async () => {
-        axios.get.mockRejectedValue(new Error('Network error'));
-
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabasePetsPage, {
-            router,
-            initialRoute: '/base-de-donnees/mascottes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
+    it('shows empty state when no items', async () => {
+        const wrapper = await mountPage({ items: [], total: 0 });
         expect(wrapper.text()).toContain('Aucun résultat trouvé');
     });
 });

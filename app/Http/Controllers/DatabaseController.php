@@ -4,115 +4,158 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Application\Services\DatabaseContentRenderer;
+use App\Application\Services\DatabaseQueryService;
 use App\Application\Services\DatabaseSeoService;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
 
 class DatabaseController extends Controller
 {
+    /**
+     * Sections dont la sidebar affiche les sous-catégories (accordéon).
+     *
+     * @var list<string>
+     */
+    private const SIDEBAR_SECTIONS = ['mounts', 'achievements', 'quests', 'pets', 'decors', 'appearances', 'professions'];
+
     public function __construct(
         private readonly DatabaseSeoService $databaseSeoService,
-        private readonly DatabaseContentRenderer $databaseContentRenderer,
+        private readonly DatabaseQueryService $databaseQueryService,
     ) {}
 
-    public function index(): View
+    public function index(): InertiaResponse
     {
-        $seo = $this->databaseSeoService->getIndexMeta();
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderDatabaseIndex($this->appUrl());
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseIndexPage', [
+            'meta' => $this->databaseSeoService->getIndexMeta(),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function mounts(?string $category = null): View|RedirectResponse
+    public function mounts(?string $category = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getMountsMeta($category);
+        $meta = $this->databaseSeoService->getMountsMeta($category);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/montures', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderMounts($this->appUrl(), $category) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseMountsPage', [
+            'meta' => $meta,
+            'category' => $category,
+            ...$this->databaseQueryService->mounts($category),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function achievements(?string $expansion = null): View|RedirectResponse
+    public function achievements(Request $request, ?string $expansion = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getAchievementsMeta($expansion);
+        $meta = $this->databaseSeoService->getAchievementsMeta($expansion);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/hauts-faits', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderAchievements($this->appUrl(), $expansion) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseAchievementsPage', [
+            'meta' => $meta,
+            'expansion' => $expansion,
+            'search' => $this->search($request),
+            ...$this->databaseQueryService->achievements($expansion, $this->search($request), $this->page($request)),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function quests(?string $expansion = null): View|RedirectResponse
+    public function quests(Request $request, ?string $expansion = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getQuestsMeta($expansion);
+        $meta = $this->databaseSeoService->getQuestsMeta($expansion);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/quetes', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderQuests($this->appUrl(), $expansion) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseQuestsPage', [
+            'meta' => $meta,
+            'expansion' => $expansion,
+            'search' => $this->search($request),
+            ...$this->databaseQueryService->quests($expansion, $this->search($request), $this->page($request)),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function pets(?string $category = null): View|RedirectResponse
+    public function pets(?string $category = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getPetsMeta($category);
+        $meta = $this->databaseSeoService->getPetsMeta($category);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/mascottes', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderPets($this->appUrl(), $category) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabasePetsPage', [
+            'meta' => $meta,
+            'category' => $category,
+            ...$this->databaseQueryService->pets($category),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function decors(?string $category = null): View|RedirectResponse
+    public function decors(?string $category = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getDecorsMeta($category);
+        $meta = $this->databaseSeoService->getDecorsMeta($category);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/decorations', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderDecors($this->appUrl(), $category) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseDecorsPage', [
+            'meta' => $meta,
+            'category' => $category,
+            ...$this->databaseQueryService->decors($category),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function appearances(?string $slot = null): View|RedirectResponse
+    public function appearances(Request $request, ?string $slot = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getAppearancesMeta($slot);
+        $meta = $this->databaseSeoService->getAppearancesMeta($slot);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/garde-robe', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderAppearances($this->appUrl(), $slot) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseTransmogPage', [
+            'meta' => $meta,
+            'slot' => $slot,
+            'search' => $this->search($request),
+            ...$this->databaseQueryService->appearances($slot, null, $this->search($request), $this->page($request)),
+            ...$this->sidebarProps(),
+        ]);
     }
 
-    public function professions(?string $profession = null): View|RedirectResponse
+    public function professions(Request $request, ?string $profession = null): InertiaResponse|RedirectResponse
     {
-        $seo = $this->databaseSeoService->getProfessionsMeta($profession);
+        $meta = $this->databaseSeoService->getProfessionsMeta($profession);
 
-        if ($seo === null) {
+        if ($meta === null) {
             return redirect('/base-de-donnees/professions', 301);
         }
 
-        $seo['serverHtml'] = $this->databaseContentRenderer->renderProfessions($this->appUrl(), $profession) ?? '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('DatabaseProfessionsPage', [
+            'meta' => $meta,
+            'profession' => $profession,
+            'expansion' => $this->stringQuery($request, 'expansion'),
+            'search' => $this->search($request),
+            ...$this->databaseQueryService->professions(),
+            'recipes' => $profession === null
+                ? null
+                : $this->databaseQueryService->professionRecipes(
+                    $profession,
+                    $this->stringQuery($request, 'expansion'),
+                    $this->search($request),
+                    $this->page($request),
+                ),
+            ...$this->sidebarProps(),
+        ]);
     }
 
     public function sitemap(): \Illuminate\Http\Response
@@ -124,11 +167,46 @@ class DatabaseController extends Controller
         ]);
     }
 
-    private function appUrl(): string
+    /**
+     * Props de la sidebar (counts + sous-catégories) partagées par toutes les pages
+     * database. Closures lazy : non évaluées lors des rechargements partiels Inertia
+     * (pagination/recherche) qui ne les incluent pas dans `only`.
+     *
+     * @return array<string, \Closure>
+     */
+    private function sidebarProps(): array
     {
-        /** @var string $configUrl */
-        $configUrl = config('app.url', '');
+        return [
+            'counts' => $this->databaseQueryService->counts(...),
+            'subCategories' => function (): array {
+                $map = [];
+                foreach (self::SIDEBAR_SECTIONS as $section) {
+                    $map[$section] = $this->databaseQueryService->subcategories($section) ?? [];
+                }
 
-        return rtrim($configUrl, '/');
+                return $map;
+            },
+        ];
+    }
+
+    private function search(Request $request): ?string
+    {
+        return $this->stringQuery($request, 'search');
+    }
+
+    private function page(Request $request): ?int
+    {
+        /** @var string|null $value */
+        $value = $request->query('page');
+
+        return ($value === null || $value === '') ? null : (int) $value;
+    }
+
+    private function stringQuery(Request $request, string $key): ?string
+    {
+        /** @var string|null $value */
+        $value = $request->query($key);
+
+        return ($value === null || $value === '') ? null : $value;
     }
 }

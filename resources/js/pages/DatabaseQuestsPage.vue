@@ -1,5 +1,18 @@
 <template>
     <div class="space-y-6 py-6 sm:py-8">
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+        </Head>
+
         <DatabasePageHeader
             title="Quêtes"
             :subtitle="activeExpansionName || 'Toutes les extensions'"
@@ -51,8 +64,8 @@
         </div>
 
         <DatabasePagination
-            :current-page="currentPage"
-            :last-page="lastPage"
+            :current-page="current_page"
+            :last-page="last_page"
             :total="total"
             @page-change="onPageChange"
         />
@@ -65,68 +78,61 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+import DatabaseLayout from '../layouts/DatabaseLayout.vue';
+
+export default {
+    layout: [AppLayout, DatabaseLayout],
+};
+</script>
+
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import axios from 'axios';
+import { ref, computed } from 'vue';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import SearchFilter from '../components/SearchFilter.vue';
 import DatabasePageHeader from '../components/DatabasePageHeader.vue';
 import DatabasePagination from '../components/DatabasePagination.vue';
 
-const route = useRoute();
-const loading = ref(true);
-const items = ref([]);
-const expansions = ref([]);
-const total = ref(0);
-const currentPage = ref(1);
-const lastPage = ref(1);
-const search = ref('');
-const serverSearch = ref('');
+const props = defineProps({
+    meta: { type: Object, required: true },
+    expansion: { type: String, default: null },
+    search: { type: String, default: null },
+    items: { type: Array, default: () => [] },
+    expansions: { type: Array, default: () => [] },
+    total: { type: Number, default: 0 },
+    current_page: { type: Number, default: 1 },
+    last_page: { type: Number, default: 1 },
+});
 
-const activeSlug = computed(() => route.params.expansion || '');
+const page = usePage();
+const loading = false;
+
+const search = ref(props.search ?? '');
 
 const activeExpansionName = computed(() => {
-    const exp = expansions.value.find(e => e.slug === activeSlug.value);
+    const exp = props.expansions.find(e => e.slug === props.expansion);
     return exp?.name || '';
 });
 
-async function fetchData() {
-    loading.value = true;
-    try {
-        const params = { page: currentPage.value };
-        if (activeSlug.value) params.expansion = activeSlug.value;
-        if (serverSearch.value) params.search = serverSearch.value;
-        const { data } = await axios.get('/api/database/quests', { params });
-        items.value = data.items;
-        expansions.value = data.expansions;
-        total.value = data.total;
-        lastPage.value = data.last_page;
-        currentPage.value = data.current_page;
-    } catch {
-        items.value = [];
-    } finally {
-        loading.value = false;
-    }
+const dataOnly = ['items', 'expansions', 'total', 'current_page', 'last_page', 'search'];
+
+function basePath() {
+    return page.url.split('?')[0];
 }
 
-function onPageChange(page) {
-    currentPage.value = page;
-    fetchData();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+function onPageChange(newPage) {
+    router.get(basePath(), { page: newPage, search: search.value || undefined }, {
+        preserveState: true,
+        only: dataOnly,
+    });
 }
 
 function onSearchDebounced(value) {
-    serverSearch.value = value;
-    currentPage.value = 1;
-    fetchData();
+    router.get(basePath(), { page: 1, search: value || undefined }, {
+        preserveState: true,
+        preserveScroll: true,
+        only: dataOnly,
+    });
 }
-
-watch(() => route.params.expansion, () => {
-    currentPage.value = 1;
-    search.value = '';
-    serverSearch.value = '';
-    fetchData();
-});
-
-onMounted(fetchData);
 </script>

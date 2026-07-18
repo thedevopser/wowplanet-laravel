@@ -1,103 +1,71 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
-import { mountWithPlugins, createMockRouter } from '../tests/helpers';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/base-de-donnees/montures', props: {} }),
+    router: { get: vi.fn(), visit: vi.fn(), on: vi.fn() },
+}));
+
 import DatabaseMountsPage from './DatabaseMountsPage.vue';
-import axios from 'axios';
+import { mountWithPlugins } from '../tests/helpers';
 
-vi.mock('axios');
-
-const mockData = {
-    items: [
-        { id: 1, name_fr: 'Destrier noir', source: 'Vendeur', icon_url: '', source_spell_id: 100 },
-        { id: 2, name_fr: 'Loup rapide', source: 'Vendeur', icon_url: '', source_spell_id: 101 },
-        { id: 3, name_fr: 'Dragon rouge', source: 'Raid', icon_url: '', source_spell_id: 102 },
-    ],
-    categories: [
-        { slug: 'flying', name: 'Volantes', count: 50 },
-        { slug: 'ground', name: 'Terrestres', count: 80 },
-    ],
-    total: 942,
+const meta = {
+    title: 'Montures WoW | WowPlanet',
+    description: 'Montures',
+    ogTitle: 'Montures', ogDescription: 'Montures', ogImage: '', ogUrl: '', ogType: 'website',
+    canonicalUrl: 'https://example.com/base-de-donnees/montures', jsonLd: null,
 };
 
-const routes = [
-    { path: '/base-de-donnees/montures/:category?', component: DatabaseMountsPage },
-    { path: '/base-de-donnees', component: { template: '<div/>' } },
+const items = [
+    { id: 1, name_fr: 'Destrier noir', source: 'Vendeur', icon_url: '', source_spell_id: 100 },
+    { id: 2, name_fr: 'Loup rapide', source: 'Vendeur', icon_url: '', source_spell_id: 101 },
+    { id: 3, name_fr: 'Dragon rouge', source: 'Raid', icon_url: '', source_spell_id: 102 },
 ];
 
-describe('DatabaseMountsPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        axios.get.mockResolvedValue({ data: mockData });
+const categories = [
+    { slug: 'flying', name: 'Volantes', count: 50 },
+    { slug: 'ground', name: 'Terrestres', count: 80 },
+];
+
+function mountPage(props = {}) {
+    return mountWithPlugins(DatabaseMountsPage, {
+        props: { meta, category: null, items, categories, total: 942, ...props },
+        stubs: { SearchFilter: true, CollectionIcon: true },
     });
+}
 
+describe('DatabaseMountsPage', () => {
     it('renders heading "Montures" and total count', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseMountsPage, {
-            router,
-            initialRoute: '/base-de-donnees/montures',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
+        const wrapper = await mountPage();
         expect(wrapper.text()).toContain('Montures');
         expect(wrapper.text()).toContain('942');
     });
 
-    it('fetches data on mount', async () => {
-        const router = createMockRouter({ routes });
-        await mountWithPlugins(DatabaseMountsPage, {
-            router,
-            initialRoute: '/base-de-donnees/montures',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
-        expect(axios.get).toHaveBeenCalledWith('/api/database/mounts', { params: {} });
+    it('displays items from props', async () => {
+        const wrapper = await mountPage();
+        expect(wrapper.text()).toContain('Destrier noir');
+        expect(wrapper.text()).toContain('Raid');
     });
 
-    it('displays source groups from items', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseMountsPage, {
-            router,
-            initialRoute: '/base-de-donnees/montures',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Vendeur');
-        expect(wrapper.text()).toContain('Raid');
+    it('shows category item count (not global total) when a category is active', async () => {
+        const wrapper = await mountPage({ category: 'flying' });
+        expect(wrapper.text()).toContain('3');
     });
 
     it('search filters items by name', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseMountsPage, {
-            router,
-            initialRoute: '/base-de-donnees/montures',
-            stubs: { BreadcrumbNav: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Vendeur');
-        expect(wrapper.text()).toContain('Raid');
+        const wrapper = await mountPage();
+        expect(wrapper.text()).toContain('Destrier noir');
 
         wrapper.vm.search = 'dragon';
-        await flushPromises();
+        await wrapper.vm.$nextTick();
 
-        expect(wrapper.text()).toContain('Raid');
-        expect(wrapper.text()).not.toContain('Vendeur');
+        expect(wrapper.text()).toContain('Dragon rouge');
+        expect(wrapper.text()).not.toContain('Destrier noir');
     });
 
-    it('handles API error (items = [])', async () => {
-        axios.get.mockRejectedValue(new Error('Network error'));
-
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseMountsPage, {
-            router,
-            initialRoute: '/base-de-donnees/montures',
-            stubs: { BreadcrumbNav: true, SearchFilter: true, CollectionIcon: true },
-        });
-        await flushPromises();
-
+    it('shows empty state when no items', async () => {
+        const wrapper = await mountPage({ items: [], total: 0 });
         expect(wrapper.text()).toContain('Aucun résultat trouvé');
     });
 });

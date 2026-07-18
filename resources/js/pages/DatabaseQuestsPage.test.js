@@ -1,108 +1,74 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
-import { mountWithPlugins, createMockRouter } from '../tests/helpers';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/base-de-donnees/quetes', props: {} }),
+    router: { get: vi.fn(), visit: vi.fn(), on: vi.fn() },
+}));
+
+import { router } from '@inertiajs/vue3';
 import DatabaseQuestsPage from './DatabaseQuestsPage.vue';
-import axios from 'axios';
+import { mountWithPlugins } from '../tests/helpers';
 
-vi.mock('axios');
-
-const mockData = {
-    items: [
-        { id: 1, name_fr: 'La menace grondante', zone_name: 'Durotar', faction: 'Horde' },
-        { id: 2, name_fr: 'Bienvenue à Hurlevent', zone_name: 'Forêt d\'Elwynn', faction: 'Alliance' },
-        { id: 3, name_fr: 'Chasse au sanglier', zone_name: 'Durotar', faction: null },
-    ],
-    expansions: [
-        { slug: 'classic', name: 'Classic', count: 3000 },
-        { slug: 'the-war-within', name: 'The War Within', count: 800 },
-    ],
-    zones: [],
-    total: 24000,
-    current_page: 1,
-    last_page: 480,
-    per_page: 50,
+const meta = {
+    title: 'Quêtes WoW | WowPlanet',
+    description: 'Quêtes',
+    ogTitle: 'Quêtes', ogDescription: 'Quêtes', ogImage: '', ogUrl: '', ogType: 'website',
+    canonicalUrl: 'https://example.com/base-de-donnees/quetes', jsonLd: null,
 };
 
-const routes = [
-    { path: '/base-de-donnees/quetes/:expansion?/:zone?', component: DatabaseQuestsPage },
-    { path: '/base-de-donnees', component: { template: '<div/>' } },
+const items = [
+    { id: 1, name_fr: 'La grande chasse', zone_name: 'Vallée', faction: 'Alliance' },
+    { id: 2, name_fr: 'Le trésor perdu', zone_name: 'Désert', faction: 'Horde' },
 ];
 
+const expansions = [{ id: 10, name: 'The War Within', slug: 'the-war-within', count: 300 }];
+
+function mountPage(props = {}) {
+    return mountWithPlugins(DatabaseQuestsPage, {
+        props: {
+            meta, expansion: null, search: null, items, expansions,
+            total: 2, current_page: 1, last_page: 3, ...props,
+        },
+        stubs: { SearchFilter: true },
+    });
+}
+
 describe('DatabaseQuestsPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        axios.get.mockResolvedValue({ data: mockData });
-    });
+    beforeEach(() => vi.clearAllMocks());
 
-    it('renders heading "Quêtes"', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseQuestsPage, {
-            router,
-            initialRoute: '/base-de-donnees/quetes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true },
-        });
-        await flushPromises();
-
+    it('renders heading and items from props', async () => {
+        const wrapper = await mountPage();
         expect(wrapper.text()).toContain('Quêtes');
+        expect(wrapper.text()).toContain('La grande chasse');
+        expect(wrapper.text()).toContain('Le trésor perdu');
     });
 
-    it('fetches data with no expansion', async () => {
-        const router = createMockRouter({ routes });
-        await mountWithPlugins(DatabaseQuestsPage, {
-            router,
-            initialRoute: '/base-de-donnees/quetes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true },
-        });
-        await flushPromises();
+    it('triggers a partial Inertia visit on page change', async () => {
+        const wrapper = await mountPage();
+        wrapper.vm.onPageChange(2);
 
-        expect(axios.get).toHaveBeenCalledWith('/api/database/quests', { params: { page: 1 } });
+        expect(router.get).toHaveBeenCalledWith(
+            '/base-de-donnees/quetes',
+            expect.objectContaining({ page: 2 }),
+            expect.objectContaining({ preserveState: true }),
+        );
     });
 
-    it('displays zone groups when data has items with zone_name', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseQuestsPage, {
-            router,
-            initialRoute: '/base-de-donnees/quetes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true },
-        });
-        await flushPromises();
+    it('triggers a partial Inertia visit on debounced search', async () => {
+        const wrapper = await mountPage();
+        wrapper.vm.onSearchDebounced('trésor');
 
-        expect(wrapper.text()).toContain('Durotar');
-        expect(wrapper.text()).toContain('Forêt d\'Elwynn');
+        expect(router.get).toHaveBeenCalledWith(
+            '/base-de-donnees/quetes',
+            expect.objectContaining({ page: 1, search: 'trésor' }),
+            expect.objectContaining({ preserveScroll: true }),
+        );
     });
 
-    it('search triggers server-side fetch', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseQuestsPage, {
-            router,
-            initialRoute: '/base-de-donnees/quetes',
-            stubs: { BreadcrumbNav: true },
-        });
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Durotar');
-        expect(wrapper.text()).toContain('Forêt d\'Elwynn');
-
-        // Simulate debounced search event
-        wrapper.vm.onSearchDebounced('hurlevent');
-        await flushPromises();
-
-        expect(axios.get).toHaveBeenCalledWith('/api/database/quests', {
-            params: { page: 1, search: 'hurlevent' },
-        });
-    });
-
-    it('handles API error', async () => {
-        axios.get.mockRejectedValue(new Error('Network error'));
-
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseQuestsPage, {
-            router,
-            initialRoute: '/base-de-donnees/quetes',
-            stubs: { BreadcrumbNav: true, SearchFilter: true },
-        });
-        await flushPromises();
-
+    it('shows empty state when no items', async () => {
+        const wrapper = await mountPage({ items: [], total: 0, last_page: 1 });
         expect(wrapper.text()).toContain('Aucun résultat trouvé');
     });
 });

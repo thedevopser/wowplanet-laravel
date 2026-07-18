@@ -1,11 +1,24 @@
 <template>
     <div class="space-y-6 py-6 sm:py-8">
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+        </Head>
+
         <!-- Profession list (when no profession selected) -->
-        <template v-if="!activeProfessionSlug">
+        <template v-if="!profession">
             <DatabasePageHeader
                 title="Professions"
                 subtitle="Toutes les professions de World of Warcraft"
-                :count="totalRecipes"
+                :count="total_recipes"
                 count-label="recettes"
                 accent-color="emerald"
             />
@@ -17,10 +30,10 @@
                     <div class="flex-1 h-px bg-slate-700"></div>
                 </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <router-link
+                    <Link
                         v-for="prof in primaryProfessions"
                         :key="prof.id"
-                        :to="'/base-de-donnees/professions/' + prof.slug"
+                        :href="'/base-de-donnees/professions/' + prof.slug"
                         class="flex items-center gap-4 p-4 sm:p-5 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 hover:bg-slate-800/60 transition-all"
                     >
                         <div class="w-12 h-12 bg-emerald-600/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 text-lg font-bold shrink-0 group-hover:scale-110 transition-transform">
@@ -30,7 +43,7 @@
                             <div class="text-sm md:text-base font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">{{ prof.name_fr }}</div>
                             <div class="text-xs text-slate-500 font-mono">{{ prof.recipe_count.toLocaleString('fr-FR') }} recettes</div>
                         </div>
-                    </router-link>
+                    </Link>
                 </div>
             </section>
 
@@ -41,10 +54,10 @@
                     <div class="flex-1 h-px bg-slate-700"></div>
                 </h2>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <router-link
+                    <Link
                         v-for="prof in secondaryProfessions"
                         :key="prof.id"
-                        :to="'/base-de-donnees/professions/' + prof.slug"
+                        :href="'/base-de-donnees/professions/' + prof.slug"
                         class="flex items-center gap-4 p-4 sm:p-5 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 hover:bg-slate-800/60 transition-all"
                     >
                         <div class="w-12 h-12 bg-emerald-600/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 text-lg font-bold shrink-0 group-hover:scale-110 transition-transform">
@@ -54,7 +67,7 @@
                             <div class="text-sm md:text-base font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">{{ prof.name_fr }}</div>
                             <div class="text-xs text-slate-500 font-mono">{{ prof.recipe_count.toLocaleString('fr-FR') }} recettes</div>
                         </div>
-                    </router-link>
+                    </Link>
                 </div>
             </section>
         </template>
@@ -62,9 +75,9 @@
         <!-- Profession detail (recipes) -->
         <template v-else>
             <!-- Expansion tabs -->
-            <div v-if="expansions.length" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
+            <div v-if="recipeExpansions.length" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                 <button
-                    v-for="exp in expansions"
+                    v-for="exp in recipeExpansions"
                     :key="exp.slug"
                     @click="toggleExpansion(exp.slug)"
                     :class="[
@@ -87,7 +100,7 @@
             <DatabasePageHeader
                 :title="professionName"
                 :subtitle="activeExpansionName || 'Toutes les extensions'"
-                :count="total"
+                :count="recipeTotal"
                 count-label="recettes"
                 accent-color="emerald"
             />
@@ -101,7 +114,7 @@
             />
 
             <!-- Flat table of all recipes -->
-            <div v-if="recipes.length" class="overflow-x-auto">
+            <div v-if="recipeList.length" class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="border-b border-white/10">
@@ -112,7 +125,7 @@
                     </thead>
                     <tbody>
                         <tr
-                            v-for="recipe in recipes"
+                            v-for="recipe in recipeList"
                             :key="recipe.id"
                             class="border-b border-white/3 even:bg-slate-800/20 hover:bg-slate-800/40 transition-colors"
                         >
@@ -137,129 +150,90 @@
             <DatabasePagination
                 :current-page="currentPage"
                 :last-page="lastPage"
-                :total="total"
+                :total="recipeTotal"
                 @page-change="onPageChange"
             />
 
-            <div v-if="loading" class="text-center py-12 text-slate-500 text-sm">Chargement...</div>
-            <div v-else-if="recipes.length === 0 && !loading" class="text-center py-8 text-slate-500 text-sm">
+            <div v-if="recipeList.length === 0" class="text-center py-8 text-slate-500 text-sm">
                 Aucun résultat trouvé.
             </div>
         </template>
-
-        <div v-if="listLoading" class="text-center py-12 text-slate-500 text-sm">Chargement...</div>
-
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+import DatabaseLayout from '../layouts/DatabaseLayout.vue';
+
+export default {
+    layout: [AppLayout, DatabaseLayout],
+};
+</script>
+
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import axios from 'axios';
+import { ref, computed } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import SearchFilter from '../components/SearchFilter.vue';
 import DatabasePageHeader from '../components/DatabasePageHeader.vue';
 import DatabasePagination from '../components/DatabasePagination.vue';
 
-const route = useRoute();
-const listLoading = ref(true);
-const loading = ref(false);
-const professions = ref([]);
-const totalRecipes = ref(0);
-const recipes = ref([]);
-const expansions = ref([]);
-const professionName = ref('');
-const search = ref('');
-const serverSearch = ref('');
-const currentPage = ref(1);
-const lastPage = ref(1);
-const total = ref(0);
-const activeExpansion = ref('');
+const props = defineProps({
+    meta: { type: Object, required: true },
+    profession: { type: String, default: null },
+    expansion: { type: String, default: null },
+    search: { type: String, default: null },
+    professions: { type: Array, default: () => [] },
+    total_recipes: { type: Number, default: 0 },
+    // Détail d'une profession : { items, expansions, profession, total, current_page, last_page } ou null.
+    recipes: { type: Object, default: null },
+});
 
-const activeProfessionSlug = computed(() => route.params.profession || '');
+const page = usePage();
+const search = ref(props.search ?? '');
 
-const primaryProfessions = computed(() => professions.value.filter(p => p.type === 'primary'));
-const secondaryProfessions = computed(() => professions.value.filter(p => p.type === 'secondary'));
+const primaryProfessions = computed(() => props.professions.filter(p => p.type === 'primary'));
+const secondaryProfessions = computed(() => props.professions.filter(p => p.type === 'secondary'));
 
+const recipeList = computed(() => props.recipes?.items ?? []);
+const recipeExpansions = computed(() => props.recipes?.expansions ?? []);
+const professionName = computed(() => props.recipes?.profession?.name_fr ?? '');
+const recipeTotal = computed(() => props.recipes?.total ?? 0);
+const currentPage = computed(() => props.recipes?.current_page ?? 1);
+const lastPage = computed(() => props.recipes?.last_page ?? 1);
+const activeExpansion = computed(() => props.expansion ?? '');
 const activeExpansionName = computed(() => {
-    const exp = expansions.value.find(e => e.slug === activeExpansion.value);
+    const exp = recipeExpansions.value.find(e => e.slug === activeExpansion.value);
     return exp?.name || '';
 });
 
+const dataOnly = ['recipes', 'expansion', 'search'];
+
+function basePath() {
+    return page.url.split('?')[0];
+}
+
+function visitRecipes(params, options = {}) {
+    router.get(basePath(), {
+        expansion: params.expansion || undefined,
+        page: params.page,
+        search: params.search || undefined,
+    }, {
+        preserveState: true,
+        only: dataOnly,
+        ...options,
+    });
+}
+
 function toggleExpansion(slug) {
-    activeExpansion.value = activeExpansion.value === slug ? '' : slug;
+    const nextExpansion = activeExpansion.value === slug ? '' : slug;
+    visitRecipes({ expansion: nextExpansion, page: 1, search: search.value });
 }
 
-async function fetchProfessionList() {
-    listLoading.value = true;
-    try {
-        const { data } = await axios.get('/api/database/professions');
-        professions.value = data.professions;
-        totalRecipes.value = data.total_recipes;
-    } catch {
-        professions.value = [];
-    } finally {
-        listLoading.value = false;
-    }
-}
-
-async function fetchRecipes() {
-    loading.value = true;
-    try {
-        const params = { profession: activeProfessionSlug.value, page: currentPage.value };
-        if (activeExpansion.value) params.expansion = activeExpansion.value;
-        if (serverSearch.value) params.search = serverSearch.value;
-        const { data } = await axios.get('/api/database/professions/recipes', { params });
-        recipes.value = data.items;
-        expansions.value = data.expansions;
-        professionName.value = data.profession?.name_fr || '';
-        total.value = data.total || 0;
-        lastPage.value = data.last_page || 1;
-        currentPage.value = data.current_page || 1;
-    } catch {
-        recipes.value = [];
-    } finally {
-        loading.value = false;
-    }
-}
-
-function onPageChange(page) {
-    currentPage.value = page;
-    fetchRecipes();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+function onPageChange(newPage) {
+    visitRecipes({ expansion: activeExpansion.value, page: newPage, search: search.value });
 }
 
 function onSearchDebounced(value) {
-    serverSearch.value = value;
-    currentPage.value = 1;
-    fetchRecipes();
+    visitRecipes({ expansion: activeExpansion.value, page: 1, search: value }, { preserveScroll: true });
 }
-
-watch(() => route.params.profession, () => {
-    currentPage.value = 1;
-    search.value = '';
-    serverSearch.value = '';
-    activeExpansion.value = '';
-    if (activeProfessionSlug.value) {
-        fetchRecipes();
-    } else {
-        fetchProfessionList();
-    }
-});
-
-watch(activeExpansion, () => {
-    currentPage.value = 1;
-    search.value = '';
-    serverSearch.value = '';
-    if (activeProfessionSlug.value) {
-        fetchRecipes();
-    }
-});
-
-onMounted(() => {
-    if (activeProfessionSlug.value) {
-        fetchRecipes();
-    } else {
-        fetchProfessionList();
-    }
-});
 </script>

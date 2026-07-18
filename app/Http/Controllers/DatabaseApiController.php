@@ -4,321 +4,81 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Domain\ValueObjects\ExpansionId;
-use App\Models\WowAchievement;
-use App\Models\WowAppearance;
-use App\Models\WowDecor;
-use App\Models\WowMount;
-use App\Models\WowPet;
-use App\Models\WowProfession;
-use App\Models\WowQuest;
-use App\Models\WowRecipe;
-use Illuminate\Database\Eloquent\Builder;
+use App\Application\Services\DatabaseQueryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DatabaseApiController extends Controller
 {
-    /**
-     * Libellés FR des slots transmog (clé = valeur stockée en base).
-     *
-     * @var array<string, string>
-     */
-    private const SLOT_LABELS = [
-        'HEAD' => 'Tête',
-        'SHOULDER' => 'Épaules',
-        'SHIRT' => 'Chemise',
-        'CHEST' => 'Torse',
-        'WAIST' => 'Ceinture',
-        'LEGS' => 'Jambes',
-        'FEET' => 'Pieds',
-        'WRIST' => 'Poignets',
-        'HAND' => 'Mains',
-        'CLOAK' => 'Cape',
-        'TABARD' => 'Tabard',
-        'WEAPON' => 'Arme',
-        'SHIELD' => 'Bouclier',
-        'RANGED' => 'Distance',
-        'TWOHWEAPON' => 'Arme à deux mains',
-        'WEAPONOFFHAND' => 'Arme en main gauche',
-        'HOLDABLE' => 'Tenu en main gauche',
-    ];
+    public function __construct(
+        private readonly DatabaseQueryService $databaseQueryService,
+    ) {}
 
     public function mounts(Request $request): JsonResponse
     {
-        $builder = WowMount::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'source', 'category', 'source_spell_id', 'icon_url'])
-            ->orderBy('name_fr');
-
-        /** @var string|null $category */
-        $category = $request->query('category');
-        if ($category !== null && $category !== '') {
-            $builder->where('category', $this->deSlugify($category, 'mounts'));
-        }
-
-        return response()->json([
-            'items' => $builder->get(),
-            'categories' => $this->buildCategoryList(WowMount::class),
-            'total' => WowMount::query()->where('is_active', true)->count(),
-        ]);
+        return response()->json($this->databaseQueryService->mounts($this->stringQuery($request, 'category')));
     }
 
     public function achievements(Request $request): JsonResponse
     {
-        /** @var string|null $expansionSlug */
-        $expansionSlug = $request->query('expansion');
-
-        $builder = WowAchievement::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'expansion_id', 'category_name', 'icon_url', 'points', 'faction'])
-            ->orderBy('name_fr');
-
-        if ($expansionSlug !== null && $expansionSlug !== '') {
-            $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof ExpansionId) {
-                $builder->where('expansion_id', $expansion->value);
-            }
-        }
-
-        /** @var string|null $search */
-        $search = $request->query('search');
-        if ($search !== null && $search !== '') {
-            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
-        }
-
-        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
-        $lengthAwarePaginator = $builder->paginate($perPage);
-
-        return response()->json([
-            'items' => $lengthAwarePaginator->items(),
-            'expansions' => $this->buildExpansionList(WowAchievement::class),
-            'total' => $lengthAwarePaginator->total(),
-            'current_page' => $lengthAwarePaginator->currentPage(),
-            'last_page' => $lengthAwarePaginator->lastPage(),
-            'per_page' => $lengthAwarePaginator->perPage(),
-        ]);
+        return response()->json($this->databaseQueryService->achievements(
+            $this->stringQuery($request, 'expansion'),
+            $this->stringQuery($request, 'search'),
+            $this->intQuery($request, 'page'),
+            $this->intQuery($request, 'per_page'),
+        ));
     }
 
     public function quests(Request $request): JsonResponse
     {
-        /** @var string|null $expansionSlug */
-        $expansionSlug = $request->query('expansion');
-
-        $builder = WowQuest::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'expansion_id', 'zone_name', 'faction'])
-            ->orderBy('name_fr');
-
-        if ($expansionSlug !== null && $expansionSlug !== '') {
-            $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof ExpansionId) {
-                $builder->where('expansion_id', $expansion->value);
-            }
-        }
-
-        /** @var string|null $search */
-        $search = $request->query('search');
-        if ($search !== null && $search !== '') {
-            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
-        }
-
-        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
-        $lengthAwarePaginator = $builder->paginate($perPage);
-
-        return response()->json([
-            'items' => $lengthAwarePaginator->items(),
-            'expansions' => $this->buildExpansionList(WowQuest::class),
-            'total' => $lengthAwarePaginator->total(),
-            'current_page' => $lengthAwarePaginator->currentPage(),
-            'last_page' => $lengthAwarePaginator->lastPage(),
-            'per_page' => $lengthAwarePaginator->perPage(),
-        ]);
+        return response()->json($this->databaseQueryService->quests(
+            $this->stringQuery($request, 'expansion'),
+            $this->stringQuery($request, 'search'),
+            $this->intQuery($request, 'page'),
+            $this->intQuery($request, 'per_page'),
+        ));
     }
 
     public function pets(Request $request): JsonResponse
     {
-        $builder = WowPet::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'source', 'category', 'creature_id', 'icon_url'])
-            ->orderBy('name_fr');
-
-        /** @var string|null $category */
-        $category = $request->query('category');
-        if ($category !== null && $category !== '') {
-            $builder->where('category', $this->deSlugify($category, 'pets'));
-        }
-
-        return response()->json([
-            'items' => $builder->get(),
-            'categories' => $this->buildCategoryList(WowPet::class),
-            'total' => WowPet::query()->where('is_active', true)->count(),
-        ]);
+        return response()->json($this->databaseQueryService->pets($this->stringQuery($request, 'category')));
     }
 
     public function decors(Request $request): JsonResponse
     {
-        $builder = WowDecor::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'source', 'category', 'item_id', 'icon_url'])
-            ->orderBy('name_fr');
-
-        /** @var string|null $category */
-        $category = $request->query('category');
-        if ($category !== null && $category !== '') {
-            $builder->where('category', $this->deSlugify($category, 'decors'));
-        }
-
-        return response()->json([
-            'items' => $builder->get(),
-            'categories' => $this->buildCategoryList(WowDecor::class),
-            'total' => WowDecor::query()->where('is_active', true)->count(),
-        ]);
+        return response()->json($this->databaseQueryService->decors($this->stringQuery($request, 'category')));
     }
 
     public function appearances(Request $request): JsonResponse
     {
-        $builder = WowAppearance::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'slot', 'category', 'quality', 'item_id', 'icon_url'])
-            ->orderBy('name_fr');
-
-        /** @var string|null $slot */
-        $slot = $request->query('slot');
-        if ($slot !== null && $slot !== '') {
-            $builder->where('slot', $this->deSlugify($slot, 'appearances'));
-        }
-
-        /** @var string|null $quality */
-        $quality = $request->query('quality');
-        if ($quality !== null && $quality !== '') {
-            $builder->where('quality', (int) $quality);
-        }
-
-        /** @var string|null $search */
-        $search = $request->query('search');
-        if ($search !== null && $search !== '') {
-            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
-        }
-
-        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
-        $lengthAwarePaginator = $builder->paginate($perPage);
-
-        return response()->json([
-            'items' => $lengthAwarePaginator->items(),
-            'slots' => $this->buildSlotList(),
-            'total' => $lengthAwarePaginator->total(),
-            'current_page' => $lengthAwarePaginator->currentPage(),
-            'last_page' => $lengthAwarePaginator->lastPage(),
-            'per_page' => $lengthAwarePaginator->perPage(),
-        ]);
+        return response()->json($this->databaseQueryService->appearances(
+            $this->stringQuery($request, 'slot'),
+            $this->stringQuery($request, 'quality'),
+            $this->stringQuery($request, 'search'),
+            $this->intQuery($request, 'page'),
+            $this->intQuery($request, 'per_page'),
+        ));
     }
 
     public function professions(): JsonResponse
     {
-        $result = WowProfession::query()->where('is_active', true)
-            ->select(['id', 'name_fr', 'type'])
-            ->orderBy('name_fr')
-            ->get()
-            ->map(fn (WowProfession $wowProfession): array => [
-                'id' => $wowProfession->id,
-                'name_fr' => $wowProfession->name_fr,
-                'type' => $wowProfession->type,
-                'slug' => $this->slugify($wowProfession->name_fr),
-                'recipe_count' => WowRecipe::query()->where('is_active', true)
-                    ->where('profession_id', $wowProfession->id)
-                    ->count(),
-            ])
-            ->all();
-
-        return response()->json([
-            'professions' => $result,
-            'total_professions' => WowProfession::query()->where('is_active', true)->count(),
-            'total_recipes' => WowRecipe::query()->where('is_active', true)->count(),
-        ]);
+        return response()->json($this->databaseQueryService->professions());
     }
 
     public function professionRecipes(Request $request): JsonResponse
     {
-        /** @var string|null $professionSlug */
-        $professionSlug = $request->query('profession');
-        /** @var string|null $expansionSlug */
-        $expansionSlug = $request->query('expansion');
-
-        if ($professionSlug === null || $professionSlug === '') {
-            return response()->json(['items' => [], 'expansions' => []]);
-        }
-
-        $professionName = $this->deSlugify($professionSlug, 'professions');
-        $profession = WowProfession::query()->where('is_active', true)
-            ->where('name_fr', $professionName)
-            ->first();
-
-        if (! $profession instanceof WowProfession) {
-            return response()->json(['items' => [], 'expansions' => []]);
-        }
-
-        $builder = WowRecipe::query()->where('is_active', true)
-            ->where('profession_id', $profession->id)
-            ->select(['id', 'name_fr', 'expansion_id', 'category_name', 'faction', 'wowhead_spell_id'])
-            ->orderBy('name_fr');
-
-        if ($expansionSlug !== null && $expansionSlug !== '') {
-            $expansion = ExpansionId::fromSlug($expansionSlug);
-            if ($expansion instanceof ExpansionId) {
-                $builder->where('expansion_id', $expansion->value);
-            }
-        }
-
-        /** @var string|null $search */
-        $search = $request->query('search');
-        if ($search !== null && $search !== '') {
-            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
-        }
-
-        $perPage = min((int) ($request->query('per_page') ?: 50), 100);
-        $lengthAwarePaginator = $builder->paginate($perPage);
-
-        return response()->json([
-            'items' => $lengthAwarePaginator->items(),
-            'expansions' => $this->buildExpansionList(WowRecipe::class, $profession->id),
-            'profession' => [
-                'id' => $profession->id,
-                'name_fr' => $profession->name_fr,
-                'type' => $profession->type,
-            ],
-            'total' => $lengthAwarePaginator->total(),
-            'current_page' => $lengthAwarePaginator->currentPage(),
-            'last_page' => $lengthAwarePaginator->lastPage(),
-            'per_page' => $lengthAwarePaginator->perPage(),
-        ]);
+        return response()->json($this->databaseQueryService->professionRecipes(
+            $this->stringQuery($request, 'profession'),
+            $this->stringQuery($request, 'expansion'),
+            $this->stringQuery($request, 'search'),
+            $this->intQuery($request, 'page'),
+            $this->intQuery($request, 'per_page'),
+        ));
     }
 
     public function subcategories(string $section): JsonResponse
     {
-        $items = match ($section) {
-            'mounts' => $this->buildCategoryList(WowMount::class),
-            'pets' => $this->buildCategoryList(WowPet::class),
-            'decors' => $this->buildCategoryList(WowDecor::class),
-            'appearances' => $this->buildSlotList(),
-            'achievements' => array_map(fn (array $e): array => [
-                'name' => $e['name'],
-                'slug' => $e['slug'],
-                'count' => $e['count'],
-            ], $this->buildExpansionList(WowAchievement::class)),
-            'quests' => array_map(fn (array $e): array => [
-                'name' => $e['name'],
-                'slug' => $e['slug'],
-                'count' => $e['count'],
-            ], $this->buildExpansionList(WowQuest::class)),
-            'professions' => WowProfession::query()->where('is_active', true)
-                ->select(['id', 'name_fr', 'type'])
-                ->orderBy('name_fr')
-                ->get()
-                ->map(fn (WowProfession $wowProfession): array => [
-                    'name' => $wowProfession->name_fr,
-                    'slug' => $this->slugify($wowProfession->name_fr),
-                    'count' => WowRecipe::query()->where('is_active', true)
-                        ->where('profession_id', $wowProfession->id)->count(),
-                    'type' => $wowProfession->type,
-                ])
-                ->all(),
-            default => null,
-        };
+        $items = $this->databaseQueryService->subcategories($section);
 
         abort_if($items === null, 404);
 
@@ -327,145 +87,22 @@ class DatabaseApiController extends Controller
 
     public function counts(): JsonResponse
     {
-        return response()->json([
-            'mounts' => WowMount::query()->where('is_active', true)->count(),
-            'achievements' => WowAchievement::query()->where('is_active', true)->count(),
-            'quests' => WowQuest::query()->where('is_active', true)->count(),
-            'pets' => WowPet::query()->where('is_active', true)->count(),
-            'decors' => WowDecor::query()->where('is_active', true)->count(),
-            'appearances' => WowAppearance::query()->where('is_active', true)->count(),
-            'professions' => WowProfession::query()->where('is_active', true)->count(),
-            'recipes' => WowRecipe::query()->where('is_active', true)->count(),
-        ]);
+        return response()->json($this->databaseQueryService->counts());
     }
 
-    /**
-     * Liste des slots transmog pour la sous-navigation (ex: Tête, Épaules…).
-     *
-     * @return list<array{name: string, slug: string, count: int}>
-     */
-    private function buildSlotList(): array
+    private function stringQuery(Request $request, string $key): ?string
     {
-        /** @var array<int, array{slot: string, items_count: int}> $rawSlots */
-        $rawSlots = WowAppearance::query()->where('is_active', true)
-            ->whereNotNull('slot')
-            ->selectRaw('slot, COUNT(*) as items_count')
-            ->groupBy('slot')
-            ->orderBy('slot')
-            ->get()
-            ->toArray();
+        /** @var string|null $value */
+        $value = $request->query($key);
 
-        return array_values(array_map(fn (array $row): array => [
-            'name' => self::SLOT_LABELS[$row['slot']] ?? $row['slot'],
-            'slug' => $this->slugify($row['slot']),
-            'count' => $row['items_count'],
-        ], $rawSlots));
+        return $value;
     }
 
-    /**
-     * @param  class-string<WowAchievement|WowQuest|WowRecipe>  $modelClass
-     * @return list<array{id: int, name: string, slug: string, count: int}>
-     */
-    private function buildExpansionList(string $modelClass, ?int $professionId = null): array
+    private function intQuery(Request $request, string $key): ?int
     {
-        $expansions = [];
+        /** @var string|null $value */
+        $value = $request->query($key);
 
-        foreach (ExpansionId::allSlugs() as $id => $slug) {
-            /** @var Builder<WowAchievement|WowQuest|WowRecipe> $query */
-            $query = $modelClass::query()->where('is_active', true)->where('expansion_id', $id);
-
-            if ($professionId !== null) {
-                $query->where('profession_id', $professionId);
-            }
-
-            $count = $query->count();
-            if ($count > 0) {
-                $expansions[] = [
-                    'id' => $id,
-                    'name' => (new ExpansionId($id))->toString(),
-                    'slug' => $slug,
-                    'count' => $count,
-                ];
-            }
-        }
-
-        return $expansions;
-    }
-
-    /**
-     * @param  class-string<WowMount|WowPet|WowDecor>  $modelClass
-     * @return list<array{name: string, slug: string, count: int}>
-     */
-    private function buildCategoryList(string $modelClass): array
-    {
-        /** @var array<int, array{category: string, items_count: int}> $rawCategories */
-        $rawCategories = $modelClass::query()->where('is_active', true)
-            ->whereNotNull('category')
-            ->selectRaw('category, COUNT(*) as items_count')
-            ->groupBy('category')
-            ->orderBy('category')
-            ->get()
-            ->toArray();
-
-        return array_values(array_map(fn (array $row): array => [
-            'name' => $row['category'],
-            'slug' => $this->slugify($row['category']),
-            'count' => $row['items_count'],
-        ], $rawCategories));
-    }
-
-    private function slugify(string $text): string
-    {
-        $slug = mb_strtolower($text);
-        $slug = str_replace(
-            [' ', "'", "\u{2019}", ':', '(', ')', ',', '.'],
-            ['-', '-', '-', '', '', '', '', ''],
-            $slug,
-        );
-        $slug = (string) preg_replace('/[^a-z0-9\-]/', '-', $slug);
-        $slug = (string) preg_replace('/-+/', '-', $slug);
-
-        return trim($slug, '-');
-    }
-
-    private function deSlugify(string $slug, string $context): string
-    {
-        /** @var list<string> $candidates */
-        $candidates = match ($context) {
-            'mounts' => WowMount::query()->where('is_active', true)
-                ->whereNotNull('category')
-                ->distinct()
-                ->pluck('category')
-                ->all(),
-            'pets' => WowPet::query()->where('is_active', true)
-                ->whereNotNull('category')
-                ->distinct()
-                ->pluck('category')
-                ->all(),
-            'decors' => WowDecor::query()->where('is_active', true)
-                ->whereNotNull('category')
-                ->distinct()
-                ->pluck('category')
-                ->all(),
-            'appearances' => WowAppearance::query()->where('is_active', true)
-                ->whereNotNull('slot')
-                ->distinct()
-                ->pluck('slot')
-                ->all(),
-            'professions' => WowProfession::query()->where('is_active', true)
-                ->pluck('name_fr')
-                ->all(),
-            default => [],
-        };
-
-        foreach ($candidates as $candidate) {
-            if ($this->slugify($candidate) === $slug) {
-                return $candidate;
-            }
-        }
-
-        $text = str_replace('-', ' ', $slug);
-
-        return mb_convert_case($text, MB_CASE_TITLE, 'UTF-8');
+        return ($value === null || $value === '') ? null : (int) $value;
     }
 }
