@@ -1,12 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { flushPromises } from '@vue/test-utils';
-import { mountWithPlugins, createMockRouter } from '../tests/helpers';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/base-de-donnees', props: {} }),
+    router: { get: vi.fn(), visit: vi.fn(), on: vi.fn() },
+}));
+
 import DatabaseIndexPage from './DatabaseIndexPage.vue';
-import axios from 'axios';
+import { mountWithPlugins } from '../tests/helpers';
 
-vi.mock('axios');
+const meta = {
+    title: 'Base de données WoW | WowPlanet',
+    description: 'Base de données',
+    ogTitle: 'Base de données',
+    ogDescription: 'Base de données',
+    ogImage: 'https://example.com/og.png',
+    ogUrl: 'https://example.com/base-de-donnees',
+    ogType: 'website',
+    canonicalUrl: 'https://example.com/base-de-donnees',
+    jsonLd: null,
+};
 
-const mockCounts = {
+const counts = {
     mounts: 942,
     achievements: 5123,
     quests: 24000,
@@ -16,67 +32,27 @@ const mockCounts = {
     professions: 14,
 };
 
-const routes = [
-    { path: '/base-de-donnees', component: DatabaseIndexPage },
-    { path: '/base-de-donnees/montures', component: { template: '<div/>' } },
-    { path: '/base-de-donnees/hauts-faits', component: { template: '<div/>' } },
-    { path: '/base-de-donnees/quetes', component: { template: '<div/>' } },
-    { path: '/base-de-donnees/mascottes', component: { template: '<div/>' } },
-    { path: '/base-de-donnees/decorations', component: { template: '<div/>' } },
-    { path: '/base-de-donnees/professions', component: { template: '<div/>' } },
-];
+function mountPage(props = {}) {
+    return mountWithPlugins(DatabaseIndexPage, { props: { meta, counts, ...props } });
+}
 
 describe('DatabaseIndexPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        axios.get.mockResolvedValue({ data: mockCounts });
-    });
-
     it('renders heading "Base de données WoW"', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseIndexPage, {
-            router,
-            initialRoute: '/base-de-donnees',
-            stubs: { BreadcrumbNav: true },
-        });
-        await flushPromises();
-
+        const wrapper = await mountPage();
         expect(wrapper.text()).toContain('Base de données WoW');
     });
 
-    it('fetches counts on mount and displays them', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseIndexPage, {
-            router,
-            initialRoute: '/base-de-donnees',
-            stubs: { BreadcrumbNav: true },
-        });
-        await flushPromises();
-
-        expect(axios.get).toHaveBeenCalledWith('/api/database/counts');
+    it('displays counts from props', async () => {
+        const wrapper = await mountPage();
         expect(wrapper.text()).toContain('942');
         // toLocaleString('fr-FR') uses narrow no-break space (U+202F) as thousands separator
         expect(wrapper.text()).toMatch(/1\s*800/);
     });
 
     it('renders 6 category links', async () => {
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseIndexPage, {
-            router,
-            initialRoute: '/base-de-donnees',
-            stubs: { BreadcrumbNav: true },
-        });
-        await flushPromises();
+        const wrapper = await mountPage();
+        const hrefs = wrapper.findAll('a').map(l => l.attributes('href'));
 
-        expect(wrapper.text()).toContain('Montures');
-        expect(wrapper.text()).toContain('Hauts-faits');
-        expect(wrapper.text()).toContain('Quêtes');
-        expect(wrapper.text()).toContain('Mascottes');
-        expect(wrapper.text()).toContain('Décorations');
-        expect(wrapper.text()).toContain('Professions');
-
-        const links = wrapper.findAll('a');
-        const hrefs = links.map(l => l.attributes('href'));
         expect(hrefs).toContain('/base-de-donnees/montures');
         expect(hrefs).toContain('/base-de-donnees/hauts-faits');
         expect(hrefs).toContain('/base-de-donnees/quetes');
@@ -85,19 +61,8 @@ describe('DatabaseIndexPage', () => {
         expect(hrefs).toContain('/base-de-donnees/professions');
     });
 
-    it('handles API error gracefully (items still render, no crash)', async () => {
-        axios.get.mockRejectedValue(new Error('Network error'));
-
-        const router = createMockRouter({ routes });
-        const wrapper = await mountWithPlugins(DatabaseIndexPage, {
-            router,
-            initialRoute: '/base-de-donnees',
-            stubs: { BreadcrumbNav: true },
-        });
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('Montures');
-        expect(wrapper.text()).toContain('Hauts-faits');
+    it('renders placeholder when counts are missing', async () => {
+        const wrapper = await mountPage({ counts: {} });
         expect(wrapper.text()).toContain('...');
     });
 });

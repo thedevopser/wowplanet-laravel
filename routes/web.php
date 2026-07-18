@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DocsController;
 use App\Http\Controllers\SeoController;
@@ -14,7 +17,15 @@ Route::get('/sitemap.xml', [SeoController::class, 'sitemap']);
 Route::get('/sitemap-pages.xml', [SeoController::class, 'sitemapPages']);
 Route::get('/sitemap-database.xml', [DatabaseController::class, 'sitemap']);
 
-Route::get('/character/{realm}/{name}', [SeoController::class, 'characterPage']);
+Route::get('/', [SeoController::class, 'home']);
+
+Route::get('/character/{realm}/{name}', [CharacterController::class, 'page']);
+
+Route::get('/my-characters', [AccountController::class, 'myCharacters']);
+Route::get('/class-stats', [AccountController::class, 'classStats']);
+Route::get('/my-score', [AccountController::class, 'myScore']);
+
+Route::get('/admin', [AdminController::class, 'page']);
 
 Route::get('/base-de-donnees', [DatabaseController::class, 'index']);
 Route::get('/base-de-donnees/montures/{category?}', [DatabaseController::class, 'mounts']);
@@ -34,4 +45,5 @@ if (app()->isLocal()) {
     Route::get('/docs/{path}', [DocsController::class, 'file'])->where('path', '.+\.md');
 }
 
-Route::get('/{any?}', [SeoController::class, 'spa'])->where('any', '^(?!api/|docs/).*$');
+// Catch-all : toute URL inconnue (hors api/ et docs/) rend la page 404 Inertia.
+Route::get('/{any}', [SeoController::class, 'notFound'])->where('any', '^(?!api/|docs/).*$');

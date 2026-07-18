@@ -1,5 +1,9 @@
 <template>
     <div class="space-y-8 animate-in fade-in duration-500">
+        <Head>
+            <title>Mon score compte - WowPlanet</title>
+        </Head>
+
         <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-3xl md:text-4xl font-black mb-3">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Mon score compte</span>
@@ -183,8 +187,17 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { Head } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computeScore, getScoreColor, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS } from '../utils/scoreCalculator';
 import LoadingSpinner from '../components/LoadingSpinner.vue';

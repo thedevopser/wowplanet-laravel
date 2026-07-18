@@ -3,7 +3,6 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterTaskController;
-use App\Http\Controllers\DatabaseApiController;
 use App\Http\Controllers\TalentController;
 use App\Http\Controllers\UserCharacterController;
 use Illuminate\Support\Facades\Route;
@@ -11,17 +10,6 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('throttle:api')->group(function (): void {
     Route::get('/character/{realm}/{name}/talents', [TalentController::class, 'show']);
     Route::get('/character/{realm}/{name}', [CharacterController::class, 'show']);
-
-    Route::get('/database/counts', [DatabaseApiController::class, 'counts']);
-    Route::get('/database/mounts', [DatabaseApiController::class, 'mounts']);
-    Route::get('/database/achievements', [DatabaseApiController::class, 'achievements']);
-    Route::get('/database/quests', [DatabaseApiController::class, 'quests']);
-    Route::get('/database/pets', [DatabaseApiController::class, 'pets']);
-    Route::get('/database/decors', [DatabaseApiController::class, 'decors']);
-    Route::get('/database/appearances', [DatabaseApiController::class, 'appearances']);
-    Route::get('/database/professions', [DatabaseApiController::class, 'professions']);
-    Route::get('/database/professions/recipes', [DatabaseApiController::class, 'professionRecipes']);
-    Route::get('/database/subcategories/{section}', [DatabaseApiController::class, 'subcategories']);
 });
 
 Route::middleware('throttle:authenticated')->group(function (): void {

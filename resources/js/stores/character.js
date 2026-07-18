@@ -12,7 +12,7 @@ export const useCharacterStore = defineStore('character', {
         userCharacters: [],
         classIcons: {},
         loadingCharacters: false,
-        theme: localStorage.getItem('wowplanet-theme') || 'dark',
+        theme: (typeof localStorage !== 'undefined' ? localStorage.getItem('wowplanet-theme') : null) || 'dark',
         crossCharacter: null,
         crossCharacterStatus: 'idle',
         crossCharacterProgress: null,
@@ -64,7 +64,9 @@ export const useCharacterStore = defineStore('character', {
     actions: {
         toggleTheme() {
             this.theme = this.theme === 'dark' ? 'light' : 'dark';
-            localStorage.setItem('wowplanet-theme', this.theme);
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('wowplanet-theme', this.theme);
+            }
         },
 
         async checkAuth() {

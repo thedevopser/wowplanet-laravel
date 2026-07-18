@@ -1,5 +1,22 @@
 <template>
     <div class="max-w-4xl mx-auto py-6 sm:py-10 space-y-8">
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" :content="meta.ogTitle">
+            <meta name="twitter:description" :content="meta.ogDescription">
+            <meta name="twitter:image" :content="meta.ogImage">
+        </Head>
+
         <h1 class="text-2xl sm:text-3xl font-bold text-white">Conditions G&eacute;n&eacute;rales d'Utilisation</h1>
         <p class="text-xs text-slate-500">Derni&egrave;re mise &agrave; jour : 20 f&eacute;vrier 2026</p>
 
@@ -76,7 +93,7 @@
             <h2 class="text-lg sm:text-xl font-semibold text-white">6. Donn&eacute;es personnelles</h2>
             <p class="text-sm text-slate-300 leading-relaxed">
                 Le traitement des donn&eacute;es personnelles est d&eacute;crit dans notre
-                <router-link to="/privacy" class="text-blue-400 hover:underline">Politique de confidentialit&eacute;</router-link>.
+                <Link href="/privacy" class="text-blue-400 hover:underline">Politique de confidentialit&eacute;</Link>.
                 En utilisant le site, vous reconnaissez avoir pris connaissance de cette politique.
             </p>
         </section>
@@ -120,3 +137,19 @@
         </section>
     </div>
 </template>
+
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
+<script setup>
+import { Head, Link } from '@inertiajs/vue3';
+
+defineProps({
+    meta: { type: Object, required: true },
+});
+</script>

@@ -1,4 +1,4 @@
-.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod push deploy prod-up prod-down worker worker-stop
+.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy prod-up prod-down worker worker-stop
 
 help: ## Display this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -92,6 +92,7 @@ coverage: ## Coverage PHP + JS avec rapports HTML
 
 HARBOR_REGISTRY = harbor.wowplanet.fr
 IMAGE_NAME = wowplanet/app
+SSR_IMAGE_NAME = wowplanet/ssr
 
 # Portainer auto-redeploy (set these in .env.deploy or environment)
 PORTAINER_URL ?= https://portainer.wowplanet.fr
@@ -105,8 +106,19 @@ build-prod: ## Build production Docker image
 	docker build --target prod \
 	             -t $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest .
 
+build-prod-ssr: ## Build production SSR (Node) Docker image
+	docker build --target ssr \
+	             -t $(HARBOR_REGISTRY)/$(SSR_IMAGE_NAME):latest .
+
+build-prod-all: build-prod build-prod-ssr ## Build both prod images (app + SSR)
+
 push: ## Push production image to Harbor
 	docker push $(HARBOR_REGISTRY)/$(IMAGE_NAME):latest
+
+push-ssr: ## Push SSR image to Harbor
+	docker push $(HARBOR_REGISTRY)/$(SSR_IMAGE_NAME):latest
+
+push-all: push push-ssr ## Push both prod images (app + SSR)
 
 redeploy: ## Trigger Portainer stack redeploy (pull new image)
 	@if [ -z "$(PORTAINER_API_KEY)" ]; then echo "ERROR: PORTAINER_API_KEY not set. Create .env.deploy or export it."; exit 1; fi
@@ -125,7 +137,7 @@ redeploy: ## Trigger Portainer stack redeploy (pull new image)
 	echo "==> Stack redeployed successfully!" || \
 	(echo "ERROR: Redeploy failed. Check Portainer URL/credentials."; exit 1)
 
-deploy: build-prod push redeploy ## Build, push, and redeploy via Portainer
+deploy: build-prod-all push-all redeploy ## Build, push (app + SSR), and redeploy via Portainer
 
 prod-up: ## Start production stack
 	docker compose -f docker-compose.prod.yml up -d

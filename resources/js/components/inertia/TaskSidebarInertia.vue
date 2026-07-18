@@ -194,13 +194,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import { useTaskStore } from '../stores/tasks';
-import { useCharacterStore } from '../stores/character';
+import { usePage } from '@inertiajs/vue3';
+import { useTaskStore } from '../../stores/tasks';
+import { useCharacterStore } from '../../stores/character';
 
 const taskStore = useTaskStore();
 const characterStore = useCharacterStore();
-const route = useRoute();
+const page = usePage();
 
 onMounted(() => {
     if (characterStore.isAuthenticated && !characterStore.userCharacters.length) {
@@ -209,10 +209,11 @@ onMounted(() => {
 });
 
 const currentCharacter = computed(() => {
-    if (route.name !== 'character' || !route.params.realm || !route.params.name) return null;
+    const match = page.url.split('?')[0].match(/^\/character\/([^/]+)\/([^/]+)$/);
+    if (!match) return null;
     return {
-        realm_slug: route.params.realm,
-        character_name: route.params.name.toLowerCase(),
+        realm_slug: decodeURIComponent(match[1]),
+        character_name: decodeURIComponent(match[2]).toLowerCase(),
     };
 });
 

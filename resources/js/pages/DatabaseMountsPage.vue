@@ -1,9 +1,22 @@
 <template>
     <div class="space-y-6 py-6 sm:py-8">
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+        </Head>
+
         <DatabasePageHeader
             title="Montures"
             :subtitle="activeCategoryName || 'Toutes les catégories'"
-            :count="total"
+            :count="displayCount"
             count-label="montures"
             accent-color="amber"
         />
@@ -50,53 +63,44 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+import DatabaseLayout from '../layouts/DatabaseLayout.vue';
+
+export default {
+    layout: [AppLayout, DatabaseLayout],
+};
+</script>
+
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
-import axios from 'axios';
+import { ref, computed } from 'vue';
+import { Head } from '@inertiajs/vue3';
 import SearchFilter from '../components/SearchFilter.vue';
 import CollectionIcon from '../components/CollectionIcon.vue';
 import DatabasePageHeader from '../components/DatabasePageHeader.vue';
 
-const route = useRoute();
-const loading = ref(true);
-const items = ref([]);
-const categories = ref([]);
-const total = ref(0);
+const props = defineProps({
+    meta: { type: Object, required: true },
+    category: { type: String, default: null },
+    items: { type: Array, default: () => [] },
+    categories: { type: Array, default: () => [] },
+    total: { type: Number, default: 0 },
+});
+
+const loading = false;
 const search = ref('');
 
-const activeSlug = computed(() => route.params.category || '');
 const activeCategoryName = computed(() => {
-    const cat = categories.value.find(c => c.slug === activeSlug.value);
+    const cat = props.categories.find(c => c.slug === props.category);
     return cat?.name || '';
 });
 
+// Compteur affiché : nb d'éléments de la catégorie active, sinon total global.
+const displayCount = computed(() => (props.category ? props.items.length : props.total));
+
 const filteredItems = computed(() => {
     const q = search.value.toLowerCase();
-    if (!q) return items.value;
-    return items.value.filter(i => i.name_fr.toLowerCase().includes(q));
+    if (!q) return props.items;
+    return props.items.filter(i => i.name_fr.toLowerCase().includes(q));
 });
-
-async function fetchData() {
-    loading.value = true;
-    try {
-        const params = {};
-        if (activeSlug.value) params.category = activeSlug.value;
-        const { data } = await axios.get('/api/database/mounts', { params });
-        items.value = data.items;
-        categories.value = data.categories;
-        total.value = activeSlug.value ? data.items.length : data.total;
-    } catch {
-        items.value = [];
-    } finally {
-        loading.value = false;
-    }
-}
-
-watch(() => route.params.category, () => {
-    search.value = '';
-    fetchData();
-});
-
-onMounted(fetchData);
 </script>

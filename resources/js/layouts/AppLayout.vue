@@ -4,56 +4,49 @@
             Aller au contenu principal
         </a>
 
-        <AppHeader />
+        <AppHeaderInertia />
 
         <main id="main-content" class="flex-1 overflow-y-auto" :class="isDatabase ? 'flex' : ''">
             <div v-if="isDatabase" class="flex-1 flex min-h-0">
-                <router-view v-slot="{ Component }">
-                    <component :is="Component" />
-                </router-view>
+                <slot />
             </div>
             <div v-else class="max-w-360 mx-auto px-3 sm:px-4 py-6 sm:py-8">
                 <div v-if="store.error" role="alert" class="bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-lg mb-6">
                     {{ store.error }}
                 </div>
-                <router-view v-slot="{ Component }">
-                    <Transition name="page" mode="out-in">
-                        <component :is="Component" />
-                    </Transition>
-                </router-view>
+                <slot />
             </div>
         </main>
 
-        <AppFooter />
+        <AppFooterInertia />
 
-        <TaskSidebar v-if="store.isAuthenticated" />
+        <TaskSidebarInertia v-if="store.isAuthenticated" />
         <SessionExpiredBanner />
+        <AuthRequiredBanner />
     </div>
 </template>
 
 <script setup>
 import { computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { usePage } from '@inertiajs/vue3';
 import { useCharacterStore } from '../stores/character';
 import { useTaskStore } from '../stores/tasks';
-import { useAuthGuard } from '../composables/useAuthGuard';
-import AppHeader from './AppHeader.vue';
-import AppFooter from './AppFooter.vue';
-import TaskSidebar from './TaskSidebar.vue';
-import SessionExpiredBanner from './SessionExpiredBanner.vue';
+import AppHeaderInertia from '../components/inertia/AppHeaderInertia.vue';
+import AppFooterInertia from '../components/inertia/AppFooterInertia.vue';
+import TaskSidebarInertia from '../components/inertia/TaskSidebarInertia.vue';
+import SessionExpiredBanner from '../components/SessionExpiredBanner.vue';
+import AuthRequiredBanner from '../components/AuthRequiredBanner.vue';
 
-const route = useRoute();
+const page = usePage();
 const store = useCharacterStore();
-const isDatabase = computed(() => route.path.startsWith('/base-de-donnees'));
 const taskStore = useTaskStore();
 
-useAuthGuard();
+const isDatabase = computed(() => page.url.split('?')[0].startsWith('/base-de-donnees'));
 
 function applyTheme(theme) {
+    if (typeof document === 'undefined') return;
     document.documentElement.classList.toggle('dark', theme === 'dark');
 }
-
-applyTheme(store.theme);
 
 watch(() => store.theme, applyTheme);
 
@@ -64,19 +57,7 @@ watch(() => store.isAuthenticated, (authenticated) => {
 });
 
 onMounted(() => {
+    applyTheme(store.theme);
     store.checkAuth();
 });
 </script>
-
-<style>
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-@keyframes spin-reverse {
-    from { transform: rotate(360deg); }
-    to { transform: rotate(0deg); }
-}
-.animate-spin-reverse {
-    animation: spin-reverse 1.5s linear infinite;
-}
-</style>

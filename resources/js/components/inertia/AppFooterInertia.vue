@@ -8,11 +8,11 @@
                 </p>
 
                 <div class="flex items-center gap-3 text-[10px] sm:text-xs">
-                    <router-link to="/privacy" class="text-slate-400 hover:text-blue-400 transition-colors">Confidentialit&eacute;</router-link>
+                    <a href="/privacy" class="text-slate-400 hover:text-blue-400 transition-colors">Confidentialit&eacute;</a>
                     <span class="text-slate-700">|</span>
-                    <router-link to="/cgu" class="text-slate-400 hover:text-blue-400 transition-colors">CGU</router-link>
+                    <a href="/cgu" class="text-slate-400 hover:text-blue-400 transition-colors">CGU</a>
                     <span class="text-slate-700">|</span>
-                    <router-link to="/faq" class="text-slate-400 hover:text-blue-400 transition-colors">FAQ</router-link>
+                    <a href="/faq" class="text-slate-400 hover:text-blue-400 transition-colors">FAQ</a>
                     <span class="text-slate-700">|</span>
                     <a href="https://discord.gg/wa49gGF8cr" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-slate-400 hover:text-[#5865F2] transition-colors">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -25,3 +25,6 @@
         </div>
     </footer>
 </template>
+
+<script setup>
+</script>

@@ -5,68 +5,54 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\CharacterSeoService;
-use App\Application\Services\SeoContentRenderer;
-use Illuminate\Contracts\View\View;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class SeoController extends Controller
 {
     public function __construct(
         private readonly CharacterSeoService $characterSeoService,
-        private readonly SeoContentRenderer $seoContentRenderer,
     ) {}
 
-    public function spa(): View
+    public function home(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getHomeMeta();
-        $seo['serverHtml'] = $this->seoContentRenderer->renderHome($this->appUrl());
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('HomePage', [
+            'meta' => $this->characterSeoService->getHomeMeta(),
+        ]);
     }
 
-    public function faqPage(): View
+    /**
+     * Page 404 Inertia (catch-all des URLs inconnues). Renvoie le statut HTTP 404.
+     */
+    public function notFound(Request $request): SymfonyResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('faq');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('NotFoundPage')
+            ->toResponse($request)
+            ->setStatusCode(404);
     }
 
-    public function cguPage(): View
+    public function faqPage(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('cgu');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('FaqPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('faq'),
+        ]);
     }
 
-    public function privacyPage(): View
+    public function cguPage(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('privacy');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('CguPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('cgu'),
+        ]);
     }
 
-    public function characterPage(string $realm, string $name): View|RedirectResponse
+    public function privacyPage(): InertiaResponse
     {
-        $normalizedRealm = mb_strtolower($realm);
-        $normalizedName = mb_strtolower($name);
-
-        if ($realm !== $normalizedRealm || $name !== $normalizedName) {
-            return redirect(sprintf('/character/%s/%s', $normalizedRealm, $normalizedName), 301);
-        }
-
-        $seo = $this->characterSeoService->getCharacterMeta($realm, $name);
-        $seo['serverHtml'] = $this->seoContentRenderer->renderCharacter(
-            $this->appUrl(),
-            $this->characterSeoService->getCachedCharacterData($realm, $name),
-            $realm,
-            $name,
-        );
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('PrivacyPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('privacy'),
+        ]);
     }
 
     public function sitemap(): Response
@@ -97,8 +83,8 @@ class SeoController extends Controller
             'User-agent: *',
             'Allow: /',
             'Allow: /base-de-donnees/',
+            'Allow: /character/',
             'Disallow: /api/',
-            'Disallow: /character/',
             'Disallow: /auth/',
             'Disallow: /admin',
             'Disallow: /my-characters',
@@ -112,13 +98,5 @@ class SeoController extends Controller
         return response($content, 200, [
             'Content-Type' => 'text/plain',
         ]);
-    }
-
-    private function appUrl(): string
-    {
-        /** @var string $configUrl */
-        $configUrl = config('app.url', '');
-
-        return rtrim($configUrl, '/');
     }
 }

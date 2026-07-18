@@ -5,7 +5,7 @@ export const useTaskStore = defineStore('tasks', {
     state: () => ({
         tasks: [],
         loading: false,
-        sidebarOpen: localStorage.getItem('wowplanet-tasks-sidebar') === 'true',
+        sidebarOpen: typeof localStorage !== 'undefined' && localStorage.getItem('wowplanet-tasks-sidebar') === 'true',
     }),
 
     getters: {
@@ -104,7 +104,9 @@ export const useTaskStore = defineStore('tasks', {
 
         toggleSidebar() {
             this.sidebarOpen = !this.sidebarOpen;
-            localStorage.setItem('wowplanet-tasks-sidebar', String(this.sidebarOpen));
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('wowplanet-tasks-sidebar', String(this.sidebarOpen));
+            }
         },
 
         _getDailyThreshold(now) {

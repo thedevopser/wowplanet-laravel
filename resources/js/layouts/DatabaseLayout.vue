@@ -3,9 +3,9 @@
         <!-- Sidebar (desktop lg+) -->
         <aside class="hidden lg:flex flex-col w-56 shrink-0 bg-slate-900/60 backdrop-blur-sm border-r border-white/5">
             <div class="p-4 border-b border-white/5">
-                <router-link to="/base-de-donnees" class="text-sm font-black text-slate-300 hover:text-white transition-colors">
+                <Link href="/base-de-donnees" class="text-sm font-black text-slate-300 hover:text-white transition-colors">
                     Base de données
-                </router-link>
+                </Link>
             </div>
             <nav class="flex-1 py-2 overflow-y-auto no-scrollbar">
                 <div v-for="section in sections" :key="section.key" class="mb-0.5">
@@ -21,33 +21,30 @@
                     >
                         <div class="w-4.5 h-4.5 shrink-0"><CategoryIcon :category="section.icon" /></div>
                         <span class="flex-1 text-left truncate">{{ section.label }}</span>
-                        <span v-if="store.counts[section.countKey]" class="text-[9px] font-mono text-slate-600">{{ formatCount(store.counts[section.countKey]) }}</span>
+                        <span v-if="counts[section.countKey]" class="text-[9px] font-mono text-slate-600">{{ formatCount(counts[section.countKey]) }}</span>
                         <svg
-                            :class="['w-3 h-3 text-slate-600 transition-transform duration-200', store.expanded[section.key] ? 'rotate-90' : '']"
+                            :class="['w-3 h-3 text-slate-600 transition-transform duration-200', expanded[section.key] ? 'rotate-90' : '']"
                             fill="none" stroke="currentColor" viewBox="0 0 24 24"
                         ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
 
                     <!-- Sub-items (accordion) -->
                     <div
-                        :class="['grid transition-[grid-template-rows] duration-200 ease-out', store.expanded[section.key] ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]']"
+                        :class="['grid transition-[grid-template-rows] duration-200 ease-out', expanded[section.key] ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]']"
                     >
                         <div class="overflow-hidden">
-                            <div v-if="store.loading[section.key]" class="py-2 pl-11 text-[10px] text-slate-600">
-                                Chargement...
-                            </div>
-                            <template v-else-if="store.subCategories[section.key]">
-                                <router-link
-                                    :to="section.path"
+                            <template v-if="subCategories[section.key]">
+                                <Link
+                                    :href="section.path"
                                     :class="[
                                         'block py-1.5 pl-11 pr-4 text-xs transition-colors truncate',
                                         isExactActive(section.path) ? section.subActiveClass : 'text-slate-500 hover:text-slate-300'
                                     ]"
-                                >Tous</router-link>
-                                <router-link
-                                    v-for="sub in store.subCategories[section.key]"
+                                >Tous</Link>
+                                <Link
+                                    v-for="sub in subCategories[section.key]"
                                     :key="sub.slug"
-                                    :to="section.path + '/' + sub.slug"
+                                    :href="section.path + '/' + sub.slug"
                                     :class="[
                                         'flex items-center justify-between py-1.5 pl-11 pr-4 text-xs transition-colors',
                                         isExactActive(section.path + '/' + sub.slug) ? section.subActiveClass : 'text-slate-500 hover:text-slate-300'
@@ -55,17 +52,17 @@
                                 >
                                     <span class="truncate">{{ sub.name }}</span>
                                     <span class="text-[9px] font-mono text-slate-700 shrink-0 ml-2">{{ sub.count }}</span>
-                                </router-link>
+                                </Link>
                             </template>
                         </div>
                     </div>
                 </div>
             </nav>
             <div class="p-4 border-t border-white/5">
-                <router-link to="/" class="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-2">
+                <Link href="/" class="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-2">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     Retour au site
-                </router-link>
+                </Link>
             </div>
         </aside>
 
@@ -73,10 +70,10 @@
         <div class="flex-1 min-w-0 flex flex-col">
             <!-- Top bar mobile: main sections -->
             <nav class="lg:hidden flex items-center gap-1.5 px-3 py-2 bg-slate-900/40 border-b border-white/5 overflow-x-auto no-scrollbar">
-                <router-link
+                <Link
                     v-for="section in sections"
                     :key="section.path"
-                    :to="section.path"
+                    :href="section.path"
                     :class="[
                         'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border whitespace-nowrap transition-all shrink-0',
                         isSectionActive(section.path)
@@ -86,7 +83,7 @@
                 >
                     <div class="w-3.5 h-3.5 shrink-0"><CategoryIcon :category="section.icon" /></div>
                     {{ section.shortLabel }}
-                </router-link>
+                </Link>
             </nav>
 
             <!-- Mobile sub-categories row -->
@@ -94,28 +91,28 @@
                 v-if="activeMobileSubCategories.length > 0"
                 class="lg:hidden flex items-center gap-1 px-3 py-1.5 bg-slate-900/20 border-b border-white/3 overflow-x-auto no-scrollbar"
             >
-                <router-link
-                    :to="activeMobileSection.path"
+                <Link
+                    :href="activeMobileSection.path"
                     :class="[
                         'px-2.5 py-1 rounded text-[11px] font-medium whitespace-nowrap transition-colors shrink-0',
                         isExactActive(activeMobileSection.path) ? 'text-white bg-slate-700/60' : 'text-slate-500 hover:text-slate-300'
                     ]"
-                >Tous</router-link>
-                <router-link
+                >Tous</Link>
+                <Link
                     v-for="sub in activeMobileSubCategories"
                     :key="sub.slug"
-                    :to="activeMobileSection.path + '/' + sub.slug"
+                    :href="activeMobileSection.path + '/' + sub.slug"
                     :class="[
                         'px-2.5 py-1 rounded text-[11px] font-medium whitespace-nowrap transition-colors shrink-0',
                         isExactActive(activeMobileSection.path + '/' + sub.slug) ? 'text-white bg-slate-700/60' : 'text-slate-500 hover:text-slate-300'
                     ]"
-                >{{ sub.name }}</router-link>
+                >{{ sub.name }}</Link>
             </nav>
 
             <!-- Page content -->
             <div class="flex-1 overflow-y-auto">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <router-view />
+                    <slot />
                 </div>
             </div>
         </div>
@@ -123,14 +120,18 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { useDatabaseSidebarStore } from '../stores/databaseSidebar';
-import CategoryIcon from './CategoryIcon.vue';
+import { computed, ref, watch, onMounted } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import CategoryIcon from '../components/CategoryIcon.vue';
 
-const route = useRoute();
-const router = useRouter();
-const store = useDatabaseSidebarStore();
+const page = usePage();
+
+const currentPath = computed(() => page.url.split('?')[0]);
+const counts = computed(() => page.props.counts ?? {});
+const subCategories = computed(() => page.props.subCategories ?? {});
+
+// État d'ouverture de l'accordéon, local au layout persistant (conservé entre visites Inertia).
+const expanded = ref({});
 
 const sections = [
     {
@@ -213,11 +214,11 @@ const sections = [
 ];
 
 function isSectionActive(path) {
-    return route.path === path || route.path.startsWith(path + '/');
+    return currentPath.value === path || currentPath.value.startsWith(path + '/');
 }
 
 function isExactActive(path) {
-    return route.path === path;
+    return currentPath.value === path;
 }
 
 function formatCount(n) {
@@ -226,27 +227,30 @@ function formatCount(n) {
 }
 
 function onSectionClick(section) {
-    store.toggleSection(section.key);
-    router.push(section.path);
+    // Sur la section déjà active, le clic sert de bascule d'accordéon.
+    if (isSectionActive(section.path)) {
+        expanded.value[section.key] = !expanded.value[section.key];
+        return;
+    }
+    // Sinon on navigue : le watch sur l'URL déploiera la section active.
+    router.visit(section.path);
 }
 
-// Mobile: find active section and its sub-categories
-const activeMobileSection = computed(() => {
-    return sections.find(s => isSectionActive(s.path)) || null;
-});
+// Déploie la section correspondant au chemin courant, replie les autres.
+function expandActiveSection() {
+    for (const section of sections) {
+        expanded.value[section.key] = isSectionActive(section.path);
+    }
+}
 
+// Mobile: section active et ses sous-catégories.
+const activeMobileSection = computed(() => sections.find(s => isSectionActive(s.path)) || null);
 const activeMobileSubCategories = computed(() => {
     if (!activeMobileSection.value) return [];
-    return store.subCategories[activeMobileSection.value.key] || [];
+    return subCategories.value[activeMobileSection.value.key] || [];
 });
 
-// Auto-expand active section on route change
-watch(() => route.path, (path) => {
-    store.expandActiveSection(path);
-}, { immediate: false });
+watch(currentPath, expandActiveSection);
 
-onMounted(() => {
-    store.fetchCounts();
-    store.expandActiveSection(route.path);
-});
+onMounted(expandActiveSection);
 </script>

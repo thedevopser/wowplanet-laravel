@@ -5,16 +5,34 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\AdminService;
+use App\Application\Services\UserCharacterService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
 
 class AdminController extends Controller
 {
     public function __construct(
         private readonly AdminService $adminService,
+        private readonly UserCharacterService $userCharacterService,
     ) {}
+
+    /**
+     * Panneau d'administration rendu via Inertia. Réservé aux administrateurs :
+     * l'API (préfixe /admin) reste protégée par le middleware `admin`.
+     */
+    public function page(): InertiaResponse|RedirectResponse
+    {
+        if (! $this->userCharacterService->isAdmin()) {
+            return redirect('/');
+        }
+
+        return Inertia::render('AdminPage');
+    }
 
     public function status(): JsonResponse
     {

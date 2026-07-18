@@ -3,70 +3,70 @@
         <div class="max-w-7xl mx-auto px-3 sm:px-4">
             <!-- Main header row -->
             <div class="h-12 sm:h-14 md:h-16 flex items-center justify-between gap-2 sm:gap-3">
-                <router-link to="/" class="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity shrink-0">
+                <a href="/" class="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity shrink-0">
                     <img src="/images/logo.png" alt="WowPlanet Logo" class="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-xl shadow-lg shadow-blue-500/30 object-cover">
                     <h1 class="text-lg sm:text-xl md:text-2xl font-black bg-clip-text text-transparent bg-linear-to-r from-blue-200 to-blue-500">WowPlanet</h1>
-                </router-link>
+                </a>
 
                 <!-- Desktop/tablet nav (sm+) -->
                 <div class="hidden sm:flex items-center gap-2 md:gap-3">
-                    <router-link
-                        to="/base-de-donnees"
+                    <a
+                        href="/base-de-donnees"
                         :class="[
                             'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
-                            route.path.startsWith('/base-de-donnees')
+                            currentPath.startsWith('/base-de-donnees')
                                 ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
                                 : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
                         ]"
                     >
                         Base de données
-                    </router-link>
+                    </a>
                     <template v-if="store.isAuthenticated">
-                        <router-link
-                            to="/my-characters"
+                        <a
+                            href="/my-characters"
                             :class="[
                                 'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
-                                route.name === 'my-characters'
+                                currentPath === '/my-characters'
                                     ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
                             ]"
                         >
                             Mes personnages
-                        </router-link>
-                        <router-link
-                            to="/class-stats"
+                        </a>
+                        <a
+                            href="/class-stats"
                             :class="[
                                 'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
-                                route.name === 'class-stats'
+                                currentPath === '/class-stats'
                                     ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
                             ]"
                         >
                             Mes classes
-                        </router-link>
-                        <router-link
-                            to="/my-score"
+                        </a>
+                        <a
+                            href="/my-score"
                             :class="[
                                 'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
-                                route.name === 'my-score'
+                                currentPath === '/my-score'
                                     ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
                             ]"
                         >
                             Mon score
-                        </router-link>
-                        <router-link
+                        </a>
+                        <a
                             v-if="store.isAdmin"
-                            to="/admin"
+                            href="/admin"
                             :class="[
                                 'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
-                                route.name === 'admin'
+                                currentPath === '/admin'
                                     ? 'bg-red-600 border-red-400 text-white shadow-lg shadow-red-500/20'
                                     : 'bg-slate-800/80 border-white/5 text-red-400 hover:text-white hover:bg-slate-700'
                             ]"
                         >
                             Admin
-                        </router-link>
+                        </a>
                         <button
                             @click="handleLogout"
                             class="px-2 md:px-3 py-1.5 rounded-md text-xs text-slate-500 hover:text-slate-300 transition-colors whitespace-nowrap"
@@ -144,70 +144,65 @@
             >
             <div v-if="mobileMenuOpen" class="sm:hidden pb-3 space-y-3 border-t border-white/5 pt-3">
                 <div class="flex flex-col gap-2">
-                    <router-link
-                        to="/base-de-donnees"
-                        @click="mobileMenuOpen = false"
+                    <a
+                        href="/base-de-donnees"
                         :class="[
                             'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
-                            route.path.startsWith('/base-de-donnees')
+                            currentPath.startsWith('/base-de-donnees')
                                 ? 'bg-blue-600 border-blue-400 text-white'
                                 : 'bg-slate-800/80 border-white/5 text-slate-300'
                         ]"
                     >
                         Base de données
-                    </router-link>
+                    </a>
                     <template v-if="store.isAuthenticated">
-                        <router-link
-                            to="/my-characters"
-                            @click="mobileMenuOpen = false"
+                        <a
+                            href="/my-characters"
                             :class="[
                                 'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
-                                route.name === 'my-characters'
+                                currentPath === '/my-characters'
                                     ? 'bg-blue-600 border-blue-400 text-white'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300'
                             ]"
                         >
                             Mes personnages
-                        </router-link>
-                        <router-link
-                            to="/class-stats"
-                            @click="mobileMenuOpen = false"
+                        </a>
+                        <a
+                            href="/class-stats"
                             :class="[
                                 'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
-                                route.name === 'class-stats'
+                                currentPath === '/class-stats'
                                     ? 'bg-blue-600 border-blue-400 text-white'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300'
                             ]"
                         >
                             Mes classes
-                        </router-link>
-                        <router-link
-                            to="/my-score"
-                            @click="mobileMenuOpen = false"
+                        </a>
+                        <a
+                            href="/my-score"
                             :class="[
                                 'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
-                                route.name === 'my-score'
+                                currentPath === '/my-score'
                                     ? 'bg-blue-600 border-blue-400 text-white'
                                     : 'bg-slate-800/80 border-white/5 text-slate-300'
                             ]"
                         >
                             Mon score
-                        </router-link>
-                        <router-link
+                        </a>
+                        <a
                             v-if="store.isAdmin"
-                            to="/admin"
-                            @click="mobileMenuOpen = false"
+                            href="/admin"
                             :class="[
                                 'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
-                                route.name === 'admin'
+                                currentPath === '/admin'
                                     ? 'bg-red-600 border-red-400 text-white'
                                     : 'bg-slate-800/80 border-white/5 text-red-400'
                             ]"
                         >
                             Admin
-                        </router-link>
+                        </a>
                         <button
-                            @click="handleLogout(); mobileMenuOpen = false"
+                            @click="handleLogout"
                             class="w-full px-3 py-2 rounded-md text-sm text-slate-500 hover:text-slate-300 transition-colors text-left"
                         >
                             Déconnexion
@@ -238,22 +233,23 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { useCharacterStore } from '../stores/character';
+import { ref, computed, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+import { useCharacterStore } from '../../stores/character';
 
-const router = useRouter();
-const route = useRoute();
+const page = usePage();
 const store = useCharacterStore();
 
+const currentPath = computed(() => page.url.split('?')[0]);
 const mobileMenuOpen = ref(false);
 
 const handleLogout = async () => {
     await store.logout();
-    router.push('/');
+    // Route legacy (non migrée) : chargement complet plutôt qu'une visite Inertia.
+    window.location.href = '/';
 };
 
-watch(route, () => {
+watch(currentPath, () => {
     mobileMenuOpen.value = false;
 });
 </script>

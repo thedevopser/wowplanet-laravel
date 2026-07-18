@@ -1,5 +1,22 @@
 <template>
     <div class="space-y-8 py-6 sm:py-8">
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" :content="meta.ogTitle">
+            <meta name="twitter:description" :content="meta.ogDescription">
+            <meta name="twitter:image" :content="meta.ogImage">
+        </Head>
+
         <div class="text-center max-w-3xl mx-auto">
             <h1 class="text-3xl sm:text-4xl md:text-5xl font-black mb-4">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Foire aux questions</span>
@@ -208,3 +225,19 @@
         </div>
     </div>
 </template>
+
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
+<script setup>
+import { Head } from '@inertiajs/vue3';
+
+defineProps({
+    meta: { type: Object, required: true },
+});
+</script>

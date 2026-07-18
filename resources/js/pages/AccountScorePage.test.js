@@ -1,6 +1,14 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import axios from 'axios';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/my-score', props: {} }),
+    router: { visit: vi.fn(), on: vi.fn() },
+}));
+
 import { mountWithPlugins } from '../tests/helpers';
 import AccountScorePage from './AccountScorePage.vue';
 

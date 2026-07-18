@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 use App\Application\Services\CharacterSeoService;
+use Inertia\Testing\AssertableInertia as Assert;
 
-test('spa returns home page', function (): void {
+test('home renders HomePage via inertia with meta', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('getHomeMeta');
@@ -20,39 +21,22 @@ test('spa returns home page', function (): void {
         'jsonLd' => '{}',
     ]);
 
-    $this->get('/')->assertOk();
+    $this->get('/')
+        ->assertOk()
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('HomePage')
+            ->where('meta.title', 'WowPlanet')
+            ->where('auth.isAuthenticated', false)
+            ->where('auth.isAdmin', false)
+        );
 });
 
-test('character page redirects to lowercase url', function (): void {
-    $this->get('/character/HYJAL/THRALL')
-        ->assertRedirect('/character/hyjal/thrall')
-        ->assertStatus(301);
-});
-
-test('character page returns view for valid character', function (): void {
-    $mock = $this->mock(CharacterSeoService::class);
-    /** @var \Mockery\Expectation $exp */
-    $exp = $mock->shouldReceive('getCharacterMeta');
-    $exp->once()->with('hyjal', 'thrall')->andReturn([
-        'title' => 'Thrall - Hyjal | WowPlanet',
-        'description' => 'Test',
-        'ogTitle' => 'Thrall',
-        'ogDescription' => 'Test',
-        'ogImage' => 'https://example.com/avatar.jpg',
-        'ogUrl' => 'https://example.com/character/hyjal/thrall',
-        'ogType' => 'profile',
-        'canonicalUrl' => 'https://example.com/character/hyjal/thrall',
-        'jsonLd' => '{}',
-    ]);
-    /** @var \Mockery\Expectation $expCached */
-    $expCached = $mock->shouldReceive('getCachedCharacterData');
-    $expCached->once()->with('hyjal', 'thrall')->andReturn([
-        'name' => 'Thrall',
-        'realm' => 'Hyjal',
-        'found' => false,
-    ]);
-
-    $this->get('/character/hyjal/thrall')->assertOk();
+test('unknown url renders NotFoundPage with 404 status', function (): void {
+    $this->get('/une-page-qui-nexiste-pas')
+        ->assertStatus(404)
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('NotFoundPage')
+        );
 });
 
 test('sitemap returns xml', function (): void {
@@ -76,24 +60,38 @@ test('robots returns plain text', function (): void {
     expect($content)->toBeString()
         ->toContain('User-agent: *')
         ->toContain('Disallow: /api/')
+        ->toContain('Allow: /character/')
+        ->not->toContain('Disallow: /character/')
         ->toContain('Sitemap:');
 });
 
-test('faq page returns ok with unique meta', function (): void {
+test('faq page renders FaqPage via inertia with unique meta and json-ld', function (): void {
     $this->get('/faq')
         ->assertOk()
-        ->assertSee('FAQ')
-        ->assertSee('Questions fréquentes');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('FaqPage')
+            ->where('meta.title', 'FAQ - Questions fréquentes | WowPlanet')
+            ->where('meta.canonicalUrl', rtrim((string) config('app.url'), '/').'/faq')
+            ->has('meta.jsonLd')
+        );
 });
 
-test('cgu page returns ok with unique meta', function (): void {
+test('cgu page renders CguPage via inertia with unique meta', function (): void {
     $this->get('/cgu')
         ->assertOk()
-        ->assertSee('Conditions');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('CguPage')
+            ->where('meta.title', 'Conditions générales d\'utilisation | WowPlanet')
+            ->where('meta.jsonLd', null)
+        );
 });
 
-test('privacy page returns ok with unique meta', function (): void {
+test('privacy page renders PrivacyPage via inertia with unique meta', function (): void {
     $this->get('/privacy')
         ->assertOk()
-        ->assertSee('Politique de confidentialité');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('PrivacyPage')
+            ->where('meta.title', 'Politique de confidentialité | WowPlanet')
+            ->where('meta.jsonLd', null)
+        );
 });
