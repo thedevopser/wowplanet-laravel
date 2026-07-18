@@ -5,9 +5,6 @@ import HomePage from './pages/HomePage.vue';
 import MyCharactersPage from './pages/MyCharactersPage.vue';
 import ClassStatsPage from './pages/ClassStatsPage.vue';
 import AccountScorePage from './pages/AccountScorePage.vue';
-import PrivacyPage from './pages/PrivacyPage.vue';
-import CguPage from './pages/CguPage.vue';
-import FaqPage from './pages/FaqPage.vue';
 
 const routes = [
     {
@@ -62,22 +59,39 @@ const routes = [
         ],
     },
     {
+        // Pages statiques désormais servies par Inertia (rendu serveur).
+        // Toute navigation client depuis le SPA legacy force un chargement complet.
         path: '/privacy',
         name: 'privacy',
-        component: PrivacyPage,
         meta: { title: 'Politique de confidentialité - WowPlanet' },
+        beforeEnter: (to) => {
+            showNavigationLoader();
+            window.location.href = to.fullPath;
+            return false;
+        },
+        component: { render: () => null },
     },
     {
         path: '/cgu',
         name: 'cgu',
-        component: CguPage,
         meta: { title: 'CGU - WowPlanet' },
+        beforeEnter: (to) => {
+            showNavigationLoader();
+            window.location.href = to.fullPath;
+            return false;
+        },
+        component: { render: () => null },
     },
     {
         path: '/faq',
         name: 'faq',
-        component: FaqPage,
         meta: { title: 'FAQ - WowPlanet' },
+        beforeEnter: (to) => {
+            showNavigationLoader();
+            window.location.href = to.fullPath;
+            return false;
+        },
+        component: { render: () => null },
     },
     {
         path: '/admin',

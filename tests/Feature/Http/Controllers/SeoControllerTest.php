@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Services\CharacterSeoService;
+use Inertia\Testing\AssertableInertia as Assert;
 
 test('spa returns home page', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
@@ -49,21 +50,33 @@ test('robots returns plain text', function (): void {
         ->toContain('Sitemap:');
 });
 
-test('faq page returns ok with unique meta', function (): void {
+test('faq page renders FaqPage via inertia with unique meta and json-ld', function (): void {
     $this->get('/faq')
         ->assertOk()
-        ->assertSee('FAQ')
-        ->assertSee('Questions fréquentes');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('FaqPage')
+            ->where('meta.title', 'FAQ - Questions fréquentes | WowPlanet')
+            ->where('meta.canonicalUrl', rtrim((string) config('app.url'), '/').'/faq')
+            ->has('meta.jsonLd')
+        );
 });
 
-test('cgu page returns ok with unique meta', function (): void {
+test('cgu page renders CguPage via inertia with unique meta', function (): void {
     $this->get('/cgu')
         ->assertOk()
-        ->assertSee('Conditions');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('CguPage')
+            ->where('meta.title', 'Conditions générales d\'utilisation | WowPlanet')
+            ->where('meta.jsonLd', null)
+        );
 });
 
-test('privacy page returns ok with unique meta', function (): void {
+test('privacy page renders PrivacyPage via inertia with unique meta', function (): void {
     $this->get('/privacy')
         ->assertOk()
-        ->assertSee('Politique de confidentialité');
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('PrivacyPage')
+            ->where('meta.title', 'Politique de confidentialité | WowPlanet')
+            ->where('meta.jsonLd', null)
+        );
 });

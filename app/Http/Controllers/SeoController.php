@@ -8,6 +8,8 @@ use App\Application\Services\CharacterSeoService;
 use App\Application\Services\SeoContentRenderer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
 
 class SeoController extends Controller
 {
@@ -24,28 +26,25 @@ class SeoController extends Controller
         return view('welcome', ['seo' => $seo]);
     }
 
-    public function faqPage(): View
+    public function faqPage(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('faq');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('FaqPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('faq'),
+        ]);
     }
 
-    public function cguPage(): View
+    public function cguPage(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('cgu');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('CguPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('cgu'),
+        ]);
     }
 
-    public function privacyPage(): View
+    public function privacyPage(): InertiaResponse
     {
-        $seo = $this->characterSeoService->getStaticPageMeta('privacy');
-        $seo['serverHtml'] = '';
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('PrivacyPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('privacy'),
+        ]);
     }
 
     public function sitemap(): Response
