@@ -1,5 +1,9 @@
 <template>
     <div class="space-y-8 animate-in fade-in duration-500">
+        <Head>
+            <title>Mes classes - WowPlanet</title>
+        </Head>
+
         <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-3xl md:text-4xl font-black mb-3">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Mes classes</span>
@@ -187,10 +191,10 @@
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        <router-link
+                        <Link
                             v-for="char in selectedClassCharacters"
                             :key="char.name + '-' + char.realmSlug"
-                            :to="`/character/${char.realmSlug}/${char.name.toLowerCase()}`"
+                            :href="`/character/${char.realmSlug}/${char.name.toLowerCase()}`"
                             class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl hover:bg-slate-800/60 hover:border-blue-500/20 transition-all group text-left"
                         >
                             <div class="flex items-center gap-3">
@@ -217,7 +221,7 @@
                                 <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5 font-mono">Niv {{ char.level }}</span>
                                 <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5">{{ char.raceName }}</span>
                             </div>
-                        </router-link>
+                        </Link>
                     </div>
                 </div>
             </Transition>
@@ -242,8 +246,17 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
 <script setup>
 import { computed, ref, onMounted, nextTick } from 'vue';
+import { Head, Link } from '@inertiajs/vue3';
 import { useCharacterStore } from '../stores/character';
 import { classColors } from '../utils/classColors';
 import LoadingSpinner from '../components/LoadingSpinner.vue';

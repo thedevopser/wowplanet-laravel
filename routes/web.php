@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\DatabaseController;
@@ -17,6 +18,10 @@ Route::get('/sitemap-characters.xml', [SeoController::class, 'sitemapCharacters'
 Route::get('/sitemap-database.xml', [DatabaseController::class, 'sitemap']);
 
 Route::get('/character/{realm}/{name}', [CharacterController::class, 'page']);
+
+Route::get('/my-characters', [AccountController::class, 'myCharacters']);
+Route::get('/class-stats', [AccountController::class, 'classStats']);
+Route::get('/my-score', [AccountController::class, 'myScore']);
 
 Route::get('/base-de-donnees', [DatabaseController::class, 'index']);
 Route::get('/base-de-donnees/montures/{category?}', [DatabaseController::class, 'mounts']);

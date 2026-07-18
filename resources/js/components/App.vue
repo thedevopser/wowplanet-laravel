@@ -28,6 +28,7 @@
 
         <TaskSidebar v-if="store.isAuthenticated" />
         <SessionExpiredBanner />
+        <AuthRequiredBanner />
     </div>
 </template>
 
@@ -41,6 +42,7 @@ import AppHeader from './AppHeader.vue';
 import AppFooter from './AppFooter.vue';
 import TaskSidebar from './TaskSidebar.vue';
 import SessionExpiredBanner from './SessionExpiredBanner.vue';
+import AuthRequiredBanner from './AuthRequiredBanner.vue';
 
 const route = useRoute();
 const store = useCharacterStore();

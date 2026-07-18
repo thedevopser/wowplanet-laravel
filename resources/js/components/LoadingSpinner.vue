@@ -1,5 +1,13 @@
 <template>
-    <div class="flex items-center justify-center py-16" role="status" aria-live="polite">
+    <!-- Overlay plein écran centré, identique en position à l'overlay de navigation
+         (utils/navigationLoader.js) : tous les loaders de chargement de page sont ainsi
+         cohérents, quel que soit le contenu déjà présent derrière. -->
+    <div
+        class="flex items-center justify-center"
+        style="position:fixed;inset:0;z-index:9999;padding:1.5rem;background:rgba(15,23,42,0.88);backdrop-filter:blur(4px)"
+        role="status"
+        aria-live="polite"
+    >
         <div class="card-glass rounded-2xl p-8 md:p-10 max-w-2xl mx-auto w-full">
             <div class="text-center">
                 <div class="relative inline-block mb-6">

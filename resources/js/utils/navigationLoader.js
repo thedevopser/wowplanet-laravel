@@ -50,3 +50,11 @@ export function showNavigationLoader(hint = 'Quêtes, hauts-faits, métiers, mon
 
     document.body.appendChild(overlay);
 }
+
+// Retire l'overlay. Nécessaire pour les visites Inertia (le document n'est pas
+// remplacé) ; sur un rechargement complet il disparaît avec l'ancien document.
+export function hideNavigationLoader() {
+    if (typeof document === 'undefined') return;
+
+    document.getElementById(OVERLAY_ID)?.remove();
+}

@@ -1,5 +1,9 @@
 <template>
     <div class="space-y-8 animate-in fade-in duration-500">
+        <Head>
+            <title>Mes personnages - WowPlanet</title>
+        </Head>
+
         <div class="text-center max-w-3xl mx-auto">
             <h2 class="text-3xl md:text-4xl font-black mb-3">
                 <span class="bg-clip-text text-transparent bg-linear-to-r from-blue-200 via-blue-400 to-blue-600">Mes personnages</span>
@@ -72,10 +76,10 @@
 
             <!-- Character Grid -->
             <div v-if="filteredUserCharacters.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <router-link
+                <Link
                     v-for="char in filteredUserCharacters"
                     :key="char.name + '-' + char.realmSlug"
-                    :to="`/character/${char.realmSlug}/${char.name.toLowerCase()}`"
+                    :href="`/character/${char.realmSlug}/${char.name.toLowerCase()}`"
                     class="bg-slate-800/40 border border-white/5 p-5 rounded-2xl hover:bg-slate-800/60 hover:border-blue-500/20 transition-all group text-left"
                 >
                     <div class="flex items-center gap-4">
@@ -106,7 +110,7 @@
                         <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5">{{ char.raceName }}</span>
                         <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5" :style="{ color: classColors[char.classId] || '#FFFFFF' }">{{ char.className }}</span>
                     </div>
-                </router-link>
+                </Link>
             </div>
 
             <!-- No search results -->
@@ -134,8 +138,17 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { Head, Link } from '@inertiajs/vue3';
 import { useCharacterStore } from '../stores/character';
 import { classColors } from '../utils/classColors';
 import LoadingSpinner from '../components/LoadingSpinner.vue';

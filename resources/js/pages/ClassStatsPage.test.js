@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/class-stats', props: {} }),
+    router: { visit: vi.fn(), on: vi.fn() },
+}));
+
 import { mountWithPlugins } from '../tests/helpers';
 import ClassStatsPage from './ClassStatsPage.vue';
 import { useCharacterStore } from '../stores/character';

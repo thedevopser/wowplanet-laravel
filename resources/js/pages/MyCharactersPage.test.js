@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@inertiajs/vue3', () => ({
+    Head: { name: 'Head', render: () => null },
+    Link: { name: 'Link', props: ['href'], template: '<a :href="href"><slot /></a>' },
+    usePage: () => ({ url: '/my-characters', props: {} }),
+    router: { visit: vi.fn(), on: vi.fn() },
+}));
+
 import { nextTick } from 'vue';
-import { RouterLinkStub } from '@vue/test-utils';
 import { mountWithPlugins } from '../tests/helpers';
 import MyCharactersPage from './MyCharactersPage.vue';
 import { useCharacterStore } from '../stores/character';
@@ -14,7 +21,6 @@ const userCharacters = [
 const mountPage = async (storeState = {}) => {
     const wrapper = await mountWithPlugins(MyCharactersPage, {
         initialState: { character: { userCharacters: [], loadingCharacters: false, ...storeState } },
-        stubs: { RouterLink: RouterLinkStub },
     });
     if (storeState.userCharacters) {
         const store = useCharacterStore();

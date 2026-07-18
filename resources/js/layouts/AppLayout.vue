@@ -22,6 +22,7 @@
 
         <TaskSidebarInertia v-if="store.isAuthenticated" />
         <SessionExpiredBanner />
+        <AuthRequiredBanner />
     </div>
 </template>
 
@@ -34,6 +35,7 @@ import AppHeaderInertia from '../components/inertia/AppHeaderInertia.vue';
 import AppFooterInertia from '../components/inertia/AppFooterInertia.vue';
 import TaskSidebarInertia from '../components/inertia/TaskSidebarInertia.vue';
 import SessionExpiredBanner from '../components/SessionExpiredBanner.vue';
+import AuthRequiredBanner from '../components/AuthRequiredBanner.vue';
 
 const page = usePage();
 const store = useCharacterStore();

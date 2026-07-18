@@ -2,9 +2,18 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import { showNavigationLoader } from './utils/navigationLoader';
 import HomePage from './pages/HomePage.vue';
-import MyCharactersPage from './pages/MyCharactersPage.vue';
-import ClassStatsPage from './pages/ClassStatsPage.vue';
-import AccountScorePage from './pages/AccountScorePage.vue';
+
+// Force un rechargement complet vers la route Inertia correspondante.
+function fullReload(to) {
+    window.location.href = to.fullPath;
+    return false;
+}
+
+// Route « pont » : la page est servie par Inertia, toute navigation client depuis
+// le SPA legacy force un rechargement complet (aucun composant legacy rendu).
+function inertiaBridge(name, path, title, beforeEnter = fullReload) {
+    return { path, name, meta: { title }, beforeEnter, component: { render: () => null } };
+}
 
 const routes = [
     {
@@ -13,37 +22,15 @@ const routes = [
         component: HomePage,
         meta: { title: 'WowPlanet - Suivi de progression World of Warcraft' },
     },
-    {
-        // La page personnage est désormais servie par Inertia (rendu serveur).
-        // Toute navigation client depuis le SPA legacy force un chargement complet.
-        path: '/character/:realm/:name',
-        name: 'character',
-        meta: { title: 'Personnage - WowPlanet' },
-        beforeEnter: (to) => {
-            showNavigationLoader();
-            window.location.href = to.fullPath;
-            return false;
-        },
-        component: { render: () => null },
-    },
-    {
-        path: '/my-characters',
-        name: 'my-characters',
-        component: MyCharactersPage,
-        meta: { title: 'Mes personnages - WowPlanet' },
-    },
-    {
-        path: '/class-stats',
-        name: 'class-stats',
-        component: ClassStatsPage,
-        meta: { title: 'Mes classes - WowPlanet' },
-    },
-    {
-        path: '/my-score',
-        name: 'my-score',
-        component: AccountScorePage,
-        meta: { title: 'Mon score compte - WowPlanet' },
-    },
+    // Seule la page personnage affiche l'overlay de synchronisation (récupération
+    // Blizzard potentiellement lente) ; les autres ponts se contentent du reload.
+    inertiaBridge('character', '/character/:realm/:name', 'Personnage - WowPlanet', (to) => {
+        showNavigationLoader();
+        return fullReload(to);
+    }),
+    inertiaBridge('my-characters', '/my-characters', 'Mes personnages - WowPlanet'),
+    inertiaBridge('class-stats', '/class-stats', 'Mes classes - WowPlanet'),
+    inertiaBridge('my-score', '/my-score', 'Mon score compte - WowPlanet'),
     {
         path: '/base-de-donnees',
         component: () => import('./components/DatabaseLayout.vue'),
@@ -58,41 +45,9 @@ const routes = [
             { path: 'professions/:profession?', name: 'database-professions', component: () => import('./pages/DatabaseProfessionsPage.vue'), meta: { title: 'Professions WoW | WowPlanet' } },
         ],
     },
-    {
-        // Pages statiques désormais servies par Inertia (rendu serveur).
-        // Toute navigation client depuis le SPA legacy force un chargement complet.
-        path: '/privacy',
-        name: 'privacy',
-        meta: { title: 'Politique de confidentialité - WowPlanet' },
-        beforeEnter: (to) => {
-            showNavigationLoader();
-            window.location.href = to.fullPath;
-            return false;
-        },
-        component: { render: () => null },
-    },
-    {
-        path: '/cgu',
-        name: 'cgu',
-        meta: { title: 'CGU - WowPlanet' },
-        beforeEnter: (to) => {
-            showNavigationLoader();
-            window.location.href = to.fullPath;
-            return false;
-        },
-        component: { render: () => null },
-    },
-    {
-        path: '/faq',
-        name: 'faq',
-        meta: { title: 'FAQ - WowPlanet' },
-        beforeEnter: (to) => {
-            showNavigationLoader();
-            window.location.href = to.fullPath;
-            return false;
-        },
-        component: { render: () => null },
-    },
+    inertiaBridge('privacy', '/privacy', 'Politique de confidentialité - WowPlanet'),
+    inertiaBridge('cgu', '/cgu', 'CGU - WowPlanet'),
+    inertiaBridge('faq', '/faq', 'FAQ - WowPlanet'),
     {
         path: '/admin',
         name: 'admin',
