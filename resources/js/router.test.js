@@ -53,9 +53,11 @@ describe('router', () => {
     it('afterEach updates document.title from route meta', async () => {
         document.title = '';
 
-        await router.push('/');
+        // Les routes « pont » (home, character, …) annulent la navigation vers Inertia ;
+        // on cible une route qui rend réellement un composant pour exercer afterEach.
+        await router.push('/une-page-inexistante');
         await router.isReady();
 
-        expect(document.title).toBe('WowPlanet - Suivi de progression World of Warcraft');
+        expect(document.title).toBe('Page introuvable - WowPlanet');
     });
 });

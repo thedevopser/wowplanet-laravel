@@ -5,7 +5,7 @@ declare(strict_types=1);
 use App\Application\Services\CharacterSeoService;
 use Inertia\Testing\AssertableInertia as Assert;
 
-test('spa returns home page', function (): void {
+test('home renders HomePage via inertia with meta', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */
     $exp = $mock->shouldReceive('getHomeMeta');
@@ -21,7 +21,14 @@ test('spa returns home page', function (): void {
         'jsonLd' => '{}',
     ]);
 
-    $this->get('/')->assertOk();
+    $this->get('/')
+        ->assertOk()
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('HomePage')
+            ->where('meta.title', 'WowPlanet')
+            ->where('auth.isAuthenticated', false)
+            ->where('auth.isAdmin', false)
+        );
 });
 
 test('sitemap returns xml', function (): void {

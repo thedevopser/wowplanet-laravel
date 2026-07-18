@@ -3,6 +3,23 @@
         data-testid="homepage-root"
         :class="['grid gap-4 sm:gap-6 py-6 sm:py-8', { 'pb-14': bannerVisible }]"
     >
+        <Head>
+            <title>{{ meta.title }}</title>
+            <meta name="description" :content="meta.description">
+            <link rel="canonical" :href="meta.canonicalUrl">
+            <meta property="og:type" :content="meta.ogType">
+            <meta property="og:title" :content="meta.ogTitle">
+            <meta property="og:description" :content="meta.ogDescription">
+            <meta property="og:image" :content="meta.ogImage">
+            <meta property="og:url" :content="meta.ogUrl">
+            <meta property="og:site_name" content="WowPlanet">
+            <meta property="og:locale" content="fr_FR">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" :content="meta.ogTitle">
+            <meta name="twitter:description" :content="meta.ogDescription">
+            <meta name="twitter:image" :content="meta.ogImage">
+        </Head>
+
         <!-- Bento row 1 : Hero + CTA & Discord -->
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
 
@@ -30,15 +47,15 @@
 
                 <!-- Battle.net CTA -->
                 <div class="card-glass rounded-2xl border p-6 sm:p-8 flex flex-col justify-center items-center text-center gap-4 flex-1">
-                    <template v-if="store.isAuthenticated">
+                    <template v-if="isAuthenticated">
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Bienvenue !</h3>
                         <p class="text-slate-400 text-sm sm:text-base">Vous êtes connecté avec Battle.net. Accédez directement à tous vos personnages.</p>
-                        <router-link
-                            to="/my-characters"
+                        <Link
+                            href="/my-characters"
                             class="btn-gradient text-white font-semibold px-6 py-2.5 rounded-lg text-sm shadow-lg shadow-blue-500/20 w-full"
                         >
                             Voir mes personnages
-                        </router-link>
+                        </Link>
                     </template>
                     <template v-else>
                         <h3 class="text-xl sm:text-2xl font-bold text-white">Commencer</h3>
@@ -109,48 +126,48 @@
                 <div class="flex-1 h-px bg-slate-700"></div>
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <router-link to="/base-de-donnees/montures" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                <Link href="/base-de-donnees/montures" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
                     <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="mounts" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Montures</div>
                         <div class="text-xs text-slate-500">Par catégorie et source</div>
                     </div>
-                </router-link>
-                <router-link to="/base-de-donnees/hauts-faits" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                </Link>
+                <Link href="/base-de-donnees/hauts-faits" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-amber-500/30 transition-all">
                     <div class="w-10 h-10 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="achievements" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-amber-400 transition-colors">Hauts-faits</div>
                         <div class="text-xs text-slate-500">Par extension et catégorie</div>
                     </div>
-                </router-link>
-                <router-link to="/base-de-donnees/quetes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+                </Link>
+                <Link href="/base-de-donnees/quetes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
                     <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="quests" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Quêtes</div>
                         <div class="text-xs text-slate-500">Par extension et zone</div>
                     </div>
-                </router-link>
-                <router-link to="/base-de-donnees/mascottes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
+                </Link>
+                <Link href="/base-de-donnees/mascottes" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-blue-500/30 transition-all">
                     <div class="w-10 h-10 bg-blue-600/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="pets" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-blue-400 transition-colors">Mascottes</div>
                         <div class="text-xs text-slate-500">Par catégorie et source</div>
                     </div>
-                </router-link>
-                <router-link to="/base-de-donnees/decorations" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-violet-500/30 transition-all">
+                </Link>
+                <Link href="/base-de-donnees/decorations" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-violet-500/30 transition-all">
                     <div class="w-10 h-10 bg-violet-600/10 border border-violet-500/20 rounded-lg flex items-center justify-center text-violet-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="decor" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-violet-400 transition-colors">Décorations</div>
                         <div class="text-xs text-slate-500">Par catégorie et source</div>
                     </div>
-                </router-link>
-                <router-link to="/base-de-donnees/professions" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 transition-all">
+                </Link>
+                <Link href="/base-de-donnees/professions" class="flex items-center gap-4 p-4 rounded-xl bg-slate-800/40 border border-white/5 group hover:border-emerald-500/30 transition-all">
                     <div class="w-10 h-10 bg-emerald-600/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-110 transition-transform p-2"><CategoryIcon category="professions" /></div>
                     <div>
                         <div class="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">Professions</div>
                         <div class="text-xs text-slate-500">Recettes par extension</div>
                     </div>
-                </router-link>
+                </Link>
             </div>
         </div>
 
@@ -164,12 +181,27 @@
     </div>
 </template>
 
+<script>
+import AppLayout from '../layouts/AppLayout.vue';
+
+export default {
+    layout: AppLayout,
+};
+</script>
+
 <script setup>
-import { ref } from 'vue';
-import { useCharacterStore } from '../stores/character';
+import { ref, computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import CategoryIcon from '../components/CategoryIcon.vue';
 import DiscordBanner from '../components/DiscordBanner.vue';
 
-const store = useCharacterStore();
-const bannerVisible = ref(!localStorage.getItem('discord_banner_dismissed'));
+defineProps({
+    meta: { type: Object, required: true },
+});
+
+const page = usePage();
+const isAuthenticated = computed(() => page.props.auth?.isAuthenticated ?? false);
+const bannerVisible = ref(
+    typeof localStorage !== 'undefined' && !localStorage.getItem('discord_banner_dismissed'),
+);
 </script>

@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import { showNavigationLoader } from './utils/navigationLoader';
-import HomePage from './pages/HomePage.vue';
 
 // Force un rechargement complet vers la route Inertia correspondante.
 function fullReload(to) {
@@ -16,12 +15,7 @@ function inertiaBridge(name, path, title, beforeEnter = fullReload) {
 }
 
 const routes = [
-    {
-        path: '/',
-        name: 'home',
-        component: HomePage,
-        meta: { title: 'WowPlanet - Suivi de progression World of Warcraft' },
-    },
+    inertiaBridge('home', '/', 'WowPlanet - Suivi de progression World of Warcraft'),
     // Seule la page personnage affiche l'overlay de synchronisation (récupération
     // Blizzard potentiellement lente) ; les autres ponts se contentent du reload.
     inertiaBridge('character', '/character/:realm/:name', 'Personnage - WowPlanet', (to) => {

@@ -18,6 +18,13 @@ class SeoController extends Controller
         private readonly SeoContentRenderer $seoContentRenderer,
     ) {}
 
+    public function home(): InertiaResponse
+    {
+        return Inertia::render('HomePage', [
+            'meta' => $this->characterSeoService->getHomeMeta(),
+        ]);
+    }
+
     public function spa(): View
     {
         $seo = $this->characterSeoService->getHomeMeta();
