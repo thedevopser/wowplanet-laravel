@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\CharacterSeoService;
-use App\Application\Services\SeoContentRenderer;
-use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class SeoController extends Controller
 {
     public function __construct(
         private readonly CharacterSeoService $characterSeoService,
-        private readonly SeoContentRenderer $seoContentRenderer,
     ) {}
 
     public function home(): InertiaResponse
@@ -25,12 +24,14 @@ class SeoController extends Controller
         ]);
     }
 
-    public function spa(): View
+    /**
+     * Page 404 Inertia (catch-all des URLs inconnues). Renvoie le statut HTTP 404.
+     */
+    public function notFound(Request $request): SymfonyResponse
     {
-        $seo = $this->characterSeoService->getHomeMeta();
-        $seo['serverHtml'] = $this->seoContentRenderer->renderHome($this->appUrl());
-
-        return view('welcome', ['seo' => $seo]);
+        return Inertia::render('NotFoundPage')
+            ->toResponse($request)
+            ->setStatusCode(404);
     }
 
     public function faqPage(): InertiaResponse
@@ -106,13 +107,5 @@ class SeoController extends Controller
         return response($content, 200, [
             'Content-Type' => 'text/plain',
         ]);
-    }
-
-    private function appUrl(): string
-    {
-        /** @var string $configUrl */
-        $configUrl = config('app.url', '');
-
-        return rtrim($configUrl, '/');
     }
 }

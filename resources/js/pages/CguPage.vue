@@ -93,7 +93,7 @@
             <h2 class="text-lg sm:text-xl font-semibold text-white">6. Donn&eacute;es personnelles</h2>
             <p class="text-sm text-slate-300 leading-relaxed">
                 Le traitement des donn&eacute;es personnelles est d&eacute;crit dans notre
-                <router-link to="/privacy" class="text-blue-400 hover:underline">Politique de confidentialit&eacute;</router-link>.
+                <Link href="/privacy" class="text-blue-400 hover:underline">Politique de confidentialit&eacute;</Link>.
                 En utilisant le site, vous reconnaissez avoir pris connaissance de cette politique.
             </p>
         </section>
@@ -147,7 +147,7 @@ export default {
 </script>
 
 <script setup>
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 
 defineProps({
     meta: { type: Object, required: true },

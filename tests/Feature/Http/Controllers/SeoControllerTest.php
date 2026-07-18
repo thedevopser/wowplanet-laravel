@@ -31,6 +31,14 @@ test('home renders HomePage via inertia with meta', function (): void {
         );
 });
 
+test('unknown url renders NotFoundPage with 404 status', function (): void {
+    $this->get('/une-page-qui-nexiste-pas')
+        ->assertStatus(404)
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('NotFoundPage')
+        );
+});
+
 test('sitemap returns xml', function (): void {
     $mock = $this->mock(CharacterSeoService::class);
     /** @var \Mockery\Expectation $exp */

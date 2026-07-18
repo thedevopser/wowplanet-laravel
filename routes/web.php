@@ -46,4 +46,5 @@ if (app()->isLocal()) {
     Route::get('/docs/{path}', [DocsController::class, 'file'])->where('path', '.+\.md');
 }
 
-Route::get('/{any?}', [SeoController::class, 'spa'])->where('any', '^(?!api/|docs/).*$');
+// Catch-all : toute URL inconnue (hors api/ et docs/) rend la page 404 Inertia.
+Route::get('/{any}', [SeoController::class, 'notFound'])->where('any', '^(?!api/|docs/).*$');

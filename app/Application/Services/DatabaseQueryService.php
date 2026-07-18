@@ -17,8 +17,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Requêtes de la base de données WoW (montures, hauts-faits, quêtes, mascottes,
- * décorations, garde-robe, professions). Source unique consommée à la fois par
- * les pages Inertia (DatabaseController) et l'API JSON legacy (DatabaseApiController).
+ * décorations, garde-robe, professions). Source des données des pages Inertia
+ * servies par DatabaseController.
  */
 class DatabaseQueryService
 {
