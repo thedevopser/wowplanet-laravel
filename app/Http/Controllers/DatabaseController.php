@@ -8,6 +8,7 @@ use App\Application\Services\DatabaseQueryService;
 use App\Application\Services\DatabaseSeoService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
@@ -172,20 +173,31 @@ class DatabaseController extends Controller
      * database. Closures lazy : non évaluées lors des rechargements partiels Inertia
      * (pagination/recherche) qui ne les incluent pas dans `only`.
      *
+     * Ces données ne changent qu'à l'import admin → mises en cache (1 h) pour éviter
+     * de recalculer ~15 requêtes d'agrégation à chaque navigation dans la base.
+     *
      * @return array<string, \Closure>
      */
     private function sidebarProps(): array
     {
         return [
-            'counts' => $this->databaseQueryService->counts(...),
-            'subCategories' => function (): array {
-                $map = [];
-                foreach (self::SIDEBAR_SECTIONS as $section) {
-                    $map[$section] = $this->databaseQueryService->subcategories($section) ?? [];
-                }
+            'counts' => fn (): array => Cache::remember(
+                'database_sidebar_counts',
+                3600,
+                fn (): array => $this->databaseQueryService->counts(),
+            ),
+            'subCategories' => fn (): array => Cache::remember(
+                'database_sidebar_subcategories',
+                3600,
+                function (): array {
+                    $map = [];
+                    foreach (self::SIDEBAR_SECTIONS as $section) {
+                        $map[$section] = $this->databaseQueryService->subcategories($section) ?? [];
+                    }
 
-                return $map;
-            },
+                    return $map;
+                },
+            ),
         ];
     }
 

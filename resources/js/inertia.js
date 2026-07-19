@@ -1,6 +1,9 @@
 import './bootstrap';
 
-window.whTooltips = { colorLinks: true, iconizeLinks: true, renameLinks: false, locale: 'fr' };
+// iconizeLinks: false — on garde nos propres icônes (CollectionIcon, équipement…)
+// et les tooltips au survol, sans la petite icône inline injectée par Wowhead
+// (doublon sur les collections, trop petite ailleurs).
+window.whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false, locale: 'fr' };
 
 import { createApp, h, nextTick } from 'vue';
 import { createInertiaApp, router } from '@inertiajs/vue3';

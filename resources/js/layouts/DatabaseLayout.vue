@@ -110,7 +110,24 @@
             </nav>
 
             <!-- Page content -->
-            <div class="flex-1 overflow-y-auto">
+            <div class="flex-1 overflow-y-auto relative">
+                <!-- Retour visuel pendant une navigation entre sections (data potentiellement lourde) -->
+                <Transition
+                    enter-active-class="transition-opacity duration-150"
+                    leave-active-class="transition-opacity duration-150"
+                    enter-from-class="opacity-0"
+                    leave-to-class="opacity-0"
+                >
+                    <div v-if="navigating" class="absolute inset-0 z-20 flex items-start justify-center pt-20 sm:pt-28 bg-slate-950/40 backdrop-blur-[1px]">
+                        <div class="flex items-center gap-3 rounded-xl bg-slate-900/90 border border-white/10 px-4 py-2.5 shadow-lg">
+                            <svg class="w-4 h-4 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span class="text-sm text-slate-300">Chargement…</span>
+                        </div>
+                    </div>
+                </Transition>
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <slot />
                 </div>
@@ -120,7 +137,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import CategoryIcon from '../components/CategoryIcon.vue';
 
@@ -129,6 +146,25 @@ const page = usePage();
 const currentPath = computed(() => page.url.split('?')[0]);
 const counts = computed(() => page.props.counts ?? {});
 const subCategories = computed(() => page.props.subCategories ?? {});
+
+// Loader affiché pendant une navigation PLEINE entre sections de la base (data
+// potentiellement volumineuse). On l'ignore pour les rechargements partiels
+// (pagination/recherche, `only` non vide) qui sont rapides et gardent la barre de progression.
+const navigating = ref(false);
+const stopStart = router.on('start', (event) => {
+    const visit = event.detail.visit;
+    const isPartial = Array.isArray(visit.only) && visit.only.length > 0;
+    if (visit.url.pathname.startsWith('/base-de-donnees') && ! isPartial) {
+        navigating.value = true;
+    }
+});
+const stopFinish = router.on('finish', () => {
+    navigating.value = false;
+});
+onBeforeUnmount(() => {
+    stopStart();
+    stopFinish();
+});
 
 // État d'ouverture de l'accordéon, local au layout persistant (conservé entre visites Inertia).
 const expanded = ref({});
