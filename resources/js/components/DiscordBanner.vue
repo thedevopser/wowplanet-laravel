@@ -47,13 +47,19 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
 const STORAGE_KEY = 'discord_banner_dismissed';
 
 const emit = defineEmits(['dismissed']);
 
-const visible = ref(!localStorage.getItem(STORAGE_KEY));
+// Masquée au rendu SSR (localStorage indisponible côté serveur) ; révélée après
+// montage côté client si non déjà fermée. La <Transition> anime l'apparition.
+const visible = ref(false);
+
+onMounted(() => {
+    visible.value = ! localStorage.getItem(STORAGE_KEY);
+});
 
 const dismiss = () => {
     localStorage.setItem(STORAGE_KEY, '1');

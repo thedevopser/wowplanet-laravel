@@ -190,7 +190,7 @@ export default {
 </script>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import CategoryIcon from '../components/CategoryIcon.vue';
 import DiscordBanner from '../components/DiscordBanner.vue';
@@ -201,7 +201,13 @@ defineProps({
 
 const page = usePage();
 const isAuthenticated = computed(() => page.props.auth?.isAuthenticated ?? false);
-const bannerVisible = ref(
-    typeof localStorage !== 'undefined' && !localStorage.getItem('discord_banner_dismissed'),
-);
+
+// Piloté après montage (localStorage indisponible au SSR) pour rester cohérent
+// avec DiscordBanner et éviter un hydration mismatch sur la classe pb-14.
+const bannerVisible = ref(false);
+
+onMounted(() => {
+    bannerVisible.value = typeof localStorage !== 'undefined'
+        && ! localStorage.getItem('discord_banner_dismissed');
+});
 </script>
