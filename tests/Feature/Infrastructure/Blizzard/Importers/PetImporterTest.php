@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\PetImporter;
 use App\Models\WowPet;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
+    Sleep::fake();
     setUpBlizzardTempStorage($this);
 });
 
@@ -13,7 +16,21 @@ afterEach(function (): void {
     tearDownBlizzardTempStorage($this);
 });
 
-test('it imports pets from SA JSON and spell names', function (): void {
+/**
+ * Mocke l'index API des mascottes (source des noms français, id = species id).
+ *
+ * @param  list<array{id: int, name: string}>  $pets
+ */
+function mockPetIndex(\Mockery\MockInterface $mock, array $pets): void
+{
+    $mock->shouldReceive('get')
+        ->with('data/wow/pet/index', \Mockery::any())
+        ->andReturn([
+            'pets' => array_map(fn (array $pet): array => ['id' => $pet['id'], 'name' => $pet['name']], $pets),
+        ]);
+}
+
+test('it imports pets from SA JSON with French names from the API', function (): void {
     writePetsJson([
         [
             'name' => 'Classic',
@@ -28,18 +45,15 @@ test('it imports pets from SA JSON and spell names', function (): void {
             ],
         ],
     ]);
-    writeBattlePetSpeciesCsv([
-        [300, 9876],
-        [301, 9877],
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockPetIndex($client, [
+        ['id' => 300, 'name' => 'Dragonnet'],
+        ['id' => 301, 'name' => 'Petit chat'],
     ]);
 
-    $spellNameMap = [
-        9876 => 'Dragonnet',
-        9877 => 'Petit chat',
-    ];
-
-    $petImporter = resolve(PetImporter::class);
-    $petImporter->import($spellNameMap);
+    resolve(PetImporter::class)->import();
 
     expect(WowPet::query()->count())->toBe(2);
     expect(WowPet::query()->find(300)->name_fr)->toBe('Dragonnet');
@@ -51,7 +65,7 @@ test('it imports pets from SA JSON and spell names', function (): void {
     expect(WowPet::query()->find(301)->name_fr)->toBe('Petit chat');
 });
 
-test('it cleans French spell name prefixes', function (): void {
+test('it uses fallback name when the API has no French name', function (): void {
     writePetsJson([
         [
             'name' => 'Classic',
@@ -59,37 +73,58 @@ test('it cleans French spell name prefixes', function (): void {
                 [
                     'name' => 'Drop',
                     'items' => [
-                        ['ID' => 400, 'name' => 'PrefixedPet', 'icon' => 'pet_prefixed', 'spellid' => 5001, 'creatureId' => 333, 'itemId' => null, 'faction' => null, 'quality' => 3],
-                        ['ID' => 401, 'name' => 'InvokerPet', 'icon' => 'pet_invoker', 'spellid' => 5002, 'creatureId' => 444, 'itemId' => null, 'faction' => null, 'quality' => 3],
+                        ['ID' => 400, 'name' => 'UnknownPet', 'icon' => 'pet_x', 'spellid' => 5001, 'creatureId' => 333, 'itemId' => null, 'faction' => null, 'quality' => 3],
                     ],
                 ],
             ],
         ],
     ]);
-    writeBattlePetSpeciesCsv([
-        [400, 5001],
-        [401, 5002],
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockPetIndex($client, []);
+
+    resolve(PetImporter::class)->import();
+
+    expect(WowPet::query()->count())->toBe(1);
+    expect(WowPet::query()->find(400)->name_fr)->toStartWith('[EN]');
+});
+
+test('it still imports pets when the pet index API call fails', function (): void {
+    writePetsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Drop',
+                    'items' => [
+                        ['ID' => 500, 'name' => 'ApiDownPet', 'icon' => 'pet_y', 'spellid' => 5002, 'creatureId' => 444, 'itemId' => null, 'faction' => null, 'quality' => 3],
+                    ],
+                ],
+            ],
+        ],
     ]);
 
-    $spellNameMap = [
-        5001 => 'Invocation : MonPet',
-        5002 => 'Invoquer Petit chat',
-    ];
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('get')
+        ->with('data/wow/pet/index', \Mockery::any())
+        ->andThrow(new \Exception('API error: 500 Internal Server Error'));
 
-    $petImporter = resolve(PetImporter::class);
-    $petImporter->import($spellNameMap);
+    resolve(PetImporter::class)->import();
 
-    expect(WowPet::query()->count())->toBe(2);
-    expect(WowPet::query()->find(400)->name_fr)->toBe('MonPet');
-    expect(WowPet::query()->find(401)->name_fr)->toBe('Petit chat');
+    expect(WowPet::query()->count())->toBe(1)
+        ->and(WowPet::query()->find(500)->name_fr)->toStartWith('[EN]');
 });
 
 test('it returns early when SA JSON is empty', function (): void {
     writePetsJson([]);
-    writeBattlePetSpeciesCsv([]);
 
-    $petImporter = resolve(PetImporter::class);
-    $petImporter->import([]);
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldNotReceive('get');
+
+    resolve(PetImporter::class)->import();
 
     expect(WowPet::query()->count())->toBe(0);
 });
@@ -100,14 +135,4 @@ function writePetsJson(array $categories): void
 {
     $json = json_encode($categories, JSON_THROW_ON_ERROR);
     file_put_contents(storage_path('app/blizzard/pets.json'), $json);
-}
-
-function writeBattlePetSpeciesCsv(array $rows): void
-{
-    $lines = ['Description_lang,SourceText_lang,ID,CreatureID,SummonSpellID,IconFileDataID'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf(',.,"%d","0","%d",0', $row[0], $row[1]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/battle_pet_species.csv'), implode("\n", $lines));
 }

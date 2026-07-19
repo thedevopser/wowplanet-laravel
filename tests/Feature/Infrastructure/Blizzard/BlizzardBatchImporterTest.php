@@ -179,9 +179,9 @@ test('importAchievements creates achievements from SimpleArmory data', function 
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
-        [10, 'Bienvenue !'],
-        [11, 'Niveau 10'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
+        10 => 'Bienvenue !',
+        11 => 'Niveau 10',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -226,9 +226,9 @@ test('importAchievements assigns expansion from category name', function (): voi
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
-        [20, 'Quêtes de Khaz Algar'],
-        [21, 'Quêtes de Zandalar'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
+        20 => 'Quêtes de Khaz Algar',
+        21 => 'Quêtes de Zandalar',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -258,9 +258,9 @@ test('importAchievements skips notReleased items', function (): void {
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', [
-        [10, 'Achievement actif'],
-        [11, 'Achievement futur'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
+        10 => 'Achievement actif',
+        11 => 'Achievement futur',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -296,7 +296,7 @@ test('importAchievements uses English fallback when French name missing', functi
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('achievement.csv', 'ID', 'Title_lang', []);
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', []);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
     $blizzardBatchImporter->importAchievements();
@@ -322,9 +322,9 @@ test('importMounts creates mounts from SimpleArmory data', function (): void {
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('mount.csv', 'ID', 'Name_lang', [
-        [1, 'Loup noir'],
-        [2, 'Destrier squelette'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'mount/index', 'mounts', [
+        1 => 'Loup noir',
+        2 => 'Destrier squelette',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -341,7 +341,7 @@ test('importMounts creates mounts from SimpleArmory data', function (): void {
 
 // ─── Pet Import ─────────────────────────────────────────────
 
-test('importPets creates pets from SimpleArmory data with spell name map', function (): void {
+test('importPets creates pets from SimpleArmory data with API French names', function (): void {
     bbiWriteCollectionJson('pets.json', [
         [
             'name' => 'Classic',
@@ -357,19 +357,13 @@ test('importPets creates pets from SimpleArmory data with spell name map', funct
         ],
     ]);
 
-    file_put_contents(storage_path('app/blizzard/battle_pet_species.csv'), implode("\n", [
-        'Description_lang,SourceText_lang,ID,CreatureID,SummonSpellID,IconFileDataID',
-        ',,"1","9999","50001",0',
-        ',,"2","8888","50002",0',
-    ]));
-
-    $spellNameMap = [
-        50001 => 'Invocation : Dragonnet',
-        50002 => 'Invoquer Petit chat',
-    ];
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'pet/index', 'pets', [
+        1 => 'Dragonnet',
+        2 => 'Petit chat',
+    ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importPets($spellNameMap);
+    $blizzardBatchImporter->importPets();
 
     expect(WowPet::query()->count())->toBe(2);
     expect(WowPet::query()->find(1)->name_fr)->toBe('Dragonnet');
@@ -397,9 +391,9 @@ test('importDecor creates decor items from SimpleArmory data', function (): void
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('housetdecor.csv', 'ID', 'Name_lang', [
-        [1, 'Foyer orné'],
-        [2, 'Tapis elfique'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
+        1 => 'Foyer orné',
+        2 => 'Tapis elfique',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -437,9 +431,9 @@ test('importDecor marks notObtainable items as inactive', function (): void {
             ],
         ],
     ]);
-    bbiWriteFrenchNamesCsv('housetdecor.csv', 'ID', 'Name_lang', [
-        [1, 'Foyer orné'],
-        [10, 'Décor caché'],
+    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
+        1 => 'Foyer orné',
+        10 => 'Décor caché',
     ]);
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
@@ -453,29 +447,17 @@ test('importDecor marks notObtainable items as inactive', function (): void {
 
 // ─── Profession Import ──────────────────────────────────────
 
-test('importProfessions creates professions and recipes from CSV', function (): void {
-    bbiWriteSkillLineCsv([
-        ['171', 'Alchimie', '11', '0'],
+test('importProfessions creates professions and recipes from the API', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockProfessionApi($mock, 171, 'Alchimie', 'PRIMARY', 2871, 'Alchimie de Khaz Algar', [
+        ['name' => 'Potions', 'recipes' => [
+            ['id' => 5001, 'name' => 'Potion de vie'],
+            ['id' => 5002, 'name' => 'Potion de mana'],
+        ]],
     ]);
-    // SkillLine now references root profession (171), not tier
-    bbiWriteSkillLineAbilityCsv([
-        ['5001', '171', '80001', '100'],
-        ['5002', '171', '80002', '200'],
-    ]);
-    // Category hierarchy: 300 (root, Khaz Algar) → 200 (collection) → 100 (Potions)
-    bbiWriteTradeSkillCategoryCsv([
-        ['300', 'Alchimie de Khaz Algar – Titre', '0'],
-        ['200', 'Recettes de Khaz Algar', '300'],
-        ['100', 'Potions', '200'],
-    ]);
-
-    $spellNameMap = [
-        80001 => 'Potion de vie',
-        80002 => 'Potion de mana',
-    ];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importProfessions($spellNameMap);
+    $blizzardBatchImporter->importProfessions();
 
     expect(WowProfession::query()->count())->toBe(1);
     expect(WowProfession::query()->find(171)->name_fr)->toBe('Alchimie');
@@ -485,25 +467,18 @@ test('importProfessions creates professions and recipes from CSV', function (): 
     expect(WowRecipe::query()->find(5001)->name_fr)->toBe('Potion de vie');
     expect(WowRecipe::query()->find(5001)->expansion_id)->toBe(10); // Khaz Algar = TWW
     expect(WowRecipe::query()->find(5001)->category_name)->toBe('Potions');
-    expect(WowRecipe::query()->find(5001)->wowhead_spell_id)->toBe(80001);
 });
 
 test('importProfessions assigns recipe factions from faction map', function (): void {
-    bbiWriteSkillLineCsv([
-        ['171', 'Alchimie', '11', '0'],
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockProfessionApi($mock, 171, 'Alchimie', 'PRIMARY', 2871, 'Alchimie classique', [
+        ['name' => 'Potions classiques', 'recipes' => [
+            ['id' => 5001, 'name' => 'Potion Alliance'],
+        ]],
     ]);
-    bbiWriteSkillLineAbilityCsv([
-        ['5001', '171', '80001', '100'],
-    ]);
-    bbiWriteTradeSkillCategoryCsv([
-        ['100', 'Potions classiques', '0'],
-    ]);
-
-    $spellNameMap = [80001 => 'Potion Alliance'];
-    $recipeFactionMap = [5001 => 'Alliance'];
 
     $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importProfessions($spellNameMap, $recipeFactionMap);
+    $blizzardBatchImporter->importProfessions([5001 => 'Alliance']);
 
     expect(WowRecipe::query()->find(5001)->faction)->toBe('Alliance');
 });
@@ -611,48 +586,46 @@ function bbiWriteCollectionJson(string $filename, array $categories): void
 }
 
 /**
- * Write a simple 2-column CSV for French names (ID → Name).
+ * Mocke un index API id → nom (mount/index, pet/index, achievement/index, decor/index).
  *
- * @param  list<array{0: int, 1: string}>  $rows
+ * @param  array<int, string>  $names  [id => nom FR]
  */
-function bbiWriteFrenchNamesCsv(string $filename, string $idHeader, string $nameHeader, array $rows): void
+function bbiMockNameIndex(\Mockery\MockInterface $mock, string $endpoint, string $listKey, array $names): void
 {
-    $lines = [$idHeader.','.$nameHeader];
-    foreach ($rows as $row) {
-        $name = str_replace('"', '""', (string) $row[1]);
-        $lines[] = sprintf('"%d","%s"', $row[0], $name);
+    $entries = [];
+    foreach ($names as $id => $name) {
+        $entries[] = ['id' => $id, 'name' => $name];
     }
 
-    file_put_contents(storage_path('app/blizzard/'.$filename), implode("\n", $lines));
+    $mock->shouldReceive('get')
+        ->with('data/wow/'.$endpoint, \Mockery::any())
+        ->andReturn([$listKey => $entries]);
 }
 
-function bbiWriteSkillLineCsv(array $rows): void
+/**
+ * Mocke le pipeline Profession API complet : index → détail → skill tier.
+ *
+ * @param  list<array{name: string, recipes: list<array{id: int, name: string}>}>  $categories
+ */
+function bbiMockProfessionApi(\Mockery\MockInterface $mock, int $professionId, string $name, string $type, int $tierId, string $tierName, array $categories): void
 {
-    $lines = ['ID,DisplayName_lang,CategoryID,ParentSkillLineID'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
-    }
+    $mock->shouldReceive('get')
+        ->with('data/wow/profession/index', \Mockery::any())
+        ->andReturn(['professions' => [['id' => $professionId, 'name' => $name]]]);
 
-    file_put_contents(storage_path('app/blizzard/skill_line.csv'), implode("\n", $lines));
-}
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/profession/'.$professionId, \Mockery::any())
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'id' => $professionId,
+            'name' => $name,
+            'type' => ['type' => $type, 'name' => 'x'],
+            'skill_tiers' => [['id' => $tierId, 'name' => $tierName]],
+        ]))));
 
-function bbiWriteSkillLineAbilityCsv(array $rows): void
-{
-    $lines = ['ID,SkillLine,Spell,TradeSkillCategoryID'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/skill_line_ability.csv'), implode("\n", $lines));
-}
-
-function bbiWriteTradeSkillCategoryCsv(array $rows): void
-{
-    $lines = ['ID,Name_lang,ParentTradeSkillCategoryID'];
-    foreach ($rows as $row) {
-        $parent = $row[2] ?? '0';
-        $lines[] = sprintf('"%s","%s","%s"', $row[0], $row[1], $parent);
-    }
-
-    file_put_contents(storage_path('app/blizzard/trade_skill_category.csv'), implode("\n", $lines));
+    $mock->shouldReceive('getAsync')
+        ->with(sprintf('data/wow/profession/%d/skill-tier/%d', $professionId, $tierId), \Mockery::any())
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'id' => $tierId,
+            'categories' => $categories,
+        ]))));
 }

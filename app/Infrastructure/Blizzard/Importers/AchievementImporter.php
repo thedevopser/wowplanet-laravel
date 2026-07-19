@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowAchievement;
-use Illuminate\Support\Facades\Log;
 
-final class AchievementImporter
+final readonly class AchievementImporter
 {
+    use ImportsFromBlizzardApi;
+
     private const FALLBACK_EXPANSION_ID = 0;
+
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+    ) {}
 
     public function import(): void
     {
@@ -46,13 +52,33 @@ final class AchievementImporter
     }
 
     /**
+     * Noms français depuis l'index Achievement de l'API officielle.
+     *
      * @return array<int, string>
      */
     private function loadFrenchNames(): array
     {
-        $this->info('Loading French names from achievement.csv...');
+        $this->info('Fetching achievement index from Blizzard API...');
 
-        $names = Db2CsvLoader::loadStringMapByHeaders('achievement.csv', 'ID', 'Title_lang');
+        $index = $this->fetchWithRetry('data/wow/achievement/index');
+        if ($index === null) {
+            $this->info('  WARNING: achievement index unavailable, falling back to English names.');
+
+            return [];
+        }
+
+        $names = [];
+
+        /** @var list<array{id?: int, name?: string}> $achievements */
+        $achievements = $index['achievements'] ?? [];
+        foreach ($achievements as $achievement) {
+            $id = (int) ($achievement['id'] ?? 0);
+            $name = trim($achievement['name'] ?? '');
+            if ($id > 0 && $name !== '') {
+                $names[$id] = $name;
+            }
+        }
+
         $this->info(sprintf('  Found %d French names.', count($names)));
 
         return $names;
@@ -113,14 +139,5 @@ final class AchievementImporter
         }
 
         $this->info(sprintf('Achievement import complete: %d items.', $count));
-    }
-
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
-
-        Log::info($message);
     }
 }

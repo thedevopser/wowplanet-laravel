@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowDecor;
-use Illuminate\Support\Facades\Log;
 
-final class DecorImporter
+final readonly class DecorImporter
 {
+    use ImportsFromBlizzardApi;
+
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+    ) {}
+
     public function import(): void
     {
         $saDecors = $this->loadSimpleArmoryData();
@@ -44,13 +50,33 @@ final class DecorImporter
     }
 
     /**
+     * Noms français depuis l'index Housing Decor de l'API officielle.
+     *
      * @return array<int, string>
      */
     private function loadFrenchNames(): array
     {
-        $this->info('Loading French names from housetdecor.csv...');
+        $this->info('Fetching decor index from Blizzard API...');
 
-        $names = Db2CsvLoader::loadStringMapByHeaders('housetdecor.csv', 'ID', 'Name_lang');
+        $index = $this->fetchWithRetry('data/wow/decor/index');
+        if ($index === null) {
+            $this->info('  WARNING: decor index unavailable, falling back to English names.');
+
+            return [];
+        }
+
+        $names = [];
+
+        /** @var list<array{id?: int, name?: string}> $decorItems */
+        $decorItems = $index['decor_items'] ?? [];
+        foreach ($decorItems as $decorItem) {
+            $id = (int) ($decorItem['id'] ?? 0);
+            $name = trim($decorItem['name'] ?? '');
+            if ($id > 0 && $name !== '') {
+                $names[$id] = $name;
+            }
+        }
+
         $this->info(sprintf('  Found %d French names.', count($names)));
 
         return $names;
@@ -118,14 +144,5 @@ final class DecorImporter
         }
 
         $this->info(sprintf('Decor import complete: %d items (%d active).', $count, count(array_filter($rows, fn (array $r): bool => $r['is_active']))));
-    }
-
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
-
-        Log::info($message);
     }
 }

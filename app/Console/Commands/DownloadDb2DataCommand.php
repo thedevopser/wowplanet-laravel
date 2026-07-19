@@ -28,29 +28,18 @@ class DownloadDb2DataCommand extends Command
     /**
      * DB2 tables to download: [wago_table_name => [local_filename, locale]].
      *
+     * Réduites aux mappings factions/extension (bitmasks FiltRaces, ContentTuning…)
+     * que l'API officielle n'expose pas. Toutes les données de contenu (noms FR,
+     * icônes, recettes, apparences…) viennent désormais de l'API Blizzard.
+     *
      * @var array<string, array{0: string, 1: string|null}>
      */
     private const TABLES = [
         'AreaTable' => ['area_table.csv', 'frFR'],
-        'Map' => ['map.csv', null],
         'ContentTuning' => ['content_tuning.csv', null],
         'QuestV2CliTask' => ['quest_v2_cli_task.csv', 'frFR'],
         'SkillLineAbility' => ['skill_line_ability.csv', null],
         'Faction' => ['faction.csv', 'frFR'],
-        'Mount' => ['mount.csv', 'frFR'],
-        'BattlePetSpecies' => ['battle_pet_species.csv', 'frFR'],
-        'Achievement' => ['achievement.csv', 'frFR'],
-        'HouseDecor' => ['housetdecor.csv', 'frFR'],
-        'QuestPOIBlob' => ['quest_poi_blob.csv', null],
-        'UiMap' => ['ui_map.csv', 'frFR'],
-        'SpellName' => ['spell_name.csv', 'frFR'],
-        'ItemAppearance' => ['item_appearance.csv', null],
-        'ItemModifiedAppearance' => ['item_modified_appearance.csv', null],
-        'ItemSparse' => ['item_sparse.csv', 'frFR'],
-        'ManifestInterfaceData' => ['manifest_interface_data.csv', null],
-        'SkillLine' => ['skill_line.csv', 'frFR'],
-        'TradeSkillCategory' => ['trade_skill_category.csv', 'frFR'],
-        'CurrencyTypes' => ['currency_types.csv', null],
     ];
 
     public function handle(): int
@@ -76,9 +65,11 @@ class DownloadDb2DataCommand extends Command
         $failed = 0;
 
         foreach ($tables as $wagoTable => [$localFilename, $locale]) {
-            $url = sprintf('https://wago.tools/db2/%s/csv', $wagoTable);
+            // product=wow épingle le dernier build LIVE : sans lui, wago sert son dernier
+            // build global, souvent un PTR dont la localisation frFR est incomplète.
+            $url = sprintf('https://wago.tools/db2/%s/csv?product=wow', $wagoTable);
             if ($locale !== null) {
-                $url .= '?locale='.$locale;
+                $url .= '&locale='.$locale;
             }
 
             $this->info(sprintf('  Downloading %s → %s...', $wagoTable, $localFilename));

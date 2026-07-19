@@ -27,16 +27,42 @@ test('command aborts when user declines confirmation', function (): void {
 });
 
 test('command truncates and reimports all with --force', function (): void {
+    $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
+
     $this->importerMock->shouldReceive('importAchievements')->once();
     $this->importerMock->shouldReceive('importQuests')->once();
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
     $this->importerMock->shouldReceive('importMounts')->once();
     $this->importerMock->shouldReceive('importPets')->once();
+    $this->importerMock->shouldReceive('importProfessions')->once();
+    $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
+    $this->importerMock->shouldReceive('importDecor')->once();
     $this->importerMock->shouldReceive('importAppearances')->once();
 
     $this->artisan('app:wow-data-refresh', ['--force' => true])
         ->assertSuccessful()
         ->expectsOutputToContain('Refresh Complete!');
+});
+
+test('command refreshes only professions with --type=professions --force', function (): void {
+    $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
+
+    $this->importerMock->shouldReceive('importProfessions')->once();
+    $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
+    $this->importerMock->shouldNotReceive('importQuests');
+    $this->importerMock->shouldNotReceive('importAchievements');
+
+    $this->artisan('app:wow-data-refresh', ['--type' => 'professions', '--force' => true])
+        ->assertSuccessful();
+});
+
+test('command refreshes only decor with --type=decor --force', function (): void {
+    $this->importerMock->shouldReceive('importDecor')->once();
+    $this->importerMock->shouldNotReceive('importQuests');
+    $this->importerMock->shouldNotReceive('importMounts');
+
+    $this->artisan('app:wow-data-refresh', ['--type' => 'decor', '--force' => true])
+        ->assertSuccessful();
 });
 
 test('command refreshes only quests with --type=quests --force', function (): void {

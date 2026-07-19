@@ -37,6 +37,31 @@ class BlizzardApiClient
         $this->namespace = 'profile-'.$this->region;
     }
 
+    /**
+     * Guzzle remplace toute query string de l'URI par l'option 'query' : les
+     * paramètres embarqués dans l'endpoint (ex. recherches bulk `?id=[a,b]`)
+     * doivent donc être extraits et fusionnés explicitement.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function mergeEndpointQuery(string $endpoint, array $query): array
+    {
+        $parts = explode('?', $endpoint, 2);
+        if (! isset($parts[1])) {
+            return [$endpoint, $query];
+        }
+
+        parse_str($parts[1], $parsed);
+
+        $embedded = [];
+        foreach ($parsed as $key => $value) {
+            $embedded[(string) $key] = $value;
+        }
+
+        return [$parts[0], array_merge($embedded, $query)];
+    }
+
     public function getAccessToken(): string
     {
         /** @var string $token */
@@ -68,6 +93,7 @@ class BlizzardApiClient
     {
         $accessToken = $this->getAccessToken();
 
+        [$endpoint, $query] = $this->mergeEndpointQuery($endpoint, $query);
         $namespace = is_string($query['namespace'] ?? null) ? $query['namespace'] : $this->namespace;
 
         $response = $this->client->get($endpoint, [
@@ -112,6 +138,8 @@ class BlizzardApiClient
     public function getAsync(string $endpoint, array $query = []): PromiseInterface
     {
         $accessToken = $this->getAccessToken();
+
+        [$endpoint, $query] = $this->mergeEndpointQuery($endpoint, $query);
         $namespace = is_string($query['namespace'] ?? null) ? $query['namespace'] : $this->namespace;
 
         return $this->client->getAsync($endpoint, [

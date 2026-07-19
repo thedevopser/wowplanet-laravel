@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\AchievementImporter;
 use App\Models\WowAchievement;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
+    Sleep::fake();
     setUpBlizzardTempStorage($this);
 });
 
@@ -13,7 +16,21 @@ afterEach(function (): void {
     tearDownBlizzardTempStorage($this);
 });
 
-test('it imports achievements from SA JSON and CSV', function (): void {
+/**
+ * Mocke l'index API des hauts faits (source des noms français).
+ *
+ * @param  list<array{id: int, name: string}>  $achievements
+ */
+function mockAchievementIndex(\Mockery\MockInterface $mock, array $achievements): void
+{
+    $mock->shouldReceive('get')
+        ->with('data/wow/achievement/index', \Mockery::any())
+        ->andReturn([
+            'achievements' => array_map(fn (array $achievement): array => ['id' => $achievement['id'], 'name' => $achievement['name']], $achievements),
+        ]);
+}
+
+test('it imports achievements from SA JSON with French names from the API', function (): void {
     writeAchievementsJson([
         [
             'name' => 'General',
@@ -33,13 +50,15 @@ test('it imports achievements from SA JSON and CSV', function (): void {
             ],
         ],
     ]);
-    writeAchievementCsv([
-        [200, 'Haut-fait Test'],
-        [201, 'Haut-fait Autre'],
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockAchievementIndex($client, [
+        ['id' => 200, 'name' => 'Haut-fait Test'],
+        ['id' => 201, 'name' => 'Haut-fait Autre'],
     ]);
 
-    $achievementImporter = resolve(AchievementImporter::class);
-    $achievementImporter->import();
+    resolve(AchievementImporter::class)->import();
 
     expect(WowAchievement::query()->count())->toBe(2);
     expect(WowAchievement::query()->find(200)->name_fr)->toBe('Haut-fait Test');
@@ -54,10 +73,12 @@ test('it imports achievements from SA JSON and CSV', function (): void {
 
 test('it returns early when SA JSON is empty', function (): void {
     writeAchievementsJson([]);
-    writeAchievementCsv([]);
 
-    $achievementImporter = resolve(AchievementImporter::class);
-    $achievementImporter->import();
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldNotReceive('get');
+
+    resolve(AchievementImporter::class)->import();
 
     expect(WowAchievement::query()->count())->toBe(0);
 });
@@ -81,15 +102,49 @@ test('it uses fallback expansion_id 0 when SA has null expansion', function (): 
             ],
         ],
     ]);
-    writeAchievementCsv([
-        [300, 'Haut-fait inconnu'],
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockAchievementIndex($client, [
+        ['id' => 300, 'name' => 'Haut-fait inconnu'],
     ]);
 
-    $achievementImporter = resolve(AchievementImporter::class);
-    $achievementImporter->import();
+    resolve(AchievementImporter::class)->import();
 
     expect(WowAchievement::query()->count())->toBe(1);
     expect(WowAchievement::query()->find(300)->expansion_id)->toBe(0);
+});
+
+test('it still imports achievements when the achievement index API call fails', function (): void {
+    writeAchievementsJson([
+        [
+            'name' => 'General',
+            'cats' => [
+                [
+                    'name' => 'Classic',
+                    'subcats' => [
+                        [
+                            'name' => 'Exploration',
+                            'items' => [
+                                ['id' => 400, 'icon' => 'achievement_x', 'points' => 10],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('get')
+        ->with('data/wow/achievement/index', \Mockery::any())
+        ->andThrow(new \Exception('API error: 500 Internal Server Error'));
+
+    resolve(AchievementImporter::class)->import();
+
+    expect(WowAchievement::query()->count())->toBe(1)
+        ->and(WowAchievement::query()->find(400)->name_fr)->toStartWith('[EN]');
 });
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -98,15 +153,4 @@ function writeAchievementsJson(array $supercats): void
 {
     $json = json_encode(['supercats' => $supercats], JSON_THROW_ON_ERROR);
     file_put_contents(storage_path('app/blizzard/achievements.json'), $json);
-}
-
-function writeAchievementCsv(array $rows): void
-{
-    $lines = ['ID,Title_lang'];
-    foreach ($rows as $row) {
-        $name = str_replace('"', '""', (string) $row[1]);
-        $lines[] = sprintf('"%d","%s"', $row[0], $name);
-    }
-
-    file_put_contents(storage_path('app/blizzard/achievement.csv'), implode("\n", $lines));
 }

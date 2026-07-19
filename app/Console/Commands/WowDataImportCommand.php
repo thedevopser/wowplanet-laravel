@@ -18,13 +18,13 @@ use Illuminate\Console\Command;
 
 class WowDataImportCommand extends Command
 {
-    protected $signature = 'app:wow-data-import {--type=all}';
+    protected $signature = 'app:wow-data-import {--type=all} {--full : Re-fetch every appearance instead of only the missing ones} {--limit= : Cap the number of appearance details fetched (smoke-test)}';
 
     protected $description = 'Import WoW data from SimpleArmory JSON + DB2 CSVs (and Blizzard API for quest mirrors)';
 
     public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
     {
-        ini_set('memory_limit', '512M');
+        ini_set('memory_limit', '1024M');
 
         /** @var string $type */
         $type = $this->option('type');
@@ -32,17 +32,14 @@ class WowDataImportCommand extends Command
         $this->info(sprintf('Starting WoW Data Import (type: %s)', $type));
         $this->newLine();
 
-        /** @var array<int, string>|null $spellNameMap */
-        $spellNameMap = null;
-
         if ($type === 'all' || $type === 'achievements') {
-            $this->info('Importing Achievements from SimpleArmory + DB2...');
+            $this->info('Importing Achievements from SimpleArmory + Blizzard API...');
             $blizzardBatchImporter->importAchievements();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info('Building area→expansion map from DB2 data...');
+            $this->info('Loading frozen area→expansion map...');
             $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
             $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
             $questFactionMap = $luaAddonParser->getQuestFactionMap();
@@ -61,40 +58,35 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'all' || $type === 'mounts') {
-            $this->info('Importing Mounts from SimpleArmory + DB2...');
+            $this->info('Importing Mounts from SimpleArmory + Blizzard API...');
             $blizzardBatchImporter->importMounts();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'pets') {
-            $spellNameMap ??= $luaAddonParser->getSpellNameMap();
-            $this->info(sprintf('Importing Pets from SimpleArmory + DB2 (spell names: %d)...', count($spellNameMap)));
-            $blizzardBatchImporter->importPets($spellNameMap);
+            $this->info('Importing Pets from SimpleArmory + Blizzard API...');
+            $blizzardBatchImporter->importPets();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'professions') {
-            $spellNameMap ??= $luaAddonParser->getSpellNameMap();
             $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
-            $this->info(sprintf(
-                'Importing Professions from DB2 CSV (spell names: %d, factions: %d)...',
-                count($spellNameMap),
-                count($recipeFactionMap),
-            ));
-            $blizzardBatchImporter->importProfessions($spellNameMap, $recipeFactionMap);
+            $this->info(sprintf('Importing Professions from Blizzard API (factions: %d)...', count($recipeFactionMap)));
+            $blizzardBatchImporter->importProfessions($recipeFactionMap);
             $blizzardBatchImporter->tagMirrorRecipeFactions();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'decor') {
-            $this->info('Importing Decor from SimpleArmory + DB2...');
+            $this->info('Importing Decor from SimpleArmory + Blizzard API...');
             $blizzardBatchImporter->importDecor();
             $this->newLine();
         }
 
         if ($type === 'all' || $type === 'appearances') {
-            $this->info('Importing Appearances (transmog) from DB2...');
-            $blizzardBatchImporter->importAppearances();
+            $this->info('Importing Appearances (transmog) from Blizzard API...');
+            $limit = $this->option('limit');
+            $blizzardBatchImporter->importAppearances((bool) $this->option('full'), is_numeric($limit) ? (int) $limit : null);
             $this->newLine();
         }
 

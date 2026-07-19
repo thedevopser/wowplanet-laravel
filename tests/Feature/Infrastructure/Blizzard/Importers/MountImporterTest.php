@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\MountImporter;
 use App\Models\WowMount;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
+    Sleep::fake();
     setUpBlizzardTempStorage($this);
 });
 
@@ -13,7 +16,21 @@ afterEach(function (): void {
     tearDownBlizzardTempStorage($this);
 });
 
-test('it imports mounts from SA JSON and CSV data', function (): void {
+/**
+ * Mocke l'index API des montures (source des noms français).
+ *
+ * @param  list<array{id: int, name: string}>  $mounts
+ */
+function mockMountIndex(\Mockery\MockInterface $mock, array $mounts): void
+{
+    $mock->shouldReceive('get')
+        ->with('data/wow/mount/index', \Mockery::any())
+        ->andReturn([
+            'mounts' => array_map(fn (array $mount): array => ['id' => $mount['id'], 'name' => $mount['name']], $mounts),
+        ]);
+}
+
+test('it imports mounts from SA JSON with French names from the API', function (): void {
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -28,13 +45,15 @@ test('it imports mounts from SA JSON and CSV data', function (): void {
             ],
         ],
     ]);
-    writeMountCsv([
-        [100, 'Monture Test'],
-        [101, 'Destrier squelette'],
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, [
+        ['id' => 100, 'name' => 'Monture Test'],
+        ['id' => 101, 'name' => 'Destrier squelette'],
     ]);
 
-    $mountImporter = resolve(MountImporter::class);
-    $mountImporter->import();
+    resolve(MountImporter::class)->import();
 
     expect(WowMount::query()->count())->toBe(2);
     expect(WowMount::query()->find(100)->name_fr)->toBe('Monture Test');
@@ -48,15 +67,17 @@ test('it imports mounts from SA JSON and CSV data', function (): void {
 
 test('it returns early when SA JSON is empty', function (): void {
     writeMountsJson([]);
-    writeMountCsv([]);
 
-    $mountImporter = resolve(MountImporter::class);
-    $mountImporter->import();
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldNotReceive('get');
+
+    resolve(MountImporter::class)->import();
 
     expect(WowMount::query()->count())->toBe(0);
 });
 
-test('it uses fallback name when CSV has no French name', function (): void {
+test('it uses fallback name when the API has no French name', function (): void {
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -70,13 +91,42 @@ test('it uses fallback name when CSV has no French name', function (): void {
             ],
         ],
     ]);
-    writeMountCsv([]);
 
-    $mountImporter = resolve(MountImporter::class);
-    $mountImporter->import();
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, []);
+
+    resolve(MountImporter::class)->import();
 
     expect(WowMount::query()->count())->toBe(1);
     expect(WowMount::query()->find(200)->name_fr)->toStartWith('[EN]');
+});
+
+test('it still imports mounts when the mount index API call fails', function (): void {
+    writeMountsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Drop',
+                    'items' => [
+                        ['ID' => 300, 'name' => 'ApiDownMount', 'icon' => 'ability_mount_x', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 3],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('get')
+        ->with('data/wow/mount/index', \Mockery::any())
+        ->andThrow(new \Exception('API error: 500 Internal Server Error'));
+
+    resolve(MountImporter::class)->import();
+
+    expect(WowMount::query()->count())->toBe(1)
+        ->and(WowMount::query()->find(300)->name_fr)->toStartWith('[EN]');
 });
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -85,15 +135,4 @@ function writeMountsJson(array $categories): void
 {
     $json = json_encode($categories, JSON_THROW_ON_ERROR);
     file_put_contents(storage_path('app/blizzard/mounts.json'), $json);
-}
-
-function writeMountCsv(array $rows): void
-{
-    $lines = ['ID,Name_lang'];
-    foreach ($rows as $row) {
-        $name = str_replace('"', '""', (string) $row[1]);
-        $lines[] = sprintf('"%d","%s"', $row[0], $name);
-    }
-
-    file_put_contents(storage_path('app/blizzard/mount.csv'), implode("\n", $lines));
 }
