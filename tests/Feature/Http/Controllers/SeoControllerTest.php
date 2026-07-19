@@ -95,3 +95,14 @@ test('privacy page renders PrivacyPage via inertia with unique meta', function (
             ->where('meta.jsonLd', null)
         );
 });
+
+test('addons page renders AddonsPage via inertia with unique meta', function (): void {
+    $this->get('/addons')
+        ->assertOk()
+        ->assertInertia(fn (Assert $assert): Assert => $assert
+            ->component('AddonsPage')
+            ->where('meta.title', 'Addons WoW | WowPlanet')
+            ->where('meta.canonicalUrl', rtrim((string) config('app.url'), '/').'/addons')
+            ->where('meta.jsonLd', null)
+        );
+});

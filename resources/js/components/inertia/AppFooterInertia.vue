@@ -8,6 +8,8 @@
                 </p>
 
                 <div class="flex items-center gap-3 text-[10px] sm:text-xs">
+                    <a href="/addons" class="text-slate-400 hover:text-blue-400 transition-colors">Addons</a>
+                    <span class="text-slate-700">|</span>
                     <a href="/privacy" class="text-slate-400 hover:text-blue-400 transition-colors">Confidentialit&eacute;</a>
                     <span class="text-slate-700">|</span>
                     <a href="/cgu" class="text-slate-400 hover:text-blue-400 transition-colors">CGU</a>
