@@ -39,6 +39,7 @@ Route::get('/base-de-donnees/professions/{profession?}', [DatabaseController::cl
 Route::get('/faq', [SeoController::class, 'faqPage']);
 Route::get('/cgu', [SeoController::class, 'cguPage']);
 Route::get('/privacy', [SeoController::class, 'privacyPage']);
+Route::get('/addons', [SeoController::class, 'addonsPage']);
 
 if (app()->isLocal()) {
     Route::get('/docs', [DocsController::class, 'index']);

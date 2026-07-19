@@ -74,6 +74,10 @@ class CharacterSeoService
                 'Politique de confidentialité | WowPlanet',
                 'Politique de confidentialité et gestion des données personnelles sur WowPlanet.',
             ],
+            'addons' => [
+                'Addons WoW | WowPlanet',
+                'Découvrez MapTidy et WhatTodo, les addons World of Warcraft développés par WowPlanet : filtrage des marqueurs de quêtes et liste de tâches à faire.',
+            ],
             default => [
                 'WowPlanet',
                 'WowPlanet - Suivi de progression World of Warcraft.',
@@ -250,6 +254,12 @@ class CharacterSeoService
         );
         $sitemap->add(
             Url::create($appUrl.'/faq')
+                ->setLastModificationDate($now)
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
+                ->setPriority(0.3),
+        );
+        $sitemap->add(
+            Url::create($appUrl.'/addons')
                 ->setLastModificationDate($now)
                 ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
                 ->setPriority(0.3),

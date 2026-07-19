@@ -55,6 +55,13 @@ class SeoController extends Controller
         ]);
     }
 
+    public function addonsPage(): InertiaResponse
+    {
+        return Inertia::render('AddonsPage', [
+            'meta' => $this->characterSeoService->getStaticPageMeta('addons'),
+        ]);
+    }
+
     public function sitemap(): Response
     {
         $xml = $this->characterSeoService->generateSitemapIndex();
