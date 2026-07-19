@@ -2,39 +2,85 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\ProfessionImporter;
 use App\Models\WowProfession;
 use App\Models\WowRecipe;
+use GuzzleHttp\Promise\Create;
+use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
-    setUpBlizzardTempStorage($this);
+    Sleep::fake();
 });
 
-afterEach(function (): void {
-    tearDownBlizzardTempStorage($this);
-});
+/**
+ * Mocke l'index des métiers.
+ *
+ * @param  list<array{id: int, name: string}>  $professions
+ */
+function mockProfessionIndex(\Mockery\MockInterface $mock, array $professions): void
+{
+    $mock->shouldReceive('get')
+        ->with('data/wow/profession/index', \Mockery::any())
+        ->andReturn([
+            'professions' => array_map(fn (array $profession): array => ['id' => $profession['id'], 'name' => $profession['name']], $professions),
+        ]);
+}
 
-test('it imports professions and recipes', function (): void {
-    writeProfSkillLineCsv([
-        ['164', 'Forge', '11', '0'],
+/**
+ * Mocke le détail d'un métier (nom, type, skill tiers).
+ *
+ * @param  list<array{id: int, name: string}>  $tiers
+ */
+function mockProfessionDetail(\Mockery\MockInterface $mock, int $id, string $name, string $type, array $tiers): void
+{
+    $mock->shouldReceive('getAsync')
+        ->with('data/wow/profession/'.$id, \Mockery::any())
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'id' => $id,
+            'name' => $name,
+            'type' => ['type' => $type, 'name' => 'x'],
+            'skill_tiers' => array_map(fn (array $tier): array => ['id' => $tier['id'], 'name' => $tier['name']], $tiers),
+        ]))));
+}
+
+/**
+ * Mocke le détail d'un skill tier (catégories → recettes).
+ *
+ * @param  list<array{name: string, recipes: list<array{id: int, name: string}>}>  $categories
+ */
+function mockSkillTierDetail(\Mockery\MockInterface $mock, int $professionId, int $tierId, array $categories): void
+{
+    $mock->shouldReceive('getAsync')
+        ->with(sprintf('data/wow/profession/%d/skill-tier/%d', $professionId, $tierId), \Mockery::any())
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'id' => $tierId,
+            'categories' => array_map(fn (array $category): array => [
+                'name' => $category['name'],
+                'recipes' => array_map(fn (array $recipe): array => ['id' => $recipe['id'], 'name' => $recipe['name']], $category['recipes']),
+            ], $categories),
+        ]))));
+}
+
+test('it imports professions and recipes from the API', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockProfessionIndex($client, [
+        ['id' => 164, 'name' => 'Forge'],
     ]);
-    writeProfSkillLineAbilityCsv([
-        ['5001', '164', '80001', '100'],
-        ['5002', '164', '80002', '100'],
+    mockProfessionDetail($client, 164, 'Forge', 'PRIMARY', [
+        ['id' => 2820, 'name' => 'Forge de Khaz Algar'],
     ]);
-    writeProfTradeSkillCategoryCsv([
-        ['300', 'Forge de Khaz Algar', '0'],
-        ['200', 'Recettes de Khaz Algar', '300'],
-        ['100', 'Armures', '200'],
+    mockSkillTierDetail($client, 164, 2820, [
+        ['name' => 'Armures', 'recipes' => [
+            ['id' => 5001, 'name' => 'Plastron en acier'],
+            ['id' => 5002, 'name' => 'Jambiere en fer'],
+        ]],
     ]);
 
-    $spellNameMap = [
-        80001 => 'Plastron en acier',
-        80002 => 'Jambiere en fer',
-    ];
-
-    $professionImporter = resolve(ProfessionImporter::class);
-    $professionImporter->import($spellNameMap);
+    resolve(ProfessionImporter::class)->import();
 
     expect(WowProfession::query()->count())->toBe(1);
     expect(WowProfession::query()->find(164)->name_fr)->toBe('Forge');
@@ -45,77 +91,116 @@ test('it imports professions and recipes', function (): void {
     expect(WowRecipe::query()->find(5001)->profession_id)->toBe(164);
     expect(WowRecipe::query()->find(5001)->expansion_id)->toBe(10); // Khaz Algar = TWW
     expect(WowRecipe::query()->find(5001)->category_name)->toBe('Armures');
-    expect(WowRecipe::query()->find(5001)->wowhead_spell_id)->toBe(80001);
+    expect(WowRecipe::query()->find(5001)->is_active)->toBeTrue();
     expect(WowRecipe::query()->find(5002)->name_fr)->toBe('Jambiere en fer');
 });
 
-test('it returns early when no professions found', function (): void {
-    writeProfSkillLineCsv([]);
-    writeProfSkillLineAbilityCsv([]);
-    writeProfTradeSkillCategoryCsv([]);
-
-    $professionImporter = resolve(ProfessionImporter::class);
-    $professionImporter->import([]);
-
-    expect(WowProfession::query()->count())->toBe(0);
-    expect(WowRecipe::query()->count())->toBe(0);
-});
-
-test('it tags mirror recipe factions', function (): void {
-    $profession = WowProfession::factory()->create(['id' => 171]);
-
+test('it preserves existing wowhead_spell_id values on re-import', function (): void {
+    WowProfession::factory()->create(['id' => 164, 'name_fr' => 'Forge', 'type' => 'primary']);
     WowRecipe::factory()->create([
         'id' => 5001,
-        'name_fr' => 'Potion speciale',
-        'profession_id' => 171,
-        'expansion_id' => 7,
+        'name_fr' => 'Ancien nom',
+        'profession_id' => 164,
+        'expansion_id' => 10,
+        'wowhead_spell_id' => 80001,
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockProfessionIndex($client, [['id' => 164, 'name' => 'Forge']]);
+    mockProfessionDetail($client, 164, 'Forge', 'PRIMARY', [['id' => 2820, 'name' => 'Forge de Khaz Algar']]);
+    mockSkillTierDetail($client, 164, 2820, [
+        ['name' => 'Armures', 'recipes' => [['id' => 5001, 'name' => 'Plastron en acier']]],
+    ]);
+
+    resolve(ProfessionImporter::class)->import();
+
+    $recipe = WowRecipe::query()->find(5001);
+    expect($recipe->name_fr)->toBe('Plastron en acier')
+        ->and($recipe->wowhead_spell_id)->toBe(80001);
+});
+
+test('it skips professions that are neither primary nor secondary', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockProfessionIndex($client, [
+        ['id' => 164, 'name' => 'Forge'],
+        ['id' => 2777, 'name' => 'Chiffrage des âmes'],
+    ]);
+    mockProfessionDetail($client, 164, 'Forge', 'PRIMARY', []);
+    mockProfessionDetail($client, 2777, 'Chiffrage des âmes', 'OTHER', []);
+
+    resolve(ProfessionImporter::class)->import();
+
+    expect(WowProfession::query()->count())->toBe(1)
+        ->and(WowProfession::query()->find(164))->not->toBeNull();
+});
+
+test('it assigns recipe factions from faction map', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockProfessionIndex($client, [['id' => 164, 'name' => 'Forge']]);
+    mockProfessionDetail($client, 164, 'Forge', 'PRIMARY', [['id' => 2820, 'name' => 'Forge de Khaz Algar']]);
+    mockSkillTierDetail($client, 164, 2820, [
+        ['name' => 'Armures', 'recipes' => [['id' => 5001, 'name' => 'Plastron allianceux']]],
+    ]);
+
+    resolve(ProfessionImporter::class)->import([5001 => 'Alliance']);
+
+    expect(WowRecipe::query()->find(5001)->faction)->toBe('Alliance');
+});
+
+test('it returns early when no primary or secondary profession is found', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockProfessionIndex($client, [['id' => 2777, 'name' => 'Chiffrage des âmes']]);
+    mockProfessionDetail($client, 2777, 'Chiffrage des âmes', 'OTHER', []);
+
+    resolve(ProfessionImporter::class)->import();
+
+    expect(WowProfession::query()->count())->toBe(0);
+});
+
+test('it returns early when the profession index fails', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    $client->shouldReceive('get')
+        ->with('data/wow/profession/index', \Mockery::any())
+        ->andThrow(new \Exception('API error: 500 Internal Server Error'));
+
+    resolve(ProfessionImporter::class)->import();
+
+    expect(WowProfession::query()->count())->toBe(0);
+});
+
+test('it tags mirror recipe pairs', function (): void {
+    WowProfession::factory()->create(['id' => 164]);
+    WowRecipe::factory()->create([
+        'id' => 9001,
+        'name_fr' => 'Tabard de faction',
+        'profession_id' => 164,
+        'expansion_id' => 5,
         'faction' => 'Alliance',
         'is_active' => true,
     ]);
     WowRecipe::factory()->create([
-        'id' => 5002,
-        'name_fr' => 'Potion speciale',
-        'profession_id' => 171,
-        'expansion_id' => 7,
+        'id' => 9002,
+        'name_fr' => 'Tabard de faction',
+        'profession_id' => 164,
+        'expansion_id' => 5,
         'faction' => null,
         'is_active' => true,
     ]);
 
-    $professionImporter = resolve(ProfessionImporter::class);
-    $professionImporter->tagMirrorRecipeFactions();
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
 
-    expect(WowRecipe::query()->find(5002)->faction)->toBe('Horde');
+    resolve(ProfessionImporter::class)->tagMirrorRecipeFactions();
+
+    expect(WowRecipe::query()->find(9002)->faction)->toBe('Horde');
 });
-
-// ─── Helpers ────────────────────────────────────────────────
-
-function writeProfSkillLineCsv(array $rows): void
-{
-    $lines = ['ID,DisplayName_lang,CategoryID,ParentSkillLineID'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/skill_line.csv'), implode("\n", $lines));
-}
-
-function writeProfSkillLineAbilityCsv(array $rows): void
-{
-    $lines = ['ID,SkillLine,Spell,TradeSkillCategoryID'];
-    foreach ($rows as $row) {
-        $lines[] = sprintf('"%s","%s","%s","%s"', $row[0], $row[1], $row[2], $row[3]);
-    }
-
-    file_put_contents(storage_path('app/blizzard/skill_line_ability.csv'), implode("\n", $lines));
-}
-
-function writeProfTradeSkillCategoryCsv(array $rows): void
-{
-    $lines = ['ID,Name_lang,ParentTradeSkillCategoryID'];
-    foreach ($rows as $row) {
-        $parent = $row[2] ?? '0';
-        $lines[] = sprintf('"%s","%s","%s"', $row[0], $row[1], $parent);
-    }
-
-    file_put_contents(storage_path('app/blizzard/trade_skill_category.csv'), implode("\n", $lines));
-}

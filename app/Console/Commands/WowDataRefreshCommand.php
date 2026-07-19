@@ -8,9 +8,12 @@ use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Models\WowAchievement;
 use App\Models\WowAppearance;
+use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
+use App\Models\WowProfession;
 use App\Models\WowQuest;
+use App\Models\WowRecipe;
 use Illuminate\Console\Command;
 
 class WowDataRefreshCommand extends Command
@@ -71,10 +74,26 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'pets') {
-            $spellNameMap = $luaAddonParser->getSpellNameMap();
             $this->info('Truncating wow_pets...');
             WowPet::query()->truncate();
-            $blizzardBatchImporter->importPets($spellNameMap);
+            $blizzardBatchImporter->importPets();
+            $this->newLine();
+        }
+
+        if ($type === 'all' || $type === 'professions') {
+            $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
+            $this->info('Truncating wow_professions and wow_recipes...');
+            WowRecipe::query()->truncate();
+            WowProfession::query()->truncate();
+            $blizzardBatchImporter->importProfessions($recipeFactionMap);
+            $blizzardBatchImporter->tagMirrorRecipeFactions();
+            $this->newLine();
+        }
+
+        if ($type === 'all' || $type === 'decor') {
+            $this->info('Truncating wow_decors...');
+            WowDecor::query()->truncate();
+            $blizzardBatchImporter->importDecor();
             $this->newLine();
         }
 
@@ -99,6 +118,9 @@ class WowDataRefreshCommand extends Command
                 ['Achievements', WowAchievement::query()->count()],
                 ['Mounts', WowMount::query()->count()],
                 ['Pets', WowPet::query()->count()],
+                ['Professions', WowProfession::query()->count()],
+                ['Recipes', WowRecipe::query()->count()],
+                ['Decor', WowDecor::query()->count()],
                 ['Appearances', WowAppearance::query()->count()],
             ]
         );

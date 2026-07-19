@@ -4,80 +4,229 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Parsers\Db2ProfessionMapper;
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Blizzard\ExpansionTierMatcher;
 use App\Models\WowProfession;
 use App\Models\WowRecipe;
-use Illuminate\Support\Facades\Log;
 
-final class ProfessionImporter
+/**
+ * Importe métiers et recettes depuis l'API officielle Blizzard (Profession API).
+ *
+ * Pipeline : index des métiers → détail par métier (type, skill tiers) → détail
+ * par tier (catégories → recettes, id = SkillLineAbility, noms FR). L'extension
+ * d'une recette vient du nom de son tier via ExpansionTierMatcher.
+ */
+final readonly class ProfessionImporter
 {
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
+    use ImportsFromBlizzardApi;
 
-        Log::info($message);
-    }
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+    ) {}
 
     /**
-     * @param  array<int, string>  $spellNameMap  [spellId => spellName]
      * @param  array<int, string>  $recipeFactionMap  [recipeId => 'Alliance'|'Horde']
      */
-    public function import(array $spellNameMap = [], array $recipeFactionMap = []): void
+    public function import(array $recipeFactionMap = []): void
     {
-        $this->info('Loading professions and recipes from DB2 CSV data...');
-        $this->info(sprintf('  Spell name map: %d entries', count($spellNameMap)));
+        $this->info('Fetching profession index from Blizzard API...');
         $this->info(sprintf('  Recipe faction map: %d entries', count($recipeFactionMap)));
 
-        $data = Db2ProfessionMapper::build($spellNameMap);
-        if ($data['professions'] === []) {
-            $this->info('ERROR: No professions found in skill_line.csv.');
+        $index = $this->fetchWithRetry('data/wow/profession/index');
+        if ($index === null) {
+            $this->info('ERROR: Could not fetch profession index.');
 
             return;
         }
 
-        $this->info(sprintf('Found %d professions, %d recipes.', count($data['professions']), count($data['recipes'])));
+        /** @var list<array{id?: int, name?: string}> $indexEntries */
+        $indexEntries = $index['professions'] ?? [];
 
-        // Save professions (bulk upsert)
+        $professions = $this->fetchProfessions($indexEntries);
+        if ($professions === []) {
+            $this->info('ERROR: No primary/secondary professions found.');
+
+            return;
+        }
+
+        $this->info(sprintf('Found %d professions. Fetching skill tiers...', count($professions)));
+
+        $recipes = $this->fetchRecipes($professions, $recipeFactionMap);
+        $this->info(sprintf('Built %d recipes.', count($recipes)));
+
+        $this->saveProfessions($professions);
+        $this->saveRecipes($recipes);
+
+        $this->info(sprintf('Profession import complete: %d professions, %d recipes.', count($professions), count($recipes)));
+    }
+
+    /**
+     * Détails des métiers, filtrés sur les types PRIMARY/SECONDARY (écarte les
+     * pseudo-métiers d'événements).
+     *
+     * @param  list<array{id?: int, name?: string}>  $indexEntries
+     * @return array<int, array{id: int, name_fr: string, type: string, tiers: list<array{id: int, name: string}>}>
+     */
+    private function fetchProfessions(array $indexEntries): array
+    {
+        $endpoints = [];
+        foreach ($indexEntries as $indexEntry) {
+            $id = (int) ($indexEntry['id'] ?? 0);
+            if ($id > 0) {
+                $endpoints[$id] = 'data/wow/profession/'.$id;
+            }
+        }
+
+        $details = $this->fetchBatchAsync($endpoints);
+
+        $professions = [];
+        foreach ($details as $id => $detail) {
+            if ($detail === null) {
+                continue;
+            }
+
+            /** @var array{type?: string} $type */
+            $type = $detail['type'] ?? [];
+            $typeValue = strtoupper($type['type'] ?? '');
+            if (! in_array($typeValue, ['PRIMARY', 'SECONDARY'], true)) {
+                continue;
+            }
+
+            $name = trim(is_string($detail['name'] ?? null) ? $detail['name'] : '');
+            if ($name === '') {
+                continue;
+            }
+
+            /** @var list<array{id?: int, name?: string}> $rawTiers */
+            $rawTiers = $detail['skill_tiers'] ?? [];
+            $tiers = [];
+            foreach ($rawTiers as $rawTier) {
+                $tierId = (int) ($rawTier['id'] ?? 0);
+                if ($tierId > 0) {
+                    $tiers[] = ['id' => $tierId, 'name' => trim($rawTier['name'] ?? '')];
+                }
+            }
+
+            $professions[(int) $id] = [
+                'id' => (int) $id,
+                'name_fr' => $name,
+                'type' => strtolower($typeValue),
+                'tiers' => $tiers,
+            ];
+        }
+
+        return $professions;
+    }
+
+    /**
+     * Recettes par tier : catégories → recettes, extension déduite du nom du tier.
+     *
+     * @param  array<int, array{id: int, name_fr: string, type: string, tiers: list<array{id: int, name: string}>}>  $professions
+     * @param  array<int, string>  $recipeFactionMap
+     * @return list<array{id: int, name_fr: string, profession_id: int, expansion_id: int, category_name: string, faction: string|null, is_active: bool}>
+     */
+    private function fetchRecipes(array $professions, array $recipeFactionMap): array
+    {
+        $endpoints = [];
+        $tierMeta = [];
+        foreach ($professions as $profession) {
+            foreach ($profession['tiers'] as $tier) {
+                $key = $profession['id'].'-'.$tier['id'];
+                $endpoints[$key] = sprintf('data/wow/profession/%d/skill-tier/%d', $profession['id'], $tier['id']);
+                $tierMeta[$key] = [
+                    'profession_id' => $profession['id'],
+                    'expansion_id' => ExpansionTierMatcher::match($tier['name']) ?? 0,
+                ];
+            }
+        }
+
+        $tierDetails = $this->fetchBatchAsync($endpoints);
+
+        $recipes = [];
+        foreach ($tierDetails as $key => $tierDetail) {
+            if ($tierDetail === null) {
+                continue;
+            }
+
+            if (! isset($tierMeta[$key])) {
+                continue;
+            }
+
+            $meta = $tierMeta[$key];
+
+            /** @var list<array{name?: string, recipes?: list<array{id?: int, name?: string}>}> $categories */
+            $categories = $tierDetail['categories'] ?? [];
+            foreach ($categories as $category) {
+                $categoryName = trim($category['name'] ?? '');
+                foreach ($category['recipes'] ?? [] as $recipe) {
+                    $recipeId = (int) ($recipe['id'] ?? 0);
+                    $recipeName = trim($recipe['name'] ?? '');
+                    if ($recipeId <= 0) {
+                        continue;
+                    }
+
+                    if ($recipeName === '') {
+                        continue;
+                    }
+
+                    $recipes[$recipeId] = [
+                        'id' => $recipeId,
+                        'name_fr' => $recipeName,
+                        'profession_id' => $meta['profession_id'],
+                        'expansion_id' => $meta['expansion_id'],
+                        'category_name' => $categoryName,
+                        'faction' => $recipeFactionMap[$recipeId] ?? null,
+                        'is_active' => true,
+                    ];
+                }
+            }
+        }
+
+        return array_values($recipes);
+    }
+
+    /**
+     * @param  array<int, array{id: int, name_fr: string, type: string, tiers: list<array{id: int, name: string}>}>  $professions
+     */
+    private function saveProfessions(array $professions): void
+    {
         WowProfession::query()->upsert(
-            array_map(fn (array $p): array => [
-                'id' => $p['id'],
-                'name_fr' => $p['name_fr'],
-                'type' => $p['type'],
+            array_map(fn (array $profession): array => [
+                'id' => $profession['id'],
+                'name_fr' => $profession['name_fr'],
+                'type' => $profession['type'],
                 'max_skill_levels' => json_encode([]),
                 'is_active' => true,
-            ], $data['professions']),
+            ], array_values($professions)),
             uniqueBy: ['id'],
             update: ['name_fr', 'type', 'is_active'],
         );
 
-        $this->info(sprintf('Saved %d professions.', count($data['professions'])));
+        $this->info(sprintf('Saved %d professions.', count($professions)));
+    }
 
-        // Save recipes (bulk upsert in chunks)
+    /**
+     * `wowhead_spell_id` n'est pas exposé par l'API : la colonne est préservée
+     * telle quelle (valeurs historiques), les nouvelles recettes restent sans lien
+     * direct (le front retombe sur une recherche Wowhead par nom).
+     *
+     * @param  list<array{id: int, name_fr: string, profession_id: int, expansion_id: int, category_name: string, faction: string|null, is_active: bool}>  $recipes
+     */
+    private function saveRecipes(array $recipes): void
+    {
         $count = 0;
-        foreach (array_chunk($data['recipes'], 500) as $chunk) {
+        foreach (array_chunk($recipes, 500) as $chunk) {
             WowRecipe::query()->upsert(
-                array_map(fn (array $r): array => [
-                    'id' => $r['id'],
-                    'name_fr' => $r['name_fr'],
-                    'profession_id' => $r['profession_id'],
-                    'expansion_id' => $r['expansion_id'],
-                    'category_name' => $r['category_name'],
-                    'faction' => $recipeFactionMap[$r['id']] ?? null,
-                    'wowhead_spell_id' => $r['wowhead_spell_id'],
-                    'is_active' => true,
-                ], $chunk),
+                $chunk,
                 uniqueBy: ['id'],
-                update: ['name_fr', 'profession_id', 'expansion_id', 'category_name', 'faction', 'wowhead_spell_id', 'is_active'],
+                update: ['name_fr', 'profession_id', 'expansion_id', 'category_name', 'faction', 'is_active'],
             );
             $count += count($chunk);
             if ($count % 2000 === 0) {
                 $this->info(sprintf('  Saved %d recipes...', $count));
             }
         }
-
-        $this->info(sprintf('Profession import complete: %d professions, %d recipes.', count($data['professions']), $count));
     }
 
     public function tagMirrorRecipeFactions(): void

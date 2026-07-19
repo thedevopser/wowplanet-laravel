@@ -31,75 +31,13 @@ test('normalizeApostrophes replaces smart quotes with regular quotes', function 
 
 // ─── buildAreaExpansionMap ───────────────────────────────────
 
-test('buildAreaExpansionMap resolves expansion from Map.ExpansionID for expansion continents', function (): void {
-    writeAreaTableCsv([
-        ['100', '530', '0', '0'],
-    ]);
-    writeMapCsv([
-        ['530', '1'],
-    ]);
-    writeContentTuningCsv([]);
-
+test('buildAreaExpansionMap returns the frozen repository map without touching CSVs', function (): void {
+    // aucun CSV écrit dans le storage temporaire : la map vient du dépôt
     $map = $this->parser->buildAreaExpansionMap();
 
-    expect($map[100])->toBe(1);
-});
-
-test('buildAreaExpansionMap uses ContentTuning for Classic continent zones', function (): void {
-    writeAreaTableCsv([
-        ['200', '0', '0', '50'],
-    ]);
-    writeMapCsv([
-        ['0', '0'],
-    ]);
-    writeContentTuningCsv([
-        ['50', '3'],
-    ]);
-
-    $map = $this->parser->buildAreaExpansionMap();
-
-    expect($map[200])->toBe(3);
-});
-
-test('buildAreaExpansionMap defaults Classic continent zone without ContentTuning to 0', function (): void {
-    writeAreaTableCsv([
-        ['300', '0', '0', '0'],
-    ]);
-    writeMapCsv([
-        ['0', '0'],
-    ]);
-    writeContentTuningCsv([]);
-
-    $map = $this->parser->buildAreaExpansionMap();
-
-    expect($map[300])->toBe(0);
-});
-
-test('buildAreaExpansionMap applies manual overrides', function (): void {
-    writeAreaTableCsv([
-        ['2037', '0', '0', '0'],
-    ]);
-    writeMapCsv([['0', '0']]);
-    writeContentTuningCsv([]);
-
-    $map = $this->parser->buildAreaExpansionMap();
-
-    expect($map[2037])->toBe(1);
-});
-
-test('buildAreaExpansionMap walks parent chain when map not found', function (): void {
-    writeAreaTableCsv([
-        ['400', '530', '0', '0'],
-        ['500', '999', '400', '0'],
-    ]);
-    writeMapCsv([
-        ['530', '1'],
-    ]);
-    writeContentTuningCsv([]);
-
-    $map = $this->parser->buildAreaExpansionMap();
-
-    expect($map[500])->toBe(1);
+    expect(count($map))->toBeGreaterThan(9000)
+        ->and($map[1])->toBe(0)      // Dun Morogh → Classic
+        ->and($map[2037])->toBe(1);  // Quel'thalas → TBC (override manuel préservé)
 });
 
 // ─── getQuestFactionMap ─────────────────────────────────────
@@ -198,32 +136,6 @@ test('getQuestExpansionMap returns all expansion quests from ContentTuning', fun
     expect($map[5000])->toBe(10);
     expect($map[5001])->toBe(11);
     expect($map[5002])->toBe(7);
-});
-
-// ─── getSpellNameMap ────────────────────────────────────────
-
-test('getSpellNameMap loads spell names from CSV', function (): void {
-    file_put_contents(storage_path('app/blizzard/spell_name.csv'), implode("\n", [
-        'ID,Name_lang',
-        '50001,Invocation : Dragonnet',
-        '50002,Potion de vie',
-    ]));
-
-    $map = $this->parser->getSpellNameMap();
-
-    expect($map)->toHaveCount(2);
-    expect($map[50001])->toBe('Invocation : Dragonnet');
-    expect($map[50002])->toBe('Potion de vie');
-});
-
-test('getSpellNameMap returns empty when file missing', function (): void {
-    expect($this->parser->getSpellNameMap())->toBe([]);
-});
-
-// ─── getQuestZoneMap ────────────────────────────────────────
-
-test('getQuestZoneMap returns empty when files missing', function (): void {
-    expect($this->parser->getQuestZoneMap())->toBe([]);
 });
 
 // ─── Helpers ────────────────────────────────────────────────

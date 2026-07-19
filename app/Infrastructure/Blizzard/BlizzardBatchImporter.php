@@ -49,12 +49,9 @@ class BlizzardBatchImporter
         $this->mountImporter->import();
     }
 
-    /**
-     * @param  array<int, string>  $spellNameMap
-     */
-    public function importPets(array $spellNameMap = []): void
+    public function importPets(): void
     {
-        $this->petImporter->import($spellNameMap);
+        $this->petImporter->import();
     }
 
     public function importDecor(): void
@@ -62,9 +59,9 @@ class BlizzardBatchImporter
         $this->decorImporter->import();
     }
 
-    public function importAppearances(): void
+    public function importAppearances(bool $full = false, ?int $limit = null): void
     {
-        $this->appearanceImporter->import();
+        $this->appearanceImporter->import($full, $limit);
     }
 
     /**
@@ -81,11 +78,10 @@ class BlizzardBatchImporter
     }
 
     /**
-     * @param  array<int, string>  $spellNameMap
      * @param  array<int, string>  $recipeFactionMap
      */
-    public function importProfessions(array $spellNameMap = [], array $recipeFactionMap = []): void
+    public function importProfessions(array $recipeFactionMap = []): void
     {
-        $this->professionImporter->import($spellNameMap, $recipeFactionMap);
+        $this->professionImporter->import($recipeFactionMap);
     }
 }

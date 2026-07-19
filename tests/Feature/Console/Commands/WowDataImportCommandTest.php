@@ -65,6 +65,24 @@ test('command imports only professions when --type=professions', function (): vo
     $this->artisan('app:wow-data-import', ['--type' => 'professions'])->assertSuccessful();
 });
 
+test('command forwards --full to the appearances importer', function (): void {
+    $this->importerMock->shouldReceive('importAppearances')->once()->with(true, null);
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--full' => true])->assertSuccessful();
+});
+
+test('command runs an incremental appearances import by default', function (): void {
+    $this->importerMock->shouldReceive('importAppearances')->once()->with(false, null);
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances'])->assertSuccessful();
+});
+
+test('command forwards --limit to the appearances importer', function (): void {
+    $this->importerMock->shouldReceive('importAppearances')->once()->with(false, 300);
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--limit' => '300'])->assertSuccessful();
+});
+
 test('command displays stats table after import', function (): void {
     $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor', 'importAppearances');
 

@@ -4,407 +4,431 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Blizzard\HourlyBudgetGuard;
 use App\Models\WowAppearance;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 
-final class AppearanceImporter
+/**
+ * Importe la garde-robe depuis l'API officielle Blizzard (Item Appearance API).
+ *
+ * Pipeline : index par slot (18 appels, liste curée des apparences collectionnables)
+ * → détail par apparence (items liés, classe, media) → recherches bulk items (qualités)
+ * et media (icônes). Incrémental par défaut : seules les apparences absentes de la
+ * base sont détaillées.
+ */
+final readonly class AppearanceImporter
 {
-    /**
-     * Mapping InventoryType (DB2) → [slot, category]. Seuls ces types sont transmoggables ;
-     * les autres (cou, doigt, bijou, sac, munition…) ne sont pas collectionnables.
-     *
-     * @var array<int, array{0: string, 1: string}>
-     */
-    private const INVENTORY_TYPE_SLOTS = [
-        1 => ['HEAD', 'Armure'],
-        3 => ['SHOULDER', 'Armure'],
-        4 => ['SHIRT', 'Armure'],
-        5 => ['CHEST', 'Armure'],
-        6 => ['WAIST', 'Armure'],
-        7 => ['LEGS', 'Armure'],
-        8 => ['FEET', 'Armure'],
-        9 => ['WRIST', 'Armure'],
-        10 => ['HAND', 'Armure'],
-        16 => ['CLOAK', 'Armure'],
-        19 => ['TABARD', 'Armure'],
-        20 => ['CHEST', 'Armure'], // robe → poitrine
-        13 => ['WEAPON', 'Arme'],
-        14 => ['SHIELD', 'Arme'],
-        15 => ['RANGED', 'Arme'],
-        17 => ['TWOHWEAPON', 'Arme'],
-        21 => ['WEAPON', 'Arme'], // main hand
-        22 => ['WEAPONOFFHAND', 'Arme'],
-        23 => ['HOLDABLE', 'Arme'],
-        25 => ['RANGED', 'Arme'], // thrown
-        26 => ['RANGED', 'Arme'], // ranged right
-        28 => ['HOLDABLE', 'Arme'], // relic
+    use ImportsFromBlizzardApi;
+
+    /** Slots transmoggables exposés par l'Item Appearance API. */
+    private const API_SLOTS = [
+        'HEAD', 'SHOULDER', 'BODY', 'CHEST', 'WAIST', 'LEGS', 'FEET', 'WRIST', 'HAND',
+        'CLOAK', 'TABARD', 'WEAPON', 'SHIELD', 'RANGED', 'TWOHWEAPON', 'WEAPONMAINHAND',
+        'WEAPONOFFHAND', 'HOLDABLE',
     ];
 
-    public function import(): void
+    /** Alias API → vocabulaire de slots historique de la base (préserve les filtres du front). */
+    private const SLOT_ALIASES = [
+        'BODY' => 'SHIRT',
+        'WEAPONMAINHAND' => 'WEAPON',
+    ];
+
+    /** Qualités API → OverallQualityID numérique historique. */
+    private const QUALITY_RANKS = [
+        'POOR' => 0,
+        'COMMON' => 1,
+        'UNCOMMON' => 2,
+        'RARE' => 3,
+        'EPIC' => 4,
+        'LEGENDARY' => 5,
+        'ARTIFACT' => 6,
+        'HEIRLOOM' => 7,
+    ];
+
+    /** Largeur des fenêtres d'IDs pour les recherches bulk (≤ 1 000 IDs ⇒ jamais de pagination). */
+    private const SEARCH_WINDOW = 1000;
+
+    /** Nombre de détails d'apparences récupérés entre deux contrôles de budget horaire. */
+    private const DETAIL_CHUNK = 2000;
+
+    /**
+     * Fenêtres de recherche traitées par lot (réponses volumineuses, parsées puis
+     * libérées). Un document de recherche d'item pèse ~10 Ko décodé (toutes les
+     * locales + preview) : 5 fenêtres × 1 000 documents ≈ 50 Mo de pic mémoire.
+     */
+    private const SEARCH_BATCH = 5;
+
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+        private HourlyBudgetGuard $hourlyBudgetGuard,
+    ) {}
+
+    /**
+     * @param  int|null  $limit  Borne le nombre de détails récupérés (smoke-test sans consommer le quota API)
+     */
+    public function import(bool $full = false, ?int $limit = null): void
     {
-        $iconMap = $this->loadIconMap();
-        if ($iconMap === []) {
+        $this->info('Fetching item appearance slot indexes from Blizzard API...');
+
+        $slotByAppearance = $this->fetchSlotIndexes();
+        if ($slotByAppearance === []) {
+            $this->info('ERROR: Could not fetch any appearance slot index.');
+
             return;
         }
 
-        $appearanceItems = $this->loadAppearanceItems();
-        $itemMap = $this->loadItemData($appearanceItems);
-        $iconNames = $this->loadIconNames($iconMap);
+        $this->info(sprintf('Found %d collectible appearances across slot indexes.', count($slotByAppearance)));
 
-        $rows = $this->buildRows($iconMap, $appearanceItems, $itemMap, $iconNames);
+        $idsToFetch = $full ? array_keys($slotByAppearance) : $this->missingAppearanceIds($slotByAppearance);
+        if ($limit !== null) {
+            $idsToFetch = array_slice($idsToFetch, 0, $limit);
+        }
+
+        $this->info(sprintf('Fetching %d appearance details (%s mode)...', count($idsToFetch), $full ? 'full' : 'incremental'));
+
+        $details = $this->fetchDetailsWithBudget($idsToFetch);
+
+        [$itemIds, $mediaIds] = $this->collectReferencedIds($details);
+        $this->info(sprintf('Searching item data (%d referenced items)...', count($itemIds)));
+        $itemData = $this->searchByIdWindows('data/wow/search/item', $itemIds, $this->parseItemResult(...));
+
+        // Les media d'items sont aussi cherchés : ~1/3 des media ids d'apparences
+        // n'existent pas dans l'API, l'icône de l'item représentatif sert de secours.
+        $mediaSearchIds = array_values(array_unique(array_merge($mediaIds, $itemIds)));
+        $this->info(sprintf('Resolving icons (%d media ids)...', count($mediaSearchIds)));
+        $mediaData = $this->searchByIdWindows('data/wow/search/media', $mediaSearchIds, $this->parseMediaResult(...), '&tags=item');
+        $this->info(sprintf('Resolved %d item entries and %d icons.', count($itemData), count($mediaData)));
+
+        $rows = $this->buildRows($details, $slotByAppearance, $itemData, $mediaData);
         $this->saveRows($rows);
+        $this->deactivateStaleRows($slotByAppearance);
     }
 
     /**
-     * item_appearance.csv → [appearanceId => iconFileDataId].
+     * Index par slot → [appearanceId => slot (vocabulaire base)].
      *
-     * @return array<int, int>
-     */
-    private function loadIconMap(): array
-    {
-        $this->info('Loading item_appearance.csv...');
-
-        $path = storage_path('app/blizzard/item_appearance.csv');
-        if (! File::exists($path)) {
-            $this->info('  WARNING: item_appearance.csv not found.');
-
-            return [];
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
-
-            return [];
-        }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $iconIdx = (int) array_search('DefaultIconFileDataID', $headers, true);
-
-        $map = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $id = (int) ($row[$idIdx] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
-
-            $map[$id] = (int) ($row[$iconIdx] ?? 0);
-        }
-
-        fclose($handle);
-
-        $this->info(sprintf('  Found %d appearances.', count($map)));
-
-        return $map;
-    }
-
-    /**
-     * item_modified_appearance.csv → [appearanceId => list<itemId>].
-     *
-     * @return array<int, list<int>>
-     */
-    private function loadAppearanceItems(): array
-    {
-        $this->info('Loading item_modified_appearance.csv...');
-
-        $path = storage_path('app/blizzard/item_modified_appearance.csv');
-        if (! File::exists($path)) {
-            $this->info('  WARNING: item_modified_appearance.csv not found.');
-
-            return [];
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
-
-            return [];
-        }
-
-        $appIdx = (int) array_search('ItemAppearanceID', $headers, true);
-        $itemIdx = (int) array_search('ItemID', $headers, true);
-
-        $map = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $appearanceId = (int) ($row[$appIdx] ?? 0);
-            $itemId = (int) ($row[$itemIdx] ?? 0);
-            if ($appearanceId <= 0) {
-                continue;
-            }
-
-            if ($itemId <= 0) {
-                continue;
-            }
-
-            $map[$appearanceId][] = $itemId;
-        }
-
-        fclose($handle);
-
-        return $map;
-    }
-
-    /**
-     * item_sparse.csv → [itemId => [name, expansion, inventoryType, quality]], filtré sur les items référencés.
-     *
-     * @param  array<int, list<int>>  $appearanceItems
-     * @return array<int, array{name: string, expansion: int, inventory_type: int, quality: int}>
-     */
-    private function loadItemData(array $appearanceItems): array
-    {
-        $this->info('Loading item_sparse.csv...');
-
-        $needed = [];
-        foreach ($appearanceItems as $appearanceItem) {
-            foreach ($appearanceItem as $itemId) {
-                $needed[$itemId] = true;
-            }
-        }
-
-        $path = storage_path('app/blizzard/item_sparse.csv');
-        if (! File::exists($path)) {
-            $this->info('  WARNING: item_sparse.csv not found.');
-
-            return [];
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
-
-            return [];
-        }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $nameIdx = (int) array_search('Display_lang', $headers, true);
-        $expIdx = (int) array_search('ExpansionID', $headers, true);
-        $invIdx = (int) array_search('InventoryType', $headers, true);
-        $qualIdx = (int) array_search('OverallQualityID', $headers, true);
-
-        $map = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $id = (int) ($row[$idIdx] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
-
-            if (! isset($needed[$id])) {
-                continue;
-            }
-
-            $name = trim($row[$nameIdx] ?? '');
-            if ($name === '') {
-                continue;
-            }
-
-            if ($this->isPlaceholderName($name)) {
-                continue;
-            }
-
-            $map[$id] = [
-                'name' => $name,
-                'expansion' => (int) ($row[$expIdx] ?? 0),
-                'inventory_type' => (int) ($row[$invIdx] ?? 0),
-                'quality' => (int) ($row[$qualIdx] ?? 0),
-            ];
-        }
-
-        fclose($handle);
-
-        $this->info(sprintf('  Found %d referenced items.', count($map)));
-
-        return $map;
-    }
-
-    /**
-     * manifest_interface_data.csv → [fileDataId => icon_name] pour les FileDataID d'icônes utilisés.
-     * Reconstruit une icône zamimg exploitable à partir du FileDataID numérique.
-     *
-     * @param  array<int, int>  $iconMap  [appearanceId => fileDataId]
      * @return array<int, string>
      */
-    private function loadIconNames(array $iconMap): array
+    private function fetchSlotIndexes(): array
     {
-        $this->info('Loading manifest_interface_data.csv (icon names)...');
+        $map = [];
 
-        $needed = array_flip(array_filter(array_values($iconMap), fn (int $fdid): bool => $fdid > 0));
-        if ($needed === []) {
-            return [];
-        }
-
-        $path = storage_path('app/blizzard/manifest_interface_data.csv');
-        if (! File::exists($path)) {
-            $this->info('  WARNING: manifest_interface_data.csv not found.');
-
-            return [];
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
-
-            return [];
-        }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $fileNameIdx = (int) array_search('FileName', $headers, true);
-
-        $names = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $id = (int) ($row[$idIdx] ?? 0);
-            if ($id <= 0) {
+        foreach (self::API_SLOTS as $apiSlot) {
+            $index = $this->fetchWithRetry('data/wow/item-appearance/slot/'.$apiSlot);
+            if ($index === null) {
                 continue;
             }
 
-            if (! isset($needed[$id])) {
-                continue;
-            }
+            $slot = self::SLOT_ALIASES[$apiSlot] ?? $apiSlot;
 
-            // "INV_Chest_Samurai.blp" → "inv_chest_samurai"
-            $fileName = trim($row[$fileNameIdx] ?? '');
-            if ($fileName === '') {
-                continue;
+            /** @var list<array{id?: int}> $appearances */
+            $appearances = $index['appearances'] ?? [];
+            foreach ($appearances as $appearance) {
+                $id = (int) ($appearance['id'] ?? 0);
+                if ($id > 0 && ! isset($map[$id])) {
+                    $map[$id] = $slot;
+                }
             }
-
-            $names[$id] = mb_strtolower(pathinfo($fileName, PATHINFO_FILENAME));
         }
 
-        fclose($handle);
-
-        $this->info(sprintf('  Resolved %d icon names.', count($names)));
-
-        return $names;
+        return $map;
     }
 
     /**
-     * @param  array<int, int>  $iconMap
-     * @param  array<int, list<int>>  $appearanceItems
-     * @param  array<int, array{name: string, expansion: int, inventory_type: int, quality: int}>  $itemMap
-     * @param  array<int, string>  $iconNames
+     * IDs absents de la base ou incomplets (jamais détaillés avec succès).
+     *
+     * @param  array<int, string>  $slotByAppearance
+     * @return list<int>
+     */
+    private function missingAppearanceIds(array $slotByAppearance): array
+    {
+        /** @var list<int> $complete */
+        $complete = WowAppearance::query()
+            ->whereNotNull('item_id')
+            ->whereNotNull('icon_url')
+            ->pluck('id')
+            ->all();
+
+        return array_values(array_diff(array_keys($slotByAppearance), $complete));
+    }
+
+    /**
+     * Détails d'apparences par lots, en respectant le budget horaire d'appels API.
+     * Chaque réponse JSON est immédiatement réduite à une structure compacte
+     * (catégorie, media id, items) pour tenir en mémoire sur ~50 000 apparences.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>
+     */
+    private function fetchDetailsWithBudget(array $ids): array
+    {
+        $details = [];
+        $fetched = 0;
+        $total = count($ids);
+
+        foreach (array_chunk($ids, self::DETAIL_CHUNK) as $chunk) {
+            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($chunk));
+            if ($wait > 0) {
+                $this->info(sprintf('  Hourly API budget reached, pausing %ds...', $wait));
+                Sleep::sleep($wait);
+            }
+
+            $endpoints = [];
+            foreach ($chunk as $id) {
+                $endpoints[$id] = 'data/wow/item-appearance/'.$id;
+            }
+
+            $results = $this->fetchBatchAsync($endpoints);
+            $this->hourlyBudgetGuard->consume(count($chunk));
+
+            foreach ($results as $id => $result) {
+                if ($result !== null) {
+                    $details[(int) $id] = $this->extractDetail($result);
+                }
+            }
+
+            $fetched += count($chunk);
+            $this->info(sprintf('  Details progress: %d/%d.', $fetched, $total));
+        }
+
+        return $details;
+    }
+
+    /**
+     * Réduit une réponse de détail d'apparence aux seuls champs exploités.
+     *
+     * @param  array<string, mixed>  $detail
+     * @return array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}
+     */
+    private function extractDetail(array $detail): array
+    {
+        /** @var array{name?: string} $itemClass */
+        $itemClass = $detail['item_class'] ?? [];
+
+        /** @var array{id?: int} $media */
+        $media = $detail['media'] ?? [];
+
+        $items = [];
+
+        /** @var list<array{id?: int, name?: string}> $rawItems */
+        $rawItems = $detail['items'] ?? [];
+        foreach ($rawItems as $rawItem) {
+            $itemId = (int) ($rawItem['id'] ?? 0);
+            if ($itemId > 0) {
+                $items[] = [$itemId, trim($rawItem['name'] ?? '')];
+            }
+        }
+
+        return [
+            'category' => ($itemClass['name'] ?? '') !== '' ? $itemClass['name'] : null,
+            'media_id' => (int) ($media['id'] ?? 0),
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @param  array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>  $details
+     * @return array{0: list<int>, 1: list<int>}
+     */
+    private function collectReferencedIds(array $details): array
+    {
+        $itemIds = [];
+        $mediaIds = [];
+
+        foreach ($details as $detail) {
+            foreach ($detail['items'] as $item) {
+                $itemIds[$item[0]] = true;
+            }
+
+            if ($detail['media_id'] > 0) {
+                $mediaIds[$detail['media_id']] = true;
+            }
+        }
+
+        return [array_keys($itemIds), array_keys($mediaIds)];
+    }
+
+    /**
+     * Recherches bulk par fenêtres d'IDs de largeur ≤ SEARCH_WINDOW (1 000 IDs max
+     * par fenêtre ⇒ une seule page par appel, garanti par l'unicité des IDs).
+     *
+     * @template T
+     *
+     * @param  list<int>  $ids
+     * @param  callable(array<string, mixed>): (array{0: int, 1: T}|null)  $parseResult
+     * @return array<int, T>
+     */
+    private function searchByIdWindows(string $endpoint, array $ids, callable $parseResult, string $extraQuery = ''): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        sort($ids);
+
+        $endpoints = [];
+        $windowStart = null;
+        foreach ($ids as $id) {
+            if ($windowStart === null || $id >= $windowStart + self::SEARCH_WINDOW) {
+                $windowStart = $id;
+                $endpoints[] = sprintf(
+                    '%s?_pageSize=%d&orderby=id&id=[%d,%d]%s',
+                    $endpoint,
+                    self::SEARCH_WINDOW,
+                    $windowStart,
+                    $windowStart + self::SEARCH_WINDOW - 1,
+                    $extraQuery,
+                );
+            }
+        }
+
+        // Petits lots parsés immédiatement : chaque fenêtre peut renvoyer jusqu'à
+        // 1 000 documents complets (~plusieurs Ko chacun), accumuler toutes les
+        // réponses brutes ferait exploser la mémoire.
+        $map = [];
+        foreach (array_chunk($endpoints, self::SEARCH_BATCH) as $chunk) {
+            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($chunk));
+            if ($wait > 0) {
+                $this->info(sprintf('  Hourly API budget reached, pausing %ds...', $wait));
+                Sleep::sleep($wait);
+            }
+
+            $responses = $this->fetchBatchAsync($chunk);
+            $this->hourlyBudgetGuard->consume(count($chunk));
+
+            foreach ($responses as $response) {
+                if ($response === null) {
+                    continue;
+                }
+
+                /** @var list<array{data?: array<string, mixed>}> $results */
+                $results = $response['results'] ?? [];
+                foreach ($results as $result) {
+                    $parsed = $parseResult($result['data'] ?? []);
+                    if ($parsed !== null) {
+                        $map[$parsed[0]] = $parsed[1];
+                    }
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{0: int, 1: array{quality: int, name: string}}|null
+     */
+    private function parseItemResult(array $data): ?array
+    {
+        $id = is_numeric($data['id'] ?? null) ? (int) $data['id'] : 0;
+        if ($id <= 0) {
+            return null;
+        }
+
+        /** @var array{type?: string} $quality */
+        $quality = $data['quality'] ?? [];
+
+        /** @var array{fr_FR?: string} $name */
+        $name = $data['name'] ?? [];
+
+        return [$id, [
+            'quality' => self::QUALITY_RANKS[$quality['type'] ?? ''] ?? 1,
+            'name' => trim($name['fr_FR'] ?? ''),
+        ]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{0: int, 1: array{icon_url: string, file_data_id: int|null}}|null
+     */
+    private function parseMediaResult(array $data): ?array
+    {
+        $id = is_numeric($data['id'] ?? null) ? (int) $data['id'] : 0;
+        if ($id <= 0) {
+            return null;
+        }
+
+        /** @var list<array{key?: string, value?: string, file_data_id?: int}> $assets */
+        $assets = $data['assets'] ?? [];
+        foreach ($assets as $asset) {
+            if (($asset['key'] ?? '') === 'icon' && ($asset['value'] ?? '') !== '') {
+                return [$id, [
+                    'icon_url' => $asset['value'],
+                    'file_data_id' => ($asset['file_data_id'] ?? 0) > 0 ? (int) $asset['file_data_id'] : null,
+                ]];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>  $details
+     * @param  array<int, string>  $slotByAppearance
+     * @param  array<int, array{quality: int, name: string}>  $itemData
+     * @param  array<int, array{icon_url: string, file_data_id: int|null}>  $mediaData
      * @return list<array{id: int, name_fr: string, slot: string|null, category: string|null, quality: int|null, item_id: int|null, icon_file_data_id: int|null, icon_url: string|null, expansion_id: int|null, source: string|null, is_active: bool}>
      */
-    private function buildRows(array $iconMap, array $appearanceItems, array $itemMap, array $iconNames = []): array
+    private function buildRows(array $details, array $slotByAppearance, array $itemData, array $mediaData): array
     {
         $rows = [];
-        $active = 0;
 
-        foreach ($iconMap as $appearanceId => $iconFdid) {
-            $itemIds = $appearanceItems[$appearanceId] ?? [];
-            $representative = $this->pickRepresentative($itemIds, $itemMap);
-
-            $iconName = $iconNames[$iconFdid] ?? null;
+        foreach ($details as $appearanceId => $detail) {
+            $representative = $this->pickRepresentative($detail['items'], $itemData);
+            $mediaInfo = $mediaData[$detail['media_id']]
+                ?? ($representative['item_id'] !== null ? ($mediaData[$representative['item_id']] ?? null) : null);
 
             $rows[] = [
                 'id' => $appearanceId,
                 'name_fr' => $representative['name'] ?? sprintf('[EN] Appearance #%d', $appearanceId),
-                'slot' => $representative['slot'],
-                'category' => $representative['category'],
+                'slot' => $slotByAppearance[$appearanceId] ?? null,
+                'category' => $detail['category'],
                 'quality' => $representative['quality'],
                 'item_id' => $representative['item_id'],
-                'icon_file_data_id' => $iconFdid > 0 ? $iconFdid : null,
-                'icon_url' => $iconName !== null ? SimpleArmoryParser::buildIconUrl($iconName) : null,
-                'expansion_id' => $representative['expansion'],
+                'icon_file_data_id' => $mediaInfo['file_data_id'] ?? null,
+                'icon_url' => $mediaInfo['icon_url'] ?? null,
+                'expansion_id' => null,
                 'source' => null,
-                'is_active' => $representative['is_active'],
+                'is_active' => true,
             ];
-
-            if ($representative['is_active']) {
-                $active++;
-            }
         }
 
-        $this->info(sprintf('  Built %d rows (%d collectible).', count($rows), $active));
+        $this->info(sprintf('Built %d appearance rows.', count($rows)));
 
         return $rows;
     }
 
     /**
-     * Choisit l'item représentatif d'une apparence : meilleure qualité parmi les items nommés,
-     * en privilégiant un slot transmoggable.
+     * Item représentatif = meilleure qualité parmi les items liés à l'apparence.
      *
-     * @param  list<int>  $itemIds
-     * @param  array<int, array{name: string, expansion: int, inventory_type: int, quality: int}>  $itemMap
-     * @return array{name: string|null, slot: string|null, category: string|null, quality: int|null, item_id: int|null, expansion: int|null, is_active: bool}
+     * @param  list<array{0: int, 1: string}>  $items  [itemId, nom du détail d'apparence]
+     * @param  array<int, array{quality: int, name: string}>  $itemData
+     * @return array{name: string|null, quality: int|null, item_id: int|null}
      */
-    private function pickRepresentative(array $itemIds, array $itemMap): array
+    private function pickRepresentative(array $items, array $itemData): array
     {
-        $transmoggable = null;
-        $fallback = null;
+        $best = null;
 
-        foreach ($itemIds as $itemId) {
-            if (! isset($itemMap[$itemId])) {
+        foreach ($items as [$itemId, $detailName]) {
+            $quality = $itemData[$itemId]['quality'] ?? 1;
+            $name = $itemData[$itemId]['name'] ?? '';
+            if ($name === '') {
+                $name = $detailName;
+            }
+
+            if ($name === '') {
                 continue;
             }
 
-            $item = $itemMap[$itemId] + ['item_id' => $itemId];
-            $isTransmoggable = isset(self::INVENTORY_TYPE_SLOTS[$item['inventory_type']]);
-
-            if ($isTransmoggable) {
-                if ($transmoggable === null || $item['quality'] > $transmoggable['quality']) {
-                    $transmoggable = $item;
-                }
-            } elseif ($fallback === null || $item['quality'] > $fallback['quality']) {
-                $fallback = $item;
+            if ($best === null || $quality > $best['quality']) {
+                $best = ['name' => $name, 'quality' => $quality, 'item_id' => $itemId];
             }
         }
 
-        if ($transmoggable !== null) {
-            [$slot, $category] = self::INVENTORY_TYPE_SLOTS[$transmoggable['inventory_type']];
-
-            return [
-                'name' => $transmoggable['name'],
-                'slot' => $slot,
-                'category' => $category,
-                'quality' => $transmoggable['quality'],
-                'item_id' => $transmoggable['item_id'],
-                'expansion' => $transmoggable['expansion'],
-                'is_active' => true,
-            ];
-        }
-
-        if ($fallback !== null) {
-            return [
-                'name' => $fallback['name'],
-                'slot' => null,
-                'category' => null,
-                'quality' => $fallback['quality'],
-                'item_id' => $fallback['item_id'],
-                'expansion' => $fallback['expansion'],
-                'is_active' => false,
-            ];
-        }
-
-        return [
-            'name' => null,
-            'slot' => null,
-            'category' => null,
-            'quality' => null,
-            'item_id' => null,
-            'expansion' => null,
-            'is_active' => false,
-        ];
+        return $best ?? ['name' => null, 'quality' => null, 'item_id' => null];
     }
 
     /**
@@ -422,38 +446,31 @@ final class AppearanceImporter
                 update: ['name_fr', 'slot', 'category', 'quality', 'item_id', 'icon_file_data_id', 'icon_url', 'expansion_id', 'source', 'is_active'],
             );
             $count += count($chunk);
-            $this->info(sprintf('  Saved %d...', $count));
         }
 
         $this->info(sprintf('Appearance import complete: %d items.', $count));
     }
 
     /**
-     * Détecte les items techniques/datamining non localisés (templates, placeholders, noms d'assets
-     * internes) qui ne doivent pas peupler la garde-robe collectionnable.
+     * Désactive les apparences en base qui ne figurent plus dans les index de slots
+     * (anciennes données CSV ou entrées retirées par Blizzard).
+     *
+     * @param  array<int, string>  $slotByAppearance
      */
-    private function isPlaceholderName(string $name): bool
+    private function deactivateStaleRows(array $slotByAppearance): void
     {
-        // noms d'assets internes : "Cape_Cloth_Sindragosa_D_01"
-        if (str_contains($name, '_')) {
-            return true;
+        /** @var list<int> $activeIds */
+        $activeIds = WowAppearance::query()->where('is_active', true)->pluck('id')->all();
+
+        $staleIds = array_diff($activeIds, array_keys($slotByAppearance));
+        if ($staleIds === []) {
+            return;
         }
 
-        // templates versionnés : "10.0 Rare Reward TBD", "11.0 Raid Template"
-        if (preg_match('/^\d+\.\d/', $name) === 1) {
-            return true;
+        foreach (array_chunk($staleIds, 500) as $chunk) {
+            WowAppearance::query()->whereIn('id', $chunk)->update(['is_active' => false]);
         }
 
-        // mots-clés internes explicites
-        return preg_match('/\b(Template|TBD|Placeholder|Do Not Use|Deprecated|UNUSED|Debug|Internal)\b/i', $name) === 1;
-    }
-
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
-
-        Log::info($message);
+        $this->info(sprintf('Deactivated %d stale appearances.', count($staleIds)));
     }
 }

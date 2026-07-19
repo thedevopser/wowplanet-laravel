@@ -4,40 +4,27 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowPet;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Log;
 
-final class PetImporter
+final readonly class PetImporter
 {
-    /**
-     * French spell name prefixes to strip when deriving pet names.
-     *
-     * @var list<string>
-     */
-    private const SPELL_NAME_PREFIXES = [
-        'Invocation : ',
-        'Invoquer ',
-        'Invoque un ',
-        'Invoque une ',
-        "Invoque l'",
-        'Invoque le ',
-        'Invoque la ',
-        'Invoque des ',
-    ];
+    use ImportsFromBlizzardApi;
 
-    /**
-     * @param  array<int, string>  $spellNameMap  [spell_id => spell_name]
-     */
-    public function import(array $spellNameMap = []): void
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+    ) {}
+
+    public function import(): void
     {
         $saPets = $this->loadSimpleArmoryData();
         if ($saPets === []) {
             return;
         }
 
-        $frenchNames = $this->loadFrenchNames($spellNameMap);
+        $frenchNames = $this->loadFrenchNames();
         $rows = $this->buildRows($saPets, $frenchNames);
 
         $this->saveRows($rows);
@@ -64,61 +51,32 @@ final class PetImporter
     }
 
     /**
-     * Build French name map from battle_pet_species.csv (pet_id => french_name).
-     * Pet names come from the SummonSpellID's spell name, cleaned of invocation prefixes.
+     * Noms français depuis l'index Pet de l'API officielle (id = species id).
      *
-     * @param  array<int, string>  $spellNameMap
      * @return array<int, string>
      */
-    private function loadFrenchNames(array $spellNameMap): array
+    private function loadFrenchNames(): array
     {
-        $this->info('Loading French pet names from battle_pet_species.csv + spell names...');
+        $this->info('Fetching pet index from Blizzard API...');
 
-        $csvPath = storage_path('app/blizzard/battle_pet_species.csv');
-        if (! File::exists($csvPath)) {
-            $this->info('  WARNING: battle_pet_species.csv not found.');
-
-            return [];
-        }
-
-        $handle = fopen($csvPath, 'r');
-        if ($handle === false) {
-            return [];
-        }
-
-        $headers = fgetcsv($handle, 0, ',', '"', '');
-        if ($headers === false) {
-            fclose($handle);
+        $index = $this->fetchWithRetry('data/wow/pet/index');
+        if ($index === null) {
+            $this->info('  WARNING: pet index unavailable, falling back to English names.');
 
             return [];
         }
-
-        $idIdx = (int) array_search('ID', $headers, true);
-        $spellIdx = (int) array_search('SummonSpellID', $headers, true);
 
         $names = [];
-        while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
-            $id = (int) $row[$idIdx];
-            $spellId = (int) ($row[$spellIdx] ?? 0);
-            if ($id <= 0) {
-                continue;
-            }
 
-            if ($spellId <= 0) {
-                continue;
-            }
-
-            if (! isset($spellNameMap[$spellId])) {
-                continue;
-            }
-
-            $name = $this->cleanPetName($spellNameMap[$spellId]);
-            if ($name !== '') {
+        /** @var list<array{id?: int, name?: string}> $pets */
+        $pets = $index['pets'] ?? [];
+        foreach ($pets as $pet) {
+            $id = (int) ($pet['id'] ?? 0);
+            $name = trim($pet['name'] ?? '');
+            if ($id > 0 && $name !== '') {
                 $names[$id] = $name;
             }
         }
-
-        fclose($handle);
 
         $this->info(sprintf('  Found %d French pet names.', count($names)));
 
@@ -186,25 +144,5 @@ final class PetImporter
         }
 
         $this->info(sprintf('Pet import complete: %d items.', $count));
-    }
-
-    private function cleanPetName(string $spellName): string
-    {
-        foreach (self::SPELL_NAME_PREFIXES as $prefix) {
-            if (str_starts_with($spellName, $prefix)) {
-                return mb_substr($spellName, mb_strlen($prefix));
-            }
-        }
-
-        return $spellName;
-    }
-
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
-
-        Log::info($message);
     }
 }

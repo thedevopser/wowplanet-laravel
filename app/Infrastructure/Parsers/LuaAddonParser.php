@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Parsers;
 
-use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Mappings\FrozenAreaExpansionMap;
 
 class LuaAddonParser
 {
     public function __construct(
-        private readonly Db2AreaExpansionMapper $db2AreaExpansionMapper,
         private readonly AddonDataParser $addonDataParser,
     ) {}
 
@@ -31,7 +30,7 @@ class LuaAddonParser
      */
     public function buildAreaExpansionMap(): array
     {
-        return $this->db2AreaExpansionMapper->build();
+        return FrozenAreaExpansionMap::load();
     }
 
     /**
@@ -40,14 +39,6 @@ class LuaAddonParser
     public function getQuestExpansionMap(): array
     {
         return $this->addonDataParser->getQuestExpansionMap();
-    }
-
-    /**
-     * @return array<int, string> [quest_id => zone_name]
-     */
-    public function getQuestZoneMap(): array
-    {
-        return Db2QuestZoneMapper::build();
     }
 
     /**
@@ -88,15 +79,5 @@ class LuaAddonParser
     public function getZoneExpansionMap(): array
     {
         return $this->addonDataParser->getZoneExpansionMap();
-    }
-
-    /**
-     * Load spell_id → spell_name map from SpellName.csv.
-     *
-     * @return array<int, string>
-     */
-    public function getSpellNameMap(): array
-    {
-        return Db2CsvLoader::loadStringMapByHeaders('spell_name.csv', 'ID', 'Name_lang');
     }
 }

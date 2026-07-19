@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
-use App\Infrastructure\Blizzard\Support\Db2CsvLoader;
+use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowMount;
-use Illuminate\Support\Facades\Log;
 
-final class MountImporter
+final readonly class MountImporter
 {
+    use ImportsFromBlizzardApi;
+
+    public function __construct(
+        private BlizzardApiClient $blizzardApiClient,
+    ) {}
+
     public function import(): void
     {
         $saMounts = $this->loadSimpleArmoryData();
@@ -45,13 +51,33 @@ final class MountImporter
     }
 
     /**
+     * Noms français depuis l'index Mount de l'API officielle.
+     *
      * @return array<int, string>
      */
     private function loadFrenchNames(): array
     {
-        $this->info('Loading French names from mount.csv...');
+        $this->info('Fetching mount index from Blizzard API...');
 
-        $names = Db2CsvLoader::loadStringMapByHeaders('mount.csv', 'ID', 'Name_lang');
+        $index = $this->fetchWithRetry('data/wow/mount/index');
+        if ($index === null) {
+            $this->info('  WARNING: mount index unavailable, falling back to English names.');
+
+            return [];
+        }
+
+        $names = [];
+
+        /** @var list<array{id?: int, name?: string}> $mounts */
+        $mounts = $index['mounts'] ?? [];
+        foreach ($mounts as $mount) {
+            $id = (int) ($mount['id'] ?? 0);
+            $name = trim($mount['name'] ?? '');
+            if ($id > 0 && $name !== '') {
+                $names[$id] = $name;
+            }
+        }
+
         $this->info(sprintf('  Found %d French names.', count($names)));
 
         return $names;
@@ -118,14 +144,5 @@ final class MountImporter
         }
 
         $this->info(sprintf('Mount import complete: %d items.', $count));
-    }
-
-    private function info(string $message): void
-    {
-        if (app()->runningInConsole()) {
-            echo $message.PHP_EOL;
-        }
-
-        Log::info($message);
     }
 }
