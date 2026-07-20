@@ -12,6 +12,34 @@ use App\Models\WowPet;
 class CollectionProgressAggregator
 {
     /**
+     * Catégorie de garde-robe par slot. Volontairement figée ici plutôt que lue dans
+     * wow_appearances.category : cette colonne est le item_class.name brut de Blizzard
+     * (classe d'objet, non normalisée), qui contient des valeurs parasites — « Quête »,
+     * « Artisanat », « Divers » — pesant 1 à 4 objets par slot.
+     *
+     * @var array<string, string>
+     */
+    private const SLOT_CATEGORIES = [
+        'HEAD' => 'Armure',
+        'SHOULDER' => 'Armure',
+        'SHIRT' => 'Armure',
+        'CHEST' => 'Armure',
+        'WAIST' => 'Armure',
+        'LEGS' => 'Armure',
+        'FEET' => 'Armure',
+        'WRIST' => 'Armure',
+        'HAND' => 'Armure',
+        'CLOAK' => 'Armure',
+        'TABARD' => 'Armure',
+        'SHIELD' => 'Armure',
+        'HOLDABLE' => 'Armure',
+        'WEAPON' => 'Arme',
+        'RANGED' => 'Arme',
+        'TWOHWEAPON' => 'Arme',
+        'WEAPONOFFHAND' => 'Arme',
+    ];
+
+    /**
      * @param  list<int>  $characterMountIds
      * @return list<array{id: int, name: string, is_completed: bool, source: string|null, category: string|null, wowhead_id: int|null, icon_url: string|null}>
      */
@@ -91,11 +119,11 @@ class CollectionProgressAggregator
      */
     public function aggregateAppearances(array $characterAppearanceIds): array
     {
-        /** @var \Illuminate\Support\Collection<int, object{slot: string, category: string|null, total: int}> $totals */
+        /** @var \Illuminate\Support\Collection<int, object{slot: string, total: int}> $totals */
         $totals = WowAppearance::query()->where('is_active', true)
             ->whereNotNull('slot')
-            ->selectRaw('slot, category, COUNT(*) as total')
-            ->groupBy('slot', 'category')
+            ->selectRaw('slot, COUNT(*) as total')
+            ->groupBy('slot')
             ->orderBy('slot')
             ->get();
 
@@ -119,7 +147,7 @@ class CollectionProgressAggregator
         foreach ($totals as $total) {
             $result[] = [
                 'slot' => $total->slot,
-                'category' => $total->category,
+                'category' => self::SLOT_CATEGORIES[$total->slot] ?? null,
                 'total' => (int) $total->total,
                 'completed' => $completedBySlot[$total->slot] ?? 0,
             ];
