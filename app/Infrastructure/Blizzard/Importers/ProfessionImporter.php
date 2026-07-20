@@ -22,8 +22,10 @@ final readonly class ProfessionImporter
     use ImportsFromBlizzardApi;
 
     public function __construct(
-        private BlizzardApiClient $blizzardApiClient,
-    ) {}
+        BlizzardApiClient $blizzardApiClient,
+    ) {
+        $this->blizzardApiClient = $blizzardApiClient;
+    }
 
     /**
      * @param  array<int, string>  $recipeFactionMap  [recipeId => 'Alliance'|'Horde']

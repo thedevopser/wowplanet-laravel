@@ -13,9 +13,13 @@ final readonly class MountImporter
 {
     use ImportsFromBlizzardApi;
 
+    private const API_ONLY_CATEGORY = 'Autres';
+
     public function __construct(
-        private BlizzardApiClient $blizzardApiClient,
-    ) {}
+        BlizzardApiClient $blizzardApiClient,
+    ) {
+        $this->blizzardApiClient = $blizzardApiClient;
+    }
 
     public function import(): void
     {
@@ -121,6 +125,30 @@ final readonly class MountImporter
 
         $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
         $this->info(sprintf('  %d with icon URL.', $withIcons));
+
+        // Complète avec les montures présentes dans l'index API mais absentes de
+        // SimpleArmory : SimpleArmory ne liste que la sélection curée, l'API en
+        // référence davantage. Ces montures n'ont pas d'extension (l'API ne
+        // l'expose pas), on les regroupe donc sous une catégorie « Autres ».
+        $apiOnly = 0;
+        foreach ($frenchNames as $id => $name) {
+            if (isset($saMounts[$id])) {
+                continue;
+            }
+
+            $rows[] = [
+                'id' => $id,
+                'name_fr' => $name !== '' ? $name : sprintf('[EN] Mount #%d', $id),
+                'source' => null,
+                'category' => self::API_ONLY_CATEGORY,
+                'source_spell_id' => null,
+                'icon_url' => null,
+                'is_active' => true,
+            ];
+            $apiOnly++;
+        }
+
+        $this->info(sprintf('  %d API-only mounts added (category "%s").', $apiOnly, self::API_ONLY_CATEGORY));
 
         return $rows;
     }

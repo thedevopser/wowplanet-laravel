@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Jobs\ImportAppearancesJob;
+use Illuminate\Support\Facades\Bus;
 
 beforeEach(function (): void {
+    Bus::fake();
+
     $this->importerMock = $this->mock(BlizzardBatchImporter::class);
     $this->parserMock = $this->mock(LuaAddonParser::class);
 
@@ -28,9 +32,10 @@ test('command imports all types by default', function (): void {
     $this->importerMock->shouldReceive('importProfessions')->once();
     $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
     $this->importerMock->shouldReceive('importDecor')->once();
-    $this->importerMock->shouldReceive('importAppearances')->once();
 
     $this->artisan('app:wow-data-import')->assertSuccessful();
+
+    Bus::assertDispatched(ImportAppearancesJob::class);
 });
 
 test('command imports only quests when --type=quests', function (): void {
@@ -65,26 +70,20 @@ test('command imports only professions when --type=professions', function (): vo
     $this->artisan('app:wow-data-import', ['--type' => 'professions'])->assertSuccessful();
 });
 
-test('command forwards --full to the appearances importer', function (): void {
-    $this->importerMock->shouldReceive('importAppearances')->once()->with(true, null);
-
+test('command dispatches a full appearance import job', function (): void {
     $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--full' => true])->assertSuccessful();
+
+    Bus::assertDispatched(fn (\App\Jobs\ImportAppearancesJob $importAppearancesJob): bool => $importAppearancesJob->full && $importAppearancesJob->offset === 0);
 });
 
-test('command runs an incremental appearances import by default', function (): void {
-    $this->importerMock->shouldReceive('importAppearances')->once()->with(false, null);
-
+test('command dispatches an incremental appearance import job by default', function (): void {
     $this->artisan('app:wow-data-import', ['--type' => 'appearances'])->assertSuccessful();
-});
 
-test('command forwards --limit to the appearances importer', function (): void {
-    $this->importerMock->shouldReceive('importAppearances')->once()->with(false, 300);
-
-    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--limit' => '300'])->assertSuccessful();
+    Bus::assertDispatched(fn (\App\Jobs\ImportAppearancesJob $importAppearancesJob): bool => $importAppearancesJob->full === false);
 });
 
 test('command displays stats table after import', function (): void {
-    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor', 'importAppearances');
+    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor');
 
     $this->artisan('app:wow-data-import')
         ->assertSuccessful()

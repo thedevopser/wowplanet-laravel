@@ -49,6 +49,21 @@ test('it forgets usage older than one hour', function (): void {
     expect($guard->secondsUntilAvailable(1))->toBe(0);
 });
 
+test('secondsUntilAvailable honours a lower ceiling than HOURLY_LIMIT', function (): void {
+    $guard = new HourlyBudgetGuard;
+
+    $guard->consume(29_500);
+
+    // Sous le plafond réservé de 30 000 : 400 requêtes passent (29 900 <= 30 000).
+    expect($guard->secondsUntilAvailable(400, 30_000))->toBe(0);
+
+    // Au-dessus du plafond réservé : il faut attendre (29 500 + 600 > 30 000).
+    expect($guard->secondsUntilAvailable(600, 30_000))->toBeGreaterThan(0);
+
+    // Sans plafond explicite : on retombe sur HOURLY_LIMIT (34 000) → 600 passent.
+    expect($guard->secondsUntilAvailable(600))->toBe(0);
+});
+
 test('it computes the wait as the delay until the oldest bucket leaves the window', function (): void {
     $guard = new HourlyBudgetGuard;
 

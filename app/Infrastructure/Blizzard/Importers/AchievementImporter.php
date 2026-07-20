@@ -16,8 +16,10 @@ final readonly class AchievementImporter
     private const FALLBACK_EXPANSION_ID = 0;
 
     public function __construct(
-        private BlizzardApiClient $blizzardApiClient,
-    ) {}
+        BlizzardApiClient $blizzardApiClient,
+    ) {
+        $this->blizzardApiClient = $blizzardApiClient;
+    }
 
     public function import(): void
     {

@@ -30,14 +30,18 @@ final class HourlyBudgetGuard
     }
 
     /**
-     * Secondes à attendre avant de pouvoir consommer $count requêtes sans dépasser le quota.
+     * Secondes à attendre avant de pouvoir consommer $count requêtes sans dépasser
+     * le plafond ($ceiling), ou HOURLY_LIMIT si non fourni. Les imports passent un
+     * plafond réservé (< HOURLY_LIMIT) pour laisser de la marge au trafic du site.
      */
-    public function secondsUntilAvailable(int $count): int
+    public function secondsUntilAvailable(int $count, ?int $ceiling = null): int
     {
+        $limit = $ceiling ?? self::HOURLY_LIMIT;
+
         $buckets = $this->buckets();
         $used = array_sum($buckets);
 
-        if ($buckets === [] || $used + $count <= self::HOURLY_LIMIT) {
+        if ($buckets === [] || $used + $count <= $limit) {
             return 0;
         }
 

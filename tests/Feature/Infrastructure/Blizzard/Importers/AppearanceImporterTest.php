@@ -257,23 +257,41 @@ test('it limits the number of fetched details for smoke-testing', function (): v
         ->and(WowAppearance::query()->find(321))->not->toBeNull();
 });
 
-test('it pauses when the hourly API budget is exhausted', function (): void {
-    // Budget déjà entièrement consommé → l'importer doit attendre avant le lot de détails
+test('importChunk stops without sleeping when the hourly budget is exhausted', function (): void {
+    // Budget déjà au-delà du plafond réservé aux imports → importChunk doit rendre la
+    // main (le job se re-dispatchera), sans dormir ni récupérer aucun détail.
     resolve(\App\Infrastructure\Blizzard\HourlyBudgetGuard::class)->consume(\App\Infrastructure\Blizzard\HourlyBudgetGuard::HOURLY_LIMIT);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
     mockSlotIndexes($client, ['HEAD' => [321]]);
-    mockAppearanceDetail($client, 321, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 10);
+    $client->shouldNotReceive('getAsync');
+
+    $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 0, timeBoxSeconds: 600);
+
+    expect($appearanceImportProgress->done)->toBeFalse();
+    expect($appearanceImportProgress->offset)->toBe(0); // aucun avancement : la tranche sera rejouée
+    expect($appearanceImportProgress->secondsUntilBudget)->toBeGreaterThan(0);
+    expect(WowAppearance::query()->count())->toBe(0);
+    Sleep::assertNeverSlept();
+});
+
+test('importChunk saves a slice and reports completion with the final offset', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [500]]);
+    mockAppearanceDetail($client, 500, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 10);
     mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Heaume']]);
     mockMediaSearch($client, [['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 'fdid' => 1]]);
 
-    resolve(AppearanceImporter::class)->import();
+    $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 0, timeBoxSeconds: 600);
 
-    // Une pause avant chaque phase d'appels API : détails, search items, search media
-    Sleep::assertSlept(fn (\Carbon\CarbonInterval $carbonInterval): bool => $carbonInterval->totalSeconds >= 3500, times: 3);
-    expect(WowAppearance::query()->find(321)->is_active)->toBeTrue();
+    expect($appearanceImportProgress->done)->toBeTrue();
+    expect($appearanceImportProgress->offset)->toBe(1);
+    expect($appearanceImportProgress->total)->toBe(1);
+    expect(WowAppearance::query()->find(500)?->item_id)->toBe(10);
 });
 
 test('it returns early when every slot index fails', function (): void {

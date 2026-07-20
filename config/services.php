@@ -41,6 +41,12 @@ return [
         'region' => env('BLIZZARD_REGION', 'eu'),
         'redirect_uri' => env('BLIZZARD_REDIRECT_URI'),
         'admin_bnet_id' => env('ADMIN_BNET_ID'),
+
+        // Réimport : plafond horaire réservé aux imports (< quota réel 36000, laisse la
+        // marge au trafic site), durée max d'une passe de job, taille d'une tranche.
+        'import_hourly_ceiling' => (int) env('BLIZZARD_IMPORT_HOURLY_CEILING', 30000),
+        'import_chunk_timebox' => (int) env('BLIZZARD_IMPORT_CHUNK_TIMEBOX', 600),
+        'appearance_slice' => (int) env('BLIZZARD_APPEARANCE_SLICE', 2000),
     ],
 
     'discord' => [
