@@ -79,6 +79,54 @@ test('aggregateAppearances returns per-slot completed/total counters', function 
         ->and($weapon['completed'])->toBe(0);
 });
 
+test('aggregateAppearances emits a single row per slot whatever the raw categories', function (): void {
+    // item_class.name brut de Blizzard : un même slot porte des catégories parasites.
+    WowAppearance::factory()->create(['id' => 1, 'slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 2, 'slot' => 'WEAPON', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 3, 'slot' => 'WEAPON', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 4, 'slot' => 'WEAPON', 'category' => 'Quête', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 5, 'slot' => 'WEAPON', 'category' => null, 'is_active' => true]);
+
+    $aggregator = new CollectionProgressAggregator;
+    $result = $aggregator->aggregateAppearances([1, 2, 3]);
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['slot'])->toBe('WEAPON')
+        ->and($result[0]['total'])->toBe(5)
+        ->and($result[0]['completed'])->toBe(3)
+        ->and($result[0]['category'])->toBe('Arme');
+});
+
+test('aggregateAppearances never counts an unlocked appearance twice', function (): void {
+    WowAppearance::factory()->create(['id' => 1, 'slot' => 'WAIST', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 2, 'slot' => 'WAIST', 'category' => 'Quête', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 3, 'slot' => 'SHIELD', 'category' => 'Armure', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 4, 'slot' => 'SHIELD', 'category' => 'Arme', 'is_active' => true]);
+
+    $aggregator = new CollectionProgressAggregator;
+    $result = $aggregator->aggregateAppearances([1, 2, 3, 4]);
+
+    // La somme des completed doit rester égale au nombre réel d'apparences débloquées.
+    expect(array_sum(array_column($result, 'completed')))->toBe(4);
+
+    foreach ($result as $row) {
+        expect($row['completed'])->toBeLessThanOrEqual($row['total']);
+    }
+});
+
+test('aggregateAppearances derives category from the slot map, not from the stored column', function (): void {
+    // SHIELD est de l'armure en jeu, même si des lignes portent item_class « Arme ».
+    WowAppearance::factory()->create(['id' => 1, 'slot' => 'SHIELD', 'category' => 'Arme', 'is_active' => true]);
+    WowAppearance::factory()->create(['id' => 2, 'slot' => 'UNKNOWN_SLOT', 'category' => 'Armure', 'is_active' => true]);
+
+    $aggregator = new CollectionProgressAggregator;
+    $result = collect($aggregator->aggregateAppearances([]));
+
+    expect($result->firstWhere('slot', 'SHIELD')['category'])->toBe('Armure')
+        ->and($result->firstWhere('slot', 'UNKNOWN_SLOT'))->not->toBeNull()
+        ->and($result->firstWhere('slot', 'UNKNOWN_SLOT')['category'])->toBeNull();
+});
+
 test('aggregateAppearances returns zero completed when nothing unlocked', function (): void {
     WowAppearance::factory()->create(['slot' => 'HEAD', 'is_active' => true]);
 
