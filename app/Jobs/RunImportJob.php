@@ -14,7 +14,10 @@ class RunImportJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 1200;
+    // La charge lourde (apparences) est externalisée dans ImportAppearancesJob, qui
+    // s'auto-relâche pendant les pauses de budget. Ce job ne fait plus que les imports
+    // légers inline. retry_after (config/queue.php) doit rester > à ce timeout.
+    public int $timeout = 1800;
 
     /**
      * @param  array<string, mixed>  $parameters

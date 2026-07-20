@@ -65,6 +65,46 @@ test('it imports mounts from SA JSON with French names from the API', function (
     expect(WowMount::query()->find(101)->name_fr)->toBe('Destrier squelette');
 });
 
+test('it adds API-only mounts absent from SA JSON under the "Autres" category', function (): void {
+    writeMountsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Reputation',
+                    'items' => [
+                        ['ID' => 100, 'name' => 'TestMount1', 'icon' => 'ability_mount_test', 'spellid' => 1234, 'creatureId' => 5678, 'itemId' => null, 'faction' => null, 'quality' => 4],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    // 100 est dans SimpleArmory, 999 non : 999 doit être ajoutée via l'index API.
+    mockMountIndex($client, [
+        ['id' => 100, 'name' => 'Monture Test'],
+        ['id' => 999, 'name' => 'Monture API seule'],
+    ]);
+
+    resolve(MountImporter::class)->import();
+
+    expect(WowMount::query()->count())->toBe(2);
+
+    // La monture SimpleArmory garde sa catégorie riche.
+    expect(WowMount::query()->find(100)->category)->toBe('Classic');
+
+    // La monture API-only est ajoutée, catégorie « Autres », champs SA à null.
+    $apiOnly = WowMount::query()->find(999);
+    expect($apiOnly->name_fr)->toBe('Monture API seule');
+    expect($apiOnly->category)->toBe('Autres');
+    expect($apiOnly->source)->toBeNull();
+    expect($apiOnly->source_spell_id)->toBeNull();
+    expect($apiOnly->icon_url)->toBeNull();
+    expect($apiOnly->is_active)->toBeTrue();
+});
+
 test('it returns early when SA JSON is empty', function (): void {
     writeMountsJson([]);
 

@@ -17,10 +17,18 @@ class RateLimitingMiddleware
     /** @var list<float> */
     private array $timestamps = [];
 
+    public function __construct(
+        private readonly HourlyBudgetGuard $hourlyBudgetGuard,
+    ) {}
+
     public function __invoke(callable $handler): callable
     {
         return function (RequestInterface $request, array $options) use ($handler): PromiseInterface {
             $this->waitForSlot();
+
+            // Point de passage unique de tous les appels Blizzard (site + imports) :
+            // on compte ici pour que le budget horaire reflète l'usage réel total.
+            $this->hourlyBudgetGuard->consume(1);
 
             /** @var PromiseInterface $promise */
             $promise = $handler($request, $options);

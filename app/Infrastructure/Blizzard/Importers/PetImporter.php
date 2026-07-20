@@ -14,8 +14,10 @@ final readonly class PetImporter
     use ImportsFromBlizzardApi;
 
     public function __construct(
-        private BlizzardApiClient $blizzardApiClient,
-    ) {}
+        BlizzardApiClient $blizzardApiClient,
+    ) {
+        $this->blizzardApiClient = $blizzardApiClient;
+    }
 
     public function import(): void
     {

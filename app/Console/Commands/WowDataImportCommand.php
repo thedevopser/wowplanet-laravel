@@ -84,9 +84,9 @@ class WowDataImportCommand extends Command
         }
 
         if ($type === 'all' || $type === 'appearances') {
-            $this->info('Importing Appearances (transmog) from Blizzard API...');
-            $limit = $this->option('limit');
-            $blizzardBatchImporter->importAppearances((bool) $this->option('full'), is_numeric($limit) ? (int) $limit : null);
+            $jobId = (string) \Illuminate\Support\Str::uuid();
+            $this->info('Dispatching resumable appearance import (queue: imports)...');
+            dispatch(new \App\Jobs\ImportAppearancesJob($jobId, (bool) $this->option('full')));
             $this->newLine();
         }
 

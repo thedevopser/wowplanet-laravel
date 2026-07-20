@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
+use App\Application\DTOs\AppearanceImportProgress;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Blizzard\HourlyBudgetGuard;
@@ -61,49 +62,124 @@ final readonly class AppearanceImporter
     private const SEARCH_BATCH = 5;
 
     public function __construct(
-        private BlizzardApiClient $blizzardApiClient,
+        BlizzardApiClient $blizzardApiClient,
         private HourlyBudgetGuard $hourlyBudgetGuard,
-    ) {}
+    ) {
+        $this->blizzardApiClient = $blizzardApiClient;
+    }
 
     /**
+     * Import synchrone bloquant (CLI direct / tests). En prod le mode fluide passe par
+     * ImportAppearancesJob, qui appelle importChunk() et se re-dispatch au lieu de bloquer.
+     *
      * @param  int|null  $limit  Borne le nombre de détails récupérés (smoke-test sans consommer le quota API)
      */
     public function import(bool $full = false, ?int $limit = null): void
     {
-        $this->info('Fetching item appearance slot indexes from Blizzard API...');
+        $offset = 0;
+        do {
+            $progress = $this->importChunk($full, $offset, PHP_INT_MAX, $limit);
+            $offset = $progress->offset;
 
+            if (! $progress->done && $progress->secondsUntilBudget > 0) {
+                $this->info(sprintf('  Hourly API budget reached, pausing %ds...', $progress->secondsUntilBudget));
+                Sleep::sleep($progress->secondsUntilBudget);
+            }
+        } while (! $progress->done);
+    }
+
+    /**
+     * Traite des tranches d'apparences depuis $offset en sauvegardant chaque tranche.
+     * S'arrête sans avancer l'offset quand le budget import est épuisé (retourne
+     * secondsUntilBudget), ou quand le time-box est atteint. deactivateStaleRows()
+     * uniquement une fois tout traité (jamais en mode --limit / smoke-test).
+     */
+    public function importChunk(bool $full, int $offset, int $timeBoxSeconds, ?int $limit = null): AppearanceImportProgress
+    {
+        $deadline = microtime(true) + $timeBoxSeconds;
+
+        $this->info('Fetching item appearance slot indexes from Blizzard API...');
         $slotByAppearance = $this->fetchSlotIndexes();
         if ($slotByAppearance === []) {
             $this->info('ERROR: Could not fetch any appearance slot index.');
 
+            return new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0);
+        }
+
+        $allIds = array_keys($slotByAppearance);
+        sort($allIds);
+        if ($limit !== null) {
+            $allIds = array_slice($allIds, 0, $limit);
+        }
+
+        $total = count($allIds);
+
+        /** @var array<int, true> $complete IDs déjà complets en base (mode incrémental). */
+        $complete = $full ? [] : array_fill_keys($this->completeAppearanceIds(), true);
+
+        /** @var int $ceiling */
+        $ceiling = config('services.blizzard.import_hourly_ceiling', 30000);
+        /** @var int $sliceSize */
+        $sliceSize = config('services.blizzard.appearance_slice', 2000);
+        $slice = max(1, $sliceSize);
+
+        $i = $offset;
+        while ($i < $total) {
+            if (microtime(true) >= $deadline) {
+                return new AppearanceImportProgress(done: false, offset: $i, total: $total, secondsUntilBudget: 0);
+            }
+
+            $window = array_slice($allIds, $i, $slice);
+            $idsToFetch = $full
+                ? $window
+                : array_values(array_filter($window, static fn (int $id): bool => ! isset($complete[$id])));
+
+            if ($idsToFetch === []) {
+                $i += count($window); // fenêtre déjà complète : on avance sans consommer de budget
+
+                continue;
+            }
+
+            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($idsToFetch), $ceiling);
+            if ($wait > 0) {
+                return new AppearanceImportProgress(done: false, offset: $i, total: $total, secondsUntilBudget: $wait);
+            }
+
+            $this->processSlice($idsToFetch, $slotByAppearance);
+            $i += count($window);
+            $this->info(sprintf('  Appearance progress: %d/%d.', $i, $total));
+        }
+
+        if ($limit === null) {
+            $this->deactivateStaleRows($slotByAppearance);
+        }
+
+        return new AppearanceImportProgress(done: true, offset: $total, total: $total, secondsUntilBudget: 0);
+    }
+
+    /**
+     * Traite une tranche d'IDs de bout en bout : détails → items/media → sauvegarde.
+     *
+     * @param  list<int>  $ids
+     * @param  array<int, string>  $slotByAppearance
+     */
+    private function processSlice(array $ids, array $slotByAppearance): void
+    {
+        $details = $this->fetchDetails($ids);
+        if ($details === []) {
             return;
         }
 
-        $this->info(sprintf('Found %d collectible appearances across slot indexes.', count($slotByAppearance)));
-
-        $idsToFetch = $full ? array_keys($slotByAppearance) : $this->missingAppearanceIds($slotByAppearance);
-        if ($limit !== null) {
-            $idsToFetch = array_slice($idsToFetch, 0, $limit);
-        }
-
-        $this->info(sprintf('Fetching %d appearance details (%s mode)...', count($idsToFetch), $full ? 'full' : 'incremental'));
-
-        $details = $this->fetchDetailsWithBudget($idsToFetch);
-
         [$itemIds, $mediaIds] = $this->collectReferencedIds($details);
-        $this->info(sprintf('Searching item data (%d referenced items)...', count($itemIds)));
         $itemData = $this->searchByIdWindows('data/wow/search/item', $itemIds, $this->parseItemResult(...));
 
         // Les media d'items sont aussi cherchés : ~1/3 des media ids d'apparences
         // n'existent pas dans l'API, l'icône de l'item représentatif sert de secours.
         $mediaSearchIds = array_values(array_unique(array_merge($mediaIds, $itemIds)));
-        $this->info(sprintf('Resolving icons (%d media ids)...', count($mediaSearchIds)));
         $mediaData = $this->searchByIdWindows('data/wow/search/media', $mediaSearchIds, $this->parseMediaResult(...), '&tags=item');
-        $this->info(sprintf('Resolved %d item entries and %d icons.', count($itemData), count($mediaData)));
 
         $rows = $this->buildRows($details, $slotByAppearance, $itemData, $mediaData);
         $this->saveRows($rows);
-        $this->deactivateStaleRows($slotByAppearance);
     }
 
     /**
@@ -137,60 +213,47 @@ final readonly class AppearanceImporter
     }
 
     /**
-     * IDs absents de la base ou incomplets (jamais détaillés avec succès).
+     * IDs déjà complets en base (détaillés avec succès : item_id + icon_url).
      *
-     * @param  array<int, string>  $slotByAppearance
      * @return list<int>
      */
-    private function missingAppearanceIds(array $slotByAppearance): array
+    private function completeAppearanceIds(): array
     {
-        /** @var list<int> $complete */
-        $complete = WowAppearance::query()
+        /** @var list<int> $ids */
+        $ids = WowAppearance::query()
             ->whereNotNull('item_id')
             ->whereNotNull('icon_url')
             ->pluck('id')
             ->all();
 
-        return array_values(array_diff(array_keys($slotByAppearance), $complete));
+        return $ids;
     }
 
     /**
-     * Détails d'apparences par lots, en respectant le budget horaire d'appels API.
-     * Chaque réponse JSON est immédiatement réduite à une structure compacte
-     * (catégorie, media id, items) pour tenir en mémoire sur ~50 000 apparences.
+     * Détails d'apparences par lots. Le budget est compté globalement via le middleware
+     * et vérifié au niveau tranche (importChunk) ; ici on ne fait que récupérer. Chaque
+     * réponse JSON est immédiatement réduite à une structure compacte (catégorie, media id, items).
      *
      * @param  list<int>  $ids
      * @return array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>
      */
-    private function fetchDetailsWithBudget(array $ids): array
+    private function fetchDetails(array $ids): array
     {
         $details = [];
-        $fetched = 0;
-        $total = count($ids);
 
         foreach (array_chunk($ids, self::DETAIL_CHUNK) as $chunk) {
-            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($chunk));
-            if ($wait > 0) {
-                $this->info(sprintf('  Hourly API budget reached, pausing %ds...', $wait));
-                Sleep::sleep($wait);
-            }
-
             $endpoints = [];
             foreach ($chunk as $id) {
                 $endpoints[$id] = 'data/wow/item-appearance/'.$id;
             }
 
             $results = $this->fetchBatchAsync($endpoints);
-            $this->hourlyBudgetGuard->consume(count($chunk));
 
             foreach ($results as $id => $result) {
                 if ($result !== null) {
                     $details[(int) $id] = $this->extractDetail($result);
                 }
             }
-
-            $fetched += count($chunk);
-            $this->info(sprintf('  Details progress: %d/%d.', $fetched, $total));
         }
 
         return $details;
@@ -289,14 +352,7 @@ final readonly class AppearanceImporter
         // réponses brutes ferait exploser la mémoire.
         $map = [];
         foreach (array_chunk($endpoints, self::SEARCH_BATCH) as $chunk) {
-            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($chunk));
-            if ($wait > 0) {
-                $this->info(sprintf('  Hourly API budget reached, pausing %ds...', $wait));
-                Sleep::sleep($wait);
-            }
-
             $responses = $this->fetchBatchAsync($chunk);
-            $this->hourlyBudgetGuard->consume(count($chunk));
 
             foreach ($responses as $response) {
                 if ($response === null) {
