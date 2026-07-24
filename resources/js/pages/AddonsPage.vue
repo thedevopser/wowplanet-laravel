@@ -1,5 +1,5 @@
 <template>
-    <div class="max-w-4xl mx-auto py-6 sm:py-10 space-y-8">
+    <div class="max-w-6xl mx-auto py-6 sm:py-10 space-y-8">
         <Head>
             <title>{{ meta.title }}</title>
             <meta name="description" :content="meta.description">
@@ -26,7 +26,7 @@
             </p>
         </div>
 
-        <div class="grid gap-6 sm:grid-cols-2">
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <article
                 v-for="addon in addons"
                 :key="addon.slug"
@@ -124,6 +124,24 @@ const addons = [
             'Reset automatique à 5h (heure serveur) : chaque jour, chaque mercredi, le 1er du mois',
             'État recalculé tout seul au passage de l\'heure de reset',
             'Interface en français sur les clients FR, en anglais ailleurs',
+        ],
+    },
+    {
+        slug: 'tanktruckreverse',
+        name: 'TankTruckReverse',
+        tagline: 'Bip de recul pour tanks',
+        image: '/images/addons/tanktruckreverse.png',
+        curseforge: 'https://www.curseforge.com/wow/addons/tanks-truck-reverse',
+        description:
+            'TankTruckReverse joue un <strong class="text-white">bip de camion en marche '
+            + 'arrière</strong> quand un tank recule pendant un combat. Minuscule et sans '
+            + 'configuration : le son se déclenche uniquement en spécialisation tank, en '
+            + 'combat, touche de recul enfoncée.',
+        features: [
+            'Détection fiable via les fonctions de déplacement du jeu (aucun calcul de position)',
+            'Se déclenche seulement en combat, en spé tank, en reculant (le pas-chassé et la course avant ne comptent pas)',
+            'Répétition du bip toutes les ~0,7 s tant que la touche de recul est maintenue',
+            'Commandes : /ttr (activer/désactiver), /ttr test, /ttr debug',
         ],
     },
 ];

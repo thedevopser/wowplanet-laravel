@@ -39,6 +39,7 @@ describe('AddonsPage', () => {
 
         expect(text).toContain('MapTidy');
         expect(text).toContain('WhatTodo');
+        expect(text).toContain('TankTruckReverse');
     });
 
     it('renders accented text without raw HTML entities', async () => {
@@ -56,5 +57,6 @@ describe('AddonsPage', () => {
 
         expect(hrefs).toContain('https://www.curseforge.com/wow/addons/maptidy');
         expect(hrefs).toContain('https://www.curseforge.com/wow/addons/whattodo');
+        expect(hrefs).toContain('https://www.curseforge.com/wow/addons/tanks-truck-reverse');
     });
 });
