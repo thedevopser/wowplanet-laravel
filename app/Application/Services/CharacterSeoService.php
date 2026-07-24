@@ -76,7 +76,7 @@ class CharacterSeoService
             ],
             'addons' => [
                 'Addons WoW | WowPlanet',
-                'Découvrez MapTidy et WhatTodo, les addons World of Warcraft développés par WowPlanet : filtrage des marqueurs de quêtes et liste de tâches à faire.',
+                'Découvrez MapTidy, WhatTodo et TankTruckReverse, les addons World of Warcraft développés par WowPlanet : filtrage des marqueurs de quêtes, liste de tâches à faire et bip de recul pour tanks.',
             ],
             default => [
                 'WowPlanet',
