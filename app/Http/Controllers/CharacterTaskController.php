@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Application\Services\CharacterTaskService;
+use App\Http\Controllers\Concerns\ResolvesBnetUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Session;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class CharacterTaskController extends Controller
 {
+    use ResolvesBnetUser;
+
     public function __construct(
         private readonly CharacterTaskService $characterTaskService,
     ) {}
@@ -78,15 +80,5 @@ class CharacterTaskController extends Controller
         } catch (AccessDeniedHttpException) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
-    }
-
-    private function getAuthenticatedUserId(): ?string
-    {
-        if (! Session::has('blizzard_user_token')) {
-            return null;
-        }
-
-        /** @var string|null */
-        return Session::get('bnet_user_id');
     }
 }

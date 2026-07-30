@@ -74,47 +74,44 @@
                 </div>
             </div>
 
+            <!-- Favorites -->
+            <section v-if="favoriteCharacters.length" class="space-y-3">
+                <h3 class="flex items-center gap-2 text-sm font-bold text-amber-400/90 uppercase tracking-wide">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M11.48 3.5a.56.56 0 011.04 0l2.13 5.11c.08.2.27.34.49.36l5.52.44c.5.04.71.67.32 1l-4.2 3.6a.56.56 0 00-.19.57l1.28 5.39c.12.49-.41.88-.84.62l-4.73-2.89a.56.56 0 00-.58 0l-4.73 2.89c-.43.26-.96-.13-.84-.62l1.28-5.39a.56.56 0 00-.19-.57l-4.2-3.6c-.39-.33-.18-.96.32-1l5.52-.44a.56.56 0 00.49-.36L11.48 3.5z" />
+                    </svg>
+                    Favoris
+                    <span class="text-slate-600 font-mono normal-case">{{ favoritesStore.favoriteCount }}/{{ MAX_FAVORITES }}</span>
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <MyCharacterCard
+                        v-for="char in favoriteCharacters"
+                        :key="char.name + '-' + char.realmSlug"
+                        :character="char"
+                        :is-favorite="true"
+                        @toggle-favorite="toggleFavorite(char)"
+                    />
+                </div>
+            </section>
+
             <!-- Character Grid -->
-            <div v-if="filteredUserCharacters.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <Link
-                    v-for="char in filteredUserCharacters"
-                    :key="char.name + '-' + char.realmSlug"
-                    :href="`/character/${char.realmSlug}/${char.name.toLowerCase()}`"
-                    class="bg-slate-800/40 border border-white/5 p-5 rounded-2xl hover:bg-slate-800/60 hover:border-blue-500/20 transition-all group text-left"
-                >
-                    <div class="flex items-center gap-4">
-                        <img
-                            v-if="char.avatarUrl"
-                            :src="char.avatarUrl"
-                            :alt="char.name"
-                            class="w-12 h-12 rounded-xl border border-white/10 shadow-lg bg-slate-800 object-cover"
-                            :style="{ borderColor: (classColors[char.classId] || '#FFFFFF') + '30' }"
-                        >
-                        <div
-                            v-else
-                            class="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black border border-white/10 shadow-lg"
-                            :style="{ backgroundColor: (classColors[char.classId] || '#FFFFFF') + '15', color: classColors[char.classId] || '#FFFFFF', borderColor: (classColors[char.classId] || '#FFFFFF') + '30' }"
-                        >
-                            {{ char.name.charAt(0) }}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-base md:text-lg font-bold truncate group-hover:text-blue-400 transition-colors" :style="{ color: classColors[char.classId] || '#FFFFFF' }">
-                                {{ char.name }}
-                            </div>
-                            <div class="text-xs sm:text-sm text-slate-500 truncate">{{ char.realm }}</div>
-                        </div>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 mt-3 text-[11px] sm:text-xs text-slate-400">
-                        <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5 font-mono">Niv {{ char.level }}</span>
-                        <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5 font-bold" :style="{ color: char.faction === 'Alliance' ? '#3b82f6' : '#ef4444' }">{{ char.faction }}</span>
-                        <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5">{{ char.raceName }}</span>
-                        <span class="px-2 py-0.5 bg-slate-800 rounded border border-white/5" :style="{ color: classColors[char.classId] || '#FFFFFF' }">{{ char.className }}</span>
-                    </div>
-                </Link>
-            </div>
+            <section v-if="filteredUserCharacters.length" class="space-y-3">
+                <h3 v-if="favoritesStore.favoriteCount" class="text-sm font-bold text-slate-500 uppercase tracking-wide">
+                    Tous mes personnages
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <MyCharacterCard
+                        v-for="char in filteredUserCharacters"
+                        :key="char.name + '-' + char.realmSlug"
+                        :character="char"
+                        :favorite-disabled="favoritesStore.isFull"
+                        @toggle-favorite="toggleFavorite(char)"
+                    />
+                </div>
+            </section>
 
             <!-- No search results -->
-            <div v-else class="text-center py-16">
+            <div v-if="!favoriteCharacters.length && !filteredUserCharacters.length" class="text-center py-16">
                 <p class="text-slate-500">Aucun personnage ne correspond &agrave; votre recherche.</p>
             </div>
         </template>
@@ -148,12 +145,14 @@ export default {
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { useCharacterStore } from '../stores/character';
-import { classColors } from '../utils/classColors';
+import { useFavoriteStore, MAX_FAVORITES } from '../stores/favorites';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
+import MyCharacterCard from '../components/MyCharacterCard.vue';
 
 const store = useCharacterStore();
+const favoritesStore = useFavoriteStore();
 const characterSearch = ref('');
 const sortBy = ref('name');
 const showCrossCharSuccess = ref(false);
@@ -172,6 +171,9 @@ onMounted(async () => {
     if (store.isAuthenticated && store.crossCharacterStatus !== 'ready') {
         store.computeCrossCharacter();
     }
+    if (store.isAuthenticated) {
+        favoritesStore.fetchFavorites();
+    }
 });
 
 watch(() => store.crossCharacterStatus, (status) => {
@@ -181,18 +183,33 @@ watch(() => store.crossCharacterStatus, (status) => {
     }
 });
 
-const filteredUserCharacters = computed(() => {
+const matchesSearch = (char) => {
     const q = characterSearch.value.toLowerCase().trim();
-    let list = store.userCharacters;
-    if (q) {
-        list = list.filter(c =>
-            c.name.toLowerCase().includes(q) ||
-            c.realm.toLowerCase().includes(q) ||
-            c.className.toLowerCase().includes(q) ||
-            c.raceName.toLowerCase().includes(q) ||
-            c.faction.toLowerCase().includes(q)
-        );
-    }
+    if (!q) return true;
+    return char.name.toLowerCase().includes(q) ||
+        char.realm.toLowerCase().includes(q) ||
+        char.className.toLowerCase().includes(q) ||
+        char.raceName.toLowerCase().includes(q) ||
+        char.faction.toLowerCase().includes(q);
+};
+
+const characterKey = (char) => `${char.realmSlug.toLowerCase()}|${char.name.toLowerCase()}`;
+
+// Favorites keep their own order (order they were starred), not the current sort.
+const favoriteCharacters = computed(() => {
+    const keys = favoritesStore.favoriteKeys;
+    if (!keys.size) return [];
+    const byKey = new Map(store.userCharacters.map(c => [characterKey(c), c]));
+    return favoritesStore.favorites
+        .map(f => byKey.get(`${f.realm_slug}|${f.character_name}`))
+        .filter(c => c !== undefined && matchesSearch(c));
+});
+
+const toggleFavorite = (char) => favoritesStore.toggleFavorite(char.realmSlug, char.name);
+
+const filteredUserCharacters = computed(() => {
+    const keys = favoritesStore.favoriteKeys;
+    const list = store.userCharacters.filter(c => !keys.has(characterKey(c)) && matchesSearch(c));
     return [...list].sort((a, b) => {
         switch (sortBy.value) {
             case 'level': return b.level - a.level;

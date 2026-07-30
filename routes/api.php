@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
+use App\Http\Controllers\CharacterFavoriteController;
 use App\Http\Controllers\CharacterTaskController;
 use App\Http\Controllers\TalentController;
 use App\Http\Controllers\UserCharacterController;
@@ -27,6 +28,10 @@ Route::middleware('throttle:authenticated')->group(function (): void {
     Route::post('/character-tasks', [CharacterTaskController::class, 'store']);
     Route::put('/character-tasks/{id}', [CharacterTaskController::class, 'update']);
     Route::delete('/character-tasks/{id}', [CharacterTaskController::class, 'destroy']);
+
+    Route::get('/character-favorites', [CharacterFavoriteController::class, 'index']);
+    Route::post('/character-favorites', [CharacterFavoriteController::class, 'store']);
+    Route::delete('/character-favorites/{realm}/{name}', [CharacterFavoriteController::class, 'destroy']);
 });
 
 Route::middleware(['throttle:authenticated', 'admin'])->prefix('admin')->group(function (): void {
