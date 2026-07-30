@@ -9,6 +9,12 @@ use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowPet;
 
+/**
+ * Catalogue des mascottes = index de l'API officielle ∩ liste curée SimpleArmory.
+ *
+ * Voir MountImporter pour le détail du partage d'autorité entre les deux sources :
+ * l'API tranche l'existence et le nom, SimpleArmory la présentation.
+ */
 final readonly class PetImporter
 {
     use ImportsFromBlizzardApi;
@@ -27,6 +33,10 @@ final readonly class PetImporter
         }
 
         $frenchNames = $this->loadFrenchNames();
+        if ($frenchNames === []) {
+            return;
+        }
+
         $rows = $this->buildRows($saPets, $frenchNames);
 
         $this->saveRows($rows);
@@ -63,7 +73,7 @@ final readonly class PetImporter
 
         $index = $this->fetchWithRetry('data/wow/pet/index');
         if ($index === null) {
-            $this->info('  WARNING: pet index unavailable, falling back to English names.');
+            $this->info('  ERROR: pet index unavailable, aborting import (catalog left untouched).');
 
             return [];
         }
@@ -80,7 +90,13 @@ final readonly class PetImporter
             }
         }
 
-        $this->info(sprintf('  Found %d French pet names.', count($names)));
+        if ($names === []) {
+            $this->info('  ERROR: pet index holds no usable name, aborting import (catalog left untouched).');
+
+            return [];
+        }
+
+        $this->info(sprintf('  Found %d live pets in the API index.', count($names)));
 
         return $names;
     }
@@ -93,16 +109,15 @@ final readonly class PetImporter
     private function buildRows(array $saPets, array $frenchNames): array
     {
         $rows = [];
-        $matched = 0;
-        $fallbacks = 0;
+        $notCurated = 0;
         $withIcons = 0;
 
-        foreach ($saPets as $id => $pet) {
-            $nameFr = $frenchNames[$id] ?? null;
-            if ($nameFr !== null) {
-                $matched++;
-            } else {
-                $fallbacks++;
+        foreach ($frenchNames as $id => $nameFr) {
+            $pet = $saPets[$id] ?? null;
+            if ($pet === null) {
+                $notCurated++;
+
+                continue;
             }
 
             $iconUrl = $pet['icon'] !== null ? SimpleArmoryParser::buildIconUrl($pet['icon']) : null;
@@ -112,7 +127,7 @@ final readonly class PetImporter
 
             $rows[] = [
                 'id' => $id,
-                'name_fr' => $nameFr ?? sprintf('[EN] Pet #%d', $id),
+                'name_fr' => $nameFr,
                 'category' => $pet['category'] !== '' ? $pet['category'] : null,
                 'source' => $pet['source'] !== '' ? $pet['source'] : null,
                 'creature_id' => $pet['creatureId'] > 0 ? $pet['creatureId'] : null,
@@ -121,8 +136,10 @@ final readonly class PetImporter
             ];
         }
 
-        $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
-        $this->info(sprintf('  %d with icon URL.', $withIcons));
+        $notLive = count(array_diff_key($saPets, $frenchNames));
+
+        $this->info(sprintf('  %d pets in catalog, %d with icon URL.', count($rows), $withIcons));
+        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
 
         return $rows;
     }
@@ -144,6 +161,8 @@ final readonly class PetImporter
             $count += count($chunk);
             $this->info(sprintf('  Saved %d...', $count));
         }
+
+        $this->deleteRowsOutsideCatalog(WowPet::class, array_column($rows, 'id'), 'pets');
 
         $this->info(sprintf('Pet import complete: %d items.', $count));
     }

@@ -9,11 +9,21 @@ use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowMount;
 
+/**
+ * Catalogue des montures = index de l'API officielle ∩ liste curée SimpleArmory.
+ *
+ * L'API fait autorité sur l'existence et le nom : elle n'expose que ce qui est live
+ * sur retail, là où SimpleArmory (construit sur les DB2 dataminés du client) référence
+ * déjà le contenu des patchs à venir. SimpleArmory fait autorité sur la présentation —
+ * extension, source fine, icône — que l'API n'expose pas.
+ *
+ * Une monture absente de l'API n'est pas encore obtenable ; une monture absente de
+ * SimpleArmory est une entrée non curée (doublon, variante PNJ, nom vide). Les deux
+ * sont exclues du catalogue.
+ */
 final readonly class MountImporter
 {
     use ImportsFromBlizzardApi;
-
-    private const API_ONLY_CATEGORY = 'Autres';
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
@@ -29,6 +39,10 @@ final readonly class MountImporter
         }
 
         $frenchNames = $this->loadFrenchNames();
+        if ($frenchNames === []) {
+            return;
+        }
+
         $rows = $this->buildRows($saMounts, $frenchNames);
 
         $this->saveRows($rows);
@@ -65,7 +79,7 @@ final readonly class MountImporter
 
         $index = $this->fetchWithRetry('data/wow/mount/index');
         if ($index === null) {
-            $this->info('  WARNING: mount index unavailable, falling back to English names.');
+            $this->info('  ERROR: mount index unavailable, aborting import (catalog left untouched).');
 
             return [];
         }
@@ -82,7 +96,13 @@ final readonly class MountImporter
             }
         }
 
-        $this->info(sprintf('  Found %d French names.', count($names)));
+        if ($names === []) {
+            $this->info('  ERROR: mount index holds no usable name, aborting import (catalog left untouched).');
+
+            return [];
+        }
+
+        $this->info(sprintf('  Found %d live mounts in the API index.', count($names)));
 
         return $names;
     }
@@ -95,16 +115,15 @@ final readonly class MountImporter
     private function buildRows(array $saMounts, array $frenchNames): array
     {
         $rows = [];
-        $matched = 0;
-        $fallbacks = 0;
+        $notCurated = 0;
         $withIcons = 0;
 
-        foreach ($saMounts as $id => $mount) {
-            $nameFr = $frenchNames[$id] ?? null;
-            if ($nameFr !== null) {
-                $matched++;
-            } else {
-                $fallbacks++;
+        foreach ($frenchNames as $id => $nameFr) {
+            $mount = $saMounts[$id] ?? null;
+            if ($mount === null) {
+                $notCurated++;
+
+                continue;
             }
 
             $iconUrl = $mount['icon'] !== null ? SimpleArmoryParser::buildIconUrl($mount['icon']) : null;
@@ -114,7 +133,7 @@ final readonly class MountImporter
 
             $rows[] = [
                 'id' => $id,
-                'name_fr' => $nameFr ?? sprintf('[EN] Mount #%d', $id),
+                'name_fr' => $nameFr,
                 'source' => $mount['source'] !== '' ? $mount['source'] : null,
                 'category' => $mount['category'] !== '' ? $mount['category'] : null,
                 'source_spell_id' => $mount['spellid'] > 0 ? $mount['spellid'] : null,
@@ -123,32 +142,10 @@ final readonly class MountImporter
             ];
         }
 
-        $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
-        $this->info(sprintf('  %d with icon URL.', $withIcons));
+        $notLive = count(array_diff_key($saMounts, $frenchNames));
 
-        // Complète avec les montures présentes dans l'index API mais absentes de
-        // SimpleArmory : SimpleArmory ne liste que la sélection curée, l'API en
-        // référence davantage. Ces montures n'ont pas d'extension (l'API ne
-        // l'expose pas), on les regroupe donc sous une catégorie « Autres ».
-        $apiOnly = 0;
-        foreach ($frenchNames as $id => $name) {
-            if (isset($saMounts[$id])) {
-                continue;
-            }
-
-            $rows[] = [
-                'id' => $id,
-                'name_fr' => $name !== '' ? $name : sprintf('[EN] Mount #%d', $id),
-                'source' => null,
-                'category' => self::API_ONLY_CATEGORY,
-                'source_spell_id' => null,
-                'icon_url' => null,
-                'is_active' => true,
-            ];
-            $apiOnly++;
-        }
-
-        $this->info(sprintf('  %d API-only mounts added (category "%s").', $apiOnly, self::API_ONLY_CATEGORY));
+        $this->info(sprintf('  %d mounts in catalog, %d with icon URL.', count($rows), $withIcons));
+        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
 
         return $rows;
     }
@@ -170,6 +167,8 @@ final readonly class MountImporter
             $count += count($chunk);
             $this->info(sprintf('  Saved %d...', $count));
         }
+
+        $this->deleteRowsOutsideCatalog(WowMount::class, array_column($rows, 'id'), 'mounts');
 
         $this->info(sprintf('Mount import complete: %d items.', $count));
     }

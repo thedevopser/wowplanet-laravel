@@ -7,6 +7,7 @@ namespace App\Infrastructure\Blizzard\Concerns;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\Utils;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 
@@ -254,6 +255,37 @@ trait ImportsFromBlizzardApi
         }
 
         return false;
+    }
+
+    /**
+     * Supprime les lignes locales absentes du lot qui vient d'être importé.
+     *
+     * L'upsert des importers n'efface jamais rien : sans ce balayage, un item retiré
+     * du catalogue (contenu non encore live, entrée non curée, reliquat d'un ancien
+     * format d'import) resterait en base indéfiniment. Les appelants doivent avoir
+     * interrompu l'import avant d'arriver ici si l'API a répondu de façon dégradée,
+     * sans quoi cette suppression détruirait le catalogue.
+     *
+     * @param  class-string<Model>  $modelClass
+     * @param  list<int>  $keptIds
+     */
+    protected function deleteRowsOutsideCatalog(string $modelClass, array $keptIds, string $label): int
+    {
+        /** @var list<int> $existingIds */
+        $existingIds = $modelClass::query()->pluck('id')->all();
+
+        $staleIds = array_values(array_diff($existingIds, $keptIds));
+        if ($staleIds === []) {
+            return 0;
+        }
+
+        foreach (array_chunk($staleIds, 500) as $chunk) {
+            $modelClass::query()->whereIn('id', $chunk)->delete();
+        }
+
+        $this->info(sprintf('  %d %s deleted (no longer in catalog).', count($staleIds), $label));
+
+        return count($staleIds);
     }
 
     protected function info(string $message): void

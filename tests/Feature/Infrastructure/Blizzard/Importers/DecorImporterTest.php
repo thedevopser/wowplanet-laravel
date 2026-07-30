@@ -105,7 +105,9 @@ test('it marks not obtainable decors as inactive', function (): void {
     expect(WowDecor::query()->find(501)->is_active)->toBeTrue();
 });
 
-test('it falls back to an English name when the API does not know the decor', function (): void {
+test('it skips decors absent from either source and deletes those dropped from the catalog', function (): void {
+    WowDecor::query()->create(['id' => 900, 'name_fr' => '[EN] Decor #900', 'is_active' => true]);
+
     writeDecorsJson([
         [
             'name' => 'The War Within',
@@ -113,7 +115,9 @@ test('it falls back to an English name when the API does not know the decor', fu
                 [
                     'name' => 'Quest',
                     'items' => [
-                        ['ID' => 600, 'name' => 'UnknownDecor', 'icon' => 'decor_x', 'spellid' => 0, 'creatureId' => 0, 'itemId' => '800', 'faction' => null, 'quality' => 1, 'notObtainable' => false],
+                        ['ID' => 600, 'name' => 'LiveDecor', 'icon' => 'decor_x', 'spellid' => 0, 'creatureId' => 0, 'itemId' => '800', 'faction' => null, 'quality' => 1, 'notObtainable' => false],
+                        // Décor dataminé sans source connue, absent de l'index API live.
+                        ['ID' => 1426, 'name' => 'UndiscoveredDecor', 'icon' => 'decor_z', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 1, 'notObtainable' => false],
                     ],
                 ],
             ],
@@ -122,14 +126,49 @@ test('it falls back to an English name when the API does not know the decor', fu
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
-    mockDecorIndex($client, []);
+    mockDecorIndex($client, [
+        ['id' => 600, 'name' => 'Décor live'],
+        ['id' => 777, 'name' => 'Décor non curé'],
+    ]);
 
     resolve(DecorImporter::class)->import();
 
-    expect(WowDecor::query()->find(600)->name_fr)->toStartWith('[EN]');
+    expect(WowDecor::query()->count())->toBe(1);
+    expect(WowDecor::query()->find(600)->name_fr)->toBe('Décor live');
+    expect(WowDecor::query()->find(1426))->toBeNull();
+    expect(WowDecor::query()->find(777))->toBeNull();
+    expect(WowDecor::query()->find(900))->toBeNull();
 });
 
-test('it still imports decors when the decor index API call fails', function (): void {
+test('it keeps a live but unobtainable decor inactive rather than dropping it', function (): void {
+    writeDecorsJson([
+        [
+            'name' => 'Midnight',
+            'subcats' => [
+                [
+                    'name' => 'Pre-Launch Event',
+                    'items' => [
+                        ['ID' => 1227, 'name' => 'PreLaunchDecor', 'icon' => 'decor_p', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 1, 'notObtainable' => true],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    // L'API atteste l'existence du décor, jamais qu'il est encore obtenable.
+    mockDecorIndex($client, [['id' => 1227, 'name' => 'Chaise ailée sin’dorei']]);
+
+    resolve(DecorImporter::class)->import();
+
+    expect(WowDecor::query()->find(1227)->name_fr)->toBe('Chaise ailée sin’dorei');
+    expect(WowDecor::query()->find(1227)->is_active)->toBeFalse();
+});
+
+test('it aborts without deleting anything when the decor index API call fails', function (): void {
+    WowDecor::query()->create(['id' => 700, 'name_fr' => 'Décor existant', 'is_active' => true]);
+
     writeDecorsJson([
         [
             'name' => 'The War Within',
@@ -153,7 +192,7 @@ test('it still imports decors when the decor index API call fails', function ():
     resolve(DecorImporter::class)->import();
 
     expect(WowDecor::query()->count())->toBe(1)
-        ->and(WowDecor::query()->find(700)->name_fr)->toStartWith('[EN]');
+        ->and(WowDecor::query()->find(700)->name_fr)->toBe('Décor existant');
 });
 
 test('it returns early when SA JSON is empty', function (): void {

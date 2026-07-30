@@ -21,7 +21,7 @@ beforeEach(function (): void {
  *
  * @param  array<string, list<int>>  $slots  [slotType => list<appearanceId>]
  */
-function mockSlotIndexes(\Mockery\MockInterface $mock, array $slots): void
+function mockSlotIndexes(\Mockery\MockInterface $mock, array $slots, array $failing = []): void
 {
     $allSlots = [
         'HEAD', 'SHOULDER', 'BODY', 'CHEST', 'WAIST', 'LEGS', 'FEET', 'WRIST', 'HAND',
@@ -30,12 +30,19 @@ function mockSlotIndexes(\Mockery\MockInterface $mock, array $slots): void
     ];
 
     foreach ($allSlots as $allSlot) {
+        $expectation = $mock->shouldReceive('get')
+            ->with('data/wow/item-appearance/slot/'.$allSlot, \Mockery::any());
+
+        if (in_array($allSlot, $failing, true)) {
+            $expectation->andThrow(new \Exception('API error: 404 Not Found'));
+
+            continue;
+        }
+
         $ids = $slots[$allSlot] ?? [];
-        $mock->shouldReceive('get')
-            ->with('data/wow/item-appearance/slot/'.$allSlot, \Mockery::any())
-            ->andReturn([
-                'appearances' => array_map(fn (int $id): array => ['id' => $id], $ids),
-            ]);
+        $expectation->andReturn([
+            'appearances' => array_map(fn (int $id): array => ['id' => $id], $ids),
+        ]);
     }
 }
 
@@ -151,8 +158,10 @@ test('it imports collectible appearances from the API slot indexes', function ()
     expect($weapon->quality)->toBe(5);
 });
 
-test('it deactivates stale appearances no longer present in the API slot indexes', function (): void {
+test('it deletes stale appearances no longer present in the API slot indexes', function (): void {
     WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
+    // Reliquat désactivé par une passe précédente : doit être purgé lui aussi.
+    WowAppearance::factory()->create(['id' => 998, 'is_active' => false]);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -164,8 +173,24 @@ test('it deactivates stale appearances no longer present in the API slot indexes
 
     resolve(AppearanceImporter::class)->import();
 
-    expect(WowAppearance::query()->find(999)->is_active)->toBeFalse()
+    expect(WowAppearance::query()->find(999))->toBeNull()
+        ->and(WowAppearance::query()->find(998))->toBeNull()
         ->and(WowAppearance::query()->find(321)->is_active)->toBeTrue();
+});
+
+test('it aborts without deleting anything when a single slot index fails', function (): void {
+    WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    // 17 slots répondent, CLOAK non : un index partiel effacerait tout un slot.
+    mockSlotIndexes($client, ['HEAD' => [321]], failing: ['CLOAK']);
+
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->find(999))->not->toBeNull()
+        ->and(WowAppearance::query()->find(321))->toBeNull();
 });
 
 test('it skips already complete appearances unless a full refresh is requested', function (): void {
@@ -307,7 +332,7 @@ test('it returns early when every slot index fails', function (): void {
     expect(WowAppearance::query()->count())->toBe(0);
 });
 
-test('it keeps an appearance importable when its detail has no linked items', function (): void {
+test('it skips an appearance whose detail has no usable item', function (): void {
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
@@ -318,9 +343,7 @@ test('it keeps an appearance importable when its detail has no linked items', fu
 
     resolve(AppearanceImporter::class)->import();
 
-    $appearance = WowAppearance::query()->find(888);
-    expect($appearance)->not->toBeNull()
-        ->and($appearance->slot)->toBe('HEAD')
-        ->and($appearance->name_fr)->toStartWith('[EN]')
-        ->and($appearance->is_active)->toBeTrue();
+    // Sans nom ni icône, la ligne serait affichée vide et compterait au dénominateur.
+    // Elle entrera d'elle-même dès que l'API exposera un item lié.
+    expect(WowAppearance::query()->find(888))->toBeNull();
 });

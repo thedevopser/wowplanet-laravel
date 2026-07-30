@@ -277,7 +277,9 @@ test('importAchievements handles missing JSON file gracefully', function (): voi
     expect(WowAchievement::query()->count())->toBe(0);
 });
 
-test('importAchievements uses English fallback when French name missing', function (): void {
+test('importAchievements leaves the catalog untouched when the API index is empty', function (): void {
+    WowAchievement::query()->create(['id' => 10, 'name_fr' => 'Achievement existant', 'expansion_id' => 0, 'category_name' => 'Classic', 'points' => 10, 'is_active' => true]);
+
     bbiWriteAchievementsJson([
         [
             'name' => 'General',
@@ -302,7 +304,7 @@ test('importAchievements uses English fallback when French name missing', functi
     $blizzardBatchImporter->importAchievements();
 
     expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(10)->name_fr)->toBe('[EN] Going Down!');
+    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Achievement existant');
 });
 
 // ─── Mount Import ───────────────────────────────────────────

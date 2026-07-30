@@ -115,7 +115,49 @@ test('it uses fallback expansion_id 0 when SA has null expansion', function (): 
     expect(WowAchievement::query()->find(300)->expansion_id)->toBe(0);
 });
 
-test('it still imports achievements when the achievement index API call fails', function (): void {
+test('it skips achievements absent from either source and deletes those dropped from the catalog', function (): void {
+    WowAchievement::query()->create(['id' => 900, 'name_fr' => '[EN] Midnight Seasonal', 'expansion_id' => 0, 'category_name' => 'Feats of Strength', 'points' => 0, 'is_active' => true]);
+
+    writeAchievementsJson([
+        [
+            'name' => 'General',
+            'cats' => [
+                [
+                    'name' => 'Classic',
+                    'subcats' => [
+                        [
+                            'name' => 'Exploration',
+                            'items' => [
+                                ['id' => 400, 'icon' => 'achievement_x', 'points' => 10],
+                                // Haut-fait d'une saison à venir : dataminé, absent de l'index API live.
+                                ['id' => 5001, 'icon' => 'achievement_y', 'points' => 10],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockAchievementIndex($client, [
+        ['id' => 400, 'name' => 'Haut-fait live'],
+        ['id' => 777, 'name' => 'Haut-fait non curé'],
+    ]);
+
+    resolve(AchievementImporter::class)->import();
+
+    expect(WowAchievement::query()->count())->toBe(1);
+    expect(WowAchievement::query()->find(400)->name_fr)->toBe('Haut-fait live');
+    expect(WowAchievement::query()->find(5001))->toBeNull();
+    expect(WowAchievement::query()->find(777))->toBeNull();
+    expect(WowAchievement::query()->find(900))->toBeNull();
+});
+
+test('it aborts without deleting anything when the achievement index API call fails', function (): void {
+    WowAchievement::query()->create(['id' => 400, 'name_fr' => 'Haut-fait existant', 'expansion_id' => 0, 'category_name' => 'Classic', 'points' => 10, 'is_active' => true]);
+
     writeAchievementsJson([
         [
             'name' => 'General',
@@ -144,7 +186,7 @@ test('it still imports achievements when the achievement index API call fails', 
     resolve(AchievementImporter::class)->import();
 
     expect(WowAchievement::query()->count())->toBe(1)
-        ->and(WowAchievement::query()->find(400)->name_fr)->toStartWith('[EN]');
+        ->and(WowAchievement::query()->find(400)->name_fr)->toBe('Haut-fait existant');
 });
 
 // ─── Helpers ────────────────────────────────────────────────

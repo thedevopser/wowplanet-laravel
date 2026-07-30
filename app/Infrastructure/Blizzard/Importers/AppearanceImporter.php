@@ -91,7 +91,7 @@ final readonly class AppearanceImporter
     /**
      * Traite des tranches d'apparences depuis $offset en sauvegardant chaque tranche.
      * S'arrête sans avancer l'offset quand le budget import est épuisé (retourne
-     * secondsUntilBudget), ou quand le time-box est atteint. deactivateStaleRows()
+     * secondsUntilBudget), ou quand le time-box est atteint. deleteStaleRows()
      * uniquement une fois tout traité (jamais en mode --limit / smoke-test).
      */
     public function importChunk(bool $full, int $offset, int $timeBoxSeconds, ?int $limit = null): AppearanceImportProgress
@@ -151,7 +151,7 @@ final readonly class AppearanceImporter
         }
 
         if ($limit === null) {
-            $this->deactivateStaleRows($slotByAppearance);
+            $this->deleteStaleRows($slotByAppearance);
         }
 
         return new AppearanceImportProgress(done: true, offset: $total, total: $total, secondsUntilBudget: 0);
@@ -185,15 +185,22 @@ final readonly class AppearanceImporter
     /**
      * Index par slot → [appearanceId => slot (vocabulaire base)].
      *
+     * Ces index constituent le catalogue de référence : deleteStaleRows() supprime tout
+     * ce qui n'y figure pas. Un index partiel effacerait donc les slots manquants. On
+     * abandonne dès qu'un seul slot ne répond pas, plutôt que de le sauter.
+     *
      * @return array<int, string>
      */
     private function fetchSlotIndexes(): array
     {
         $map = [];
+        $failedSlots = [];
 
         foreach (self::API_SLOTS as $apiSlot) {
             $index = $this->fetchWithRetry('data/wow/item-appearance/slot/'.$apiSlot);
             if ($index === null) {
+                $failedSlots[] = $apiSlot;
+
                 continue;
             }
 
@@ -207,6 +214,17 @@ final readonly class AppearanceImporter
                     $map[$id] = $slot;
                 }
             }
+        }
+
+        if ($failedSlots !== []) {
+            $this->info(sprintf(
+                'ERROR: %d/%d slot indexes unavailable (%s), aborting import (catalog left untouched).',
+                count($failedSlots),
+                count(self::API_SLOTS),
+                implode(', ', $failedSlots),
+            ));
+
+            return [];
         }
 
         return $map;
@@ -431,15 +449,27 @@ final readonly class AppearanceImporter
     private function buildRows(array $details, array $slotByAppearance, array $itemData, array $mediaData): array
     {
         $rows = [];
+        $withoutRepresentative = 0;
 
         foreach ($details as $appearanceId => $detail) {
             $representative = $this->pickRepresentative($detail['items'], $itemData);
+
+            // Aucun item exploitable : ni nom, ni qualité, ni icône. La ligne serait
+            // affichée vide dans la garde-robe et compterait au dénominateur. On l'écarte ;
+            // elle entrera d'elle-même dès que l'API exposera un item lié, puisque
+            // completeAppearanceIds() la considère de toute façon comme à re-détailler.
+            if ($representative['name'] === null) {
+                $withoutRepresentative++;
+
+                continue;
+            }
+
             $mediaInfo = $mediaData[$detail['media_id']]
                 ?? ($representative['item_id'] !== null ? ($mediaData[$representative['item_id']] ?? null) : null);
 
             $rows[] = [
                 'id' => $appearanceId,
-                'name_fr' => $representative['name'] ?? sprintf('[EN] Appearance #%d', $appearanceId),
+                'name_fr' => $representative['name'],
                 'slot' => $slotByAppearance[$appearanceId] ?? null,
                 'category' => $detail['category'],
                 'quality' => $representative['quality'],
@@ -452,7 +482,7 @@ final readonly class AppearanceImporter
             ];
         }
 
-        $this->info(sprintf('Built %d appearance rows.', count($rows)));
+        $this->info(sprintf('Built %d appearance rows (%d skipped, no usable item).', count($rows), $withoutRepresentative));
 
         return $rows;
     }
@@ -508,25 +538,30 @@ final readonly class AppearanceImporter
     }
 
     /**
-     * Désactive les apparences en base qui ne figurent plus dans les index de slots
+     * Supprime les apparences en base qui ne figurent plus dans les index de slots
      * (anciennes données CSV ou entrées retirées par Blizzard).
+     *
+     * Le balayage porte sur toutes les lignes, actives ou non : ne regarder que les
+     * actives laissait le rebut s'accumuler indéfiniment, une ligne désactivée par une
+     * passe précédente n'étant jamais reconsidérée. fetchSlotIndexes() garantit que
+     * les 18 index ont répondu, sans quoi l'import s'est déjà interrompu.
      *
      * @param  array<int, string>  $slotByAppearance
      */
-    private function deactivateStaleRows(array $slotByAppearance): void
+    private function deleteStaleRows(array $slotByAppearance): void
     {
-        /** @var list<int> $activeIds */
-        $activeIds = WowAppearance::query()->where('is_active', true)->pluck('id')->all();
+        /** @var list<int> $existingIds */
+        $existingIds = WowAppearance::query()->pluck('id')->all();
 
-        $staleIds = array_diff($activeIds, array_keys($slotByAppearance));
+        $staleIds = array_diff($existingIds, array_keys($slotByAppearance));
         if ($staleIds === []) {
             return;
         }
 
         foreach (array_chunk($staleIds, 500) as $chunk) {
-            WowAppearance::query()->whereIn('id', $chunk)->update(['is_active' => false]);
+            WowAppearance::query()->whereIn('id', $chunk)->delete();
         }
 
-        $this->info(sprintf('Deactivated %d stale appearances.', count($staleIds)));
+        $this->info(sprintf('Deleted %d stale appearances.', count($staleIds)));
     }
 }

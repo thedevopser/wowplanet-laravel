@@ -65,7 +65,7 @@ test('it imports mounts from SA JSON with French names from the API', function (
     expect(WowMount::query()->find(101)->name_fr)->toBe('Destrier squelette');
 });
 
-test('it adds API-only mounts absent from SA JSON under the "Autres" category', function (): void {
+test('it skips API mounts absent from the curated SA JSON', function (): void {
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -82,7 +82,7 @@ test('it adds API-only mounts absent from SA JSON under the "Autres" category', 
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
-    // 100 est dans SimpleArmory, 999 non : 999 doit être ajoutée via l'index API.
+    // 999 n'est pas dans SimpleArmory : entrée non curée (doublon, variante PNJ), écartée.
     mockMountIndex($client, [
         ['id' => 100, 'name' => 'Monture Test'],
         ['id' => 999, 'name' => 'Monture API seule'],
@@ -90,19 +90,63 @@ test('it adds API-only mounts absent from SA JSON under the "Autres" category', 
 
     resolve(MountImporter::class)->import();
 
-    expect(WowMount::query()->count())->toBe(2);
-
-    // La monture SimpleArmory garde sa catégorie riche.
+    expect(WowMount::query()->count())->toBe(1);
     expect(WowMount::query()->find(100)->category)->toBe('Classic');
+    expect(WowMount::query()->find(999))->toBeNull();
+});
 
-    // La monture API-only est ajoutée, catégorie « Autres », champs SA à null.
-    $apiOnly = WowMount::query()->find(999);
-    expect($apiOnly->name_fr)->toBe('Monture API seule');
-    expect($apiOnly->category)->toBe('Autres');
-    expect($apiOnly->source)->toBeNull();
-    expect($apiOnly->source_spell_id)->toBeNull();
-    expect($apiOnly->icon_url)->toBeNull();
-    expect($apiOnly->is_active)->toBeTrue();
+test('it skips SA mounts absent from the live API index', function (): void {
+    writeMountsJson([
+        [
+            'name' => 'Midnight',
+            'subcats' => [
+                [
+                    'name' => 'Achievement',
+                    'items' => [
+                        ['ID' => 100, 'name' => 'LiveMount', 'icon' => 'ability_mount_test', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 4],
+                        // Contenu daté d'un patch à venir : présent dans les DB2 dataminés, pas encore live.
+                        ['ID' => 3021, 'name' => 'Crimson Venomfang', 'icon' => 'inv_venomserpentmount_pink', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 4],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, [['id' => 100, 'name' => 'Monture live']]);
+
+    resolve(MountImporter::class)->import();
+
+    expect(WowMount::query()->count())->toBe(1);
+    expect(WowMount::query()->find(3021))->toBeNull();
+});
+
+test('it deletes mounts that dropped out of the catalog', function (): void {
+    WowMount::query()->create(['id' => 3021, 'name_fr' => '[EN] Mount #3021', 'category' => 'Midnight', 'is_active' => true]);
+
+    writeMountsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [
+                [
+                    'name' => 'Reputation',
+                    'items' => [
+                        ['ID' => 100, 'name' => 'TestMount1', 'icon' => 'ability_mount_test', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 4],
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, [['id' => 100, 'name' => 'Monture Test']]);
+
+    resolve(MountImporter::class)->import();
+
+    expect(WowMount::query()->find(3021))->toBeNull();
+    expect(WowMount::query()->count())->toBe(1);
 });
 
 test('it returns early when SA JSON is empty', function (): void {
@@ -117,7 +161,9 @@ test('it returns early when SA JSON is empty', function (): void {
     expect(WowMount::query()->count())->toBe(0);
 });
 
-test('it uses fallback name when the API has no French name', function (): void {
+test('it aborts without touching the catalog when the API index is empty', function (): void {
+    WowMount::query()->create(['id' => 200, 'name_fr' => 'Monture existante', 'is_active' => true]);
+
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -139,10 +185,12 @@ test('it uses fallback name when the API has no French name', function (): void 
     resolve(MountImporter::class)->import();
 
     expect(WowMount::query()->count())->toBe(1);
-    expect(WowMount::query()->find(200)->name_fr)->toStartWith('[EN]');
+    expect(WowMount::query()->find(200)->name_fr)->toBe('Monture existante');
 });
 
-test('it still imports mounts when the mount index API call fails', function (): void {
+test('it aborts without deleting anything when the mount index API call fails', function (): void {
+    WowMount::query()->create(['id' => 300, 'name_fr' => 'Monture existante', 'is_active' => true]);
+
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -166,7 +214,7 @@ test('it still imports mounts when the mount index API call fails', function ():
     resolve(MountImporter::class)->import();
 
     expect(WowMount::query()->count())->toBe(1)
-        ->and(WowMount::query()->find(300)->name_fr)->toStartWith('[EN]');
+        ->and(WowMount::query()->find(300)->name_fr)->toBe('Monture existante');
 });
 
 // ─── Helpers ────────────────────────────────────────────────
