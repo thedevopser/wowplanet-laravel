@@ -217,3 +217,30 @@ body {
 .page-leave-to {
     opacity: 0;
 }
+
+/*
+ * Utilitaires globaux hérités de l'ancien composant racine App.vue, supprimé
+ * lors de la migration Inertia. Les classes restent utilisées par les listes
+ * déroulantes des onglets et par LoadingSpinner.
+ */
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+@keyframes spin-reverse {
+    from {
+        transform: rotate(360deg);
+    }
+    to {
+        transform: rotate(0deg);
+    }
+}
+
+.animate-spin-reverse {
+    animation: spin-reverse 1.5s linear infinite;
+}

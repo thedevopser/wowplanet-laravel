@@ -65,7 +65,9 @@ test('it imports pets from SA JSON with French names from the API', function ():
     expect(WowPet::query()->find(301)->name_fr)->toBe('Petit chat');
 });
 
-test('it uses fallback name when the API has no French name', function (): void {
+test('it skips pets absent from either source and deletes those dropped from the catalog', function (): void {
+    WowPet::query()->create(['id' => 900, 'name_fr' => '[EN] Pet #900', 'is_active' => true]);
+
     writePetsJson([
         [
             'name' => 'Classic',
@@ -73,7 +75,9 @@ test('it uses fallback name when the API has no French name', function (): void 
                 [
                     'name' => 'Drop',
                     'items' => [
-                        ['ID' => 400, 'name' => 'UnknownPet', 'icon' => 'pet_x', 'spellid' => 5001, 'creatureId' => 333, 'itemId' => null, 'faction' => null, 'quality' => 3],
+                        ['ID' => 400, 'name' => 'LivePet', 'icon' => 'pet_x', 'spellid' => 5001, 'creatureId' => 333, 'itemId' => null, 'faction' => null, 'quality' => 3],
+                        // Mascotte d'un patch à venir : dataminée, absente de l'index API live.
+                        ['ID' => 5130, 'name' => 'UpcomingPet', 'icon' => 'pet_z', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 3],
                     ],
                 ],
             ],
@@ -82,15 +86,24 @@ test('it uses fallback name when the API has no French name', function (): void 
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
-    mockPetIndex($client, []);
+    // 777 est dans l'index API mais pas curée par SimpleArmory : écartée aussi.
+    mockPetIndex($client, [
+        ['id' => 400, 'name' => 'Mascotte live'],
+        ['id' => 777, 'name' => 'Mascotte non curée'],
+    ]);
 
     resolve(PetImporter::class)->import();
 
     expect(WowPet::query()->count())->toBe(1);
-    expect(WowPet::query()->find(400)->name_fr)->toStartWith('[EN]');
+    expect(WowPet::query()->find(400)->name_fr)->toBe('Mascotte live');
+    expect(WowPet::query()->find(5130))->toBeNull();
+    expect(WowPet::query()->find(777))->toBeNull();
+    expect(WowPet::query()->find(900))->toBeNull();
 });
 
-test('it still imports pets when the pet index API call fails', function (): void {
+test('it aborts without deleting anything when the pet index API call fails', function (): void {
+    WowPet::query()->create(['id' => 500, 'name_fr' => 'Mascotte existante', 'is_active' => true]);
+
     writePetsJson([
         [
             'name' => 'Classic',
@@ -114,7 +127,7 @@ test('it still imports pets when the pet index API call fails', function (): voi
     resolve(PetImporter::class)->import();
 
     expect(WowPet::query()->count())->toBe(1)
-        ->and(WowPet::query()->find(500)->name_fr)->toStartWith('[EN]');
+        ->and(WowPet::query()->find(500)->name_fr)->toBe('Mascotte existante');
 });
 
 test('it returns early when SA JSON is empty', function (): void {

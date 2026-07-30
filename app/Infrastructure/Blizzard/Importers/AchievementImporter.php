@@ -9,6 +9,12 @@ use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowAchievement;
 
+/**
+ * Catalogue des hauts faits = index de l'API officielle ∩ liste curée SimpleArmory.
+ *
+ * Voir MountImporter pour le détail du partage d'autorité entre les deux sources :
+ * l'API tranche l'existence et le nom, SimpleArmory l'extension, la catégorie et les points.
+ */
 final readonly class AchievementImporter
 {
     use ImportsFromBlizzardApi;
@@ -29,6 +35,10 @@ final readonly class AchievementImporter
         }
 
         $frenchNames = $this->loadFrenchNames();
+        if ($frenchNames === []) {
+            return;
+        }
+
         $rows = $this->buildRows($saAchievements, $frenchNames);
 
         $this->saveRows($rows);
@@ -64,7 +74,7 @@ final readonly class AchievementImporter
 
         $index = $this->fetchWithRetry('data/wow/achievement/index');
         if ($index === null) {
-            $this->info('  WARNING: achievement index unavailable, falling back to English names.');
+            $this->info('  ERROR: achievement index unavailable, aborting import (catalog left untouched).');
 
             return [];
         }
@@ -81,7 +91,13 @@ final readonly class AchievementImporter
             }
         }
 
-        $this->info(sprintf('  Found %d French names.', count($names)));
+        if ($names === []) {
+            $this->info('  ERROR: achievement index holds no usable name, aborting import (catalog left untouched).');
+
+            return [];
+        }
+
+        $this->info(sprintf('  Found %d live achievements in the API index.', count($names)));
 
         return $names;
     }
@@ -94,20 +110,19 @@ final readonly class AchievementImporter
     private function buildRows(array $saAchievements, array $frenchNames): array
     {
         $rows = [];
-        $matched = 0;
-        $fallbacks = 0;
+        $notCurated = 0;
 
-        foreach ($saAchievements as $id => $achievement) {
-            $nameFr = $frenchNames[$id] ?? null;
-            if ($nameFr !== null) {
-                $matched++;
-            } else {
-                $fallbacks++;
+        foreach ($frenchNames as $id => $nameFr) {
+            $achievement = $saAchievements[$id] ?? null;
+            if ($achievement === null) {
+                $notCurated++;
+
+                continue;
             }
 
             $rows[] = [
                 'id' => $id,
-                'name_fr' => $nameFr ?? sprintf('[EN] %s', $achievement['subcategory']),
+                'name_fr' => $nameFr,
                 'expansion_id' => $achievement['expansion_id'] ?? self::FALLBACK_EXPANSION_ID,
                 'category_name' => $achievement['category'],
                 'icon_url' => SimpleArmoryParser::buildIconUrl($achievement['icon']),
@@ -117,7 +132,10 @@ final readonly class AchievementImporter
             ];
         }
 
-        $this->info(sprintf('  %d matched with French name, %d using English fallback.', $matched, $fallbacks));
+        $notLive = count(array_diff_key($saAchievements, $frenchNames));
+
+        $this->info(sprintf('  %d achievements in catalog.', count($rows)));
+        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
 
         return $rows;
     }
@@ -139,6 +157,8 @@ final readonly class AchievementImporter
             $count += count($chunk);
             $this->info(sprintf('  Saved %d...', $count));
         }
+
+        $this->deleteRowsOutsideCatalog(WowAchievement::class, array_column($rows, 'id'), 'achievements');
 
         $this->info(sprintf('Achievement import complete: %d items.', $count));
     }

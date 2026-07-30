@@ -9,6 +9,16 @@ use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
 use App\Models\WowDecor;
 
+/**
+ * Catalogue des décors = index de l'API officielle ∩ liste curée SimpleArmory.
+ *
+ * Voir MountImporter pour le détail du partage d'autorité entre les deux sources.
+ *
+ * Les décors marqués notObtainable par SimpleArmory restent importés mais inactifs :
+ * 119 d'entre eux figurent dans l'index API live — l'API atteste qu'ils existent, jamais
+ * qu'ils sont encore obtenables (événement de pré-lancement clos, promotion retirée).
+ * Sans ce flag ils compteraient au dénominateur et rendraient le 100 % inatteignable.
+ */
 final readonly class DecorImporter
 {
     use ImportsFromBlizzardApi;
@@ -27,6 +37,10 @@ final readonly class DecorImporter
         }
 
         $frenchNames = $this->loadFrenchNames();
+        if ($frenchNames === []) {
+            return;
+        }
+
         $rows = $this->buildRows($saDecors, $frenchNames);
 
         $this->saveRows($rows);
@@ -62,7 +76,7 @@ final readonly class DecorImporter
 
         $index = $this->fetchWithRetry('data/wow/decor/index');
         if ($index === null) {
-            $this->info('  WARNING: decor index unavailable, falling back to English names.');
+            $this->info('  ERROR: decor index unavailable, aborting import (catalog left untouched).');
 
             return [];
         }
@@ -79,7 +93,13 @@ final readonly class DecorImporter
             }
         }
 
-        $this->info(sprintf('  Found %d French names.', count($names)));
+        if ($names === []) {
+            $this->info('  ERROR: decor index holds no usable name, aborting import (catalog left untouched).');
+
+            return [];
+        }
+
+        $this->info(sprintf('  Found %d live decors in the API index.', count($names)));
 
         return $names;
     }
@@ -92,16 +112,15 @@ final readonly class DecorImporter
     private function buildRows(array $saDecors, array $frenchNames): array
     {
         $rows = [];
-        $matched = 0;
-        $fallbacks = 0;
+        $notCurated = 0;
         $inactive = 0;
 
-        foreach ($saDecors as $id => $decor) {
-            $nameFr = $frenchNames[$id] ?? null;
-            if ($nameFr !== null) {
-                $matched++;
-            } else {
-                $fallbacks++;
+        foreach ($frenchNames as $id => $nameFr) {
+            $decor = $saDecors[$id] ?? null;
+            if ($decor === null) {
+                $notCurated++;
+
+                continue;
             }
 
             $isActive = ! $decor['notObtainable'];
@@ -113,7 +132,7 @@ final readonly class DecorImporter
 
             $rows[] = [
                 'id' => $id,
-                'name_fr' => $nameFr ?? sprintf('[EN] Decor #%d', $id),
+                'name_fr' => $nameFr,
                 'category' => $decor['category'] !== '' ? $decor['category'] : null,
                 'source' => $decor['source'] !== '' ? $decor['source'] : null,
                 'item_id' => $decor['itemId'],
@@ -122,7 +141,10 @@ final readonly class DecorImporter
             ];
         }
 
-        $this->info(sprintf('  %d matched with French name, %d using English fallback, %d not obtainable.', $matched, $fallbacks, $inactive));
+        $notLive = count(array_diff_key($saDecors, $frenchNames));
+
+        $this->info(sprintf('  %d decors in catalog, %d not obtainable.', count($rows), $inactive));
+        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
 
         return $rows;
     }
@@ -144,6 +166,8 @@ final readonly class DecorImporter
             $count += count($chunk);
             $this->info(sprintf('  Saved %d...', $count));
         }
+
+        $this->deleteRowsOutsideCatalog(WowDecor::class, array_column($rows, 'id'), 'decors');
 
         $this->info(sprintf('Decor import complete: %d items (%d active).', $count, count(array_filter($rows, fn (array $r): bool => $r['is_active']))));
     }
