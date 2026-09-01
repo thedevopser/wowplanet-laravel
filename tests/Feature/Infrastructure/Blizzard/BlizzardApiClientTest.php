@@ -250,3 +250,35 @@ test('getCurrentMythicSeasonId fetches and caches the current season', function 
     // Deuxième appel servi par le cache : aucune requête supplémentaire dans la queue
     expect($client->getCurrentMythicSeasonId())->toBe(14);
 });
+
+// ─── getCurrentPvpSeasonId ──────────────────────────────────
+
+test('getCurrentPvpSeasonId fetches and caches the current season', function (): void {
+    Cache::put('blizzard_access_token', 'season-token', 3600);
+
+    $mockHandler = new MockHandler([
+        new Response(200, [], json_encode(['current_season' => ['id' => 40]])),
+    ]);
+
+    $guzzle = new Client(['handler' => HandlerStack::create($mockHandler), 'base_uri' => 'https://eu.api.blizzard.com/']);
+    $client = new BlizzardApiClient($guzzle);
+
+    expect($client->getCurrentPvpSeasonId())->toBe(40)
+        ->and(Cache::get('blizzard_current_pvp_season'))->toBe(40);
+
+    // Deuxième appel servi par le cache : aucune requête supplémentaire dans la queue
+    expect($client->getCurrentPvpSeasonId())->toBe(40);
+});
+
+test('getCurrentPvpSeasonId returns 0 when the index has no current season', function (): void {
+    Cache::put('blizzard_access_token', 'season-token', 3600);
+
+    $mockHandler = new MockHandler([
+        new Response(200, [], json_encode(['seasons' => []])),
+    ]);
+
+    $guzzle = new Client(['handler' => HandlerStack::create($mockHandler), 'base_uri' => 'https://eu.api.blizzard.com/']);
+    $client = new BlizzardApiClient($guzzle);
+
+    expect($client->getCurrentPvpSeasonId())->toBe(0);
+});

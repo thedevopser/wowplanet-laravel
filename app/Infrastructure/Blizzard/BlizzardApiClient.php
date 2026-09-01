@@ -179,6 +179,24 @@ class BlizzardApiClient
         return (int) $seasonId;
     }
 
+    public function getCurrentPvpSeasonId(): int
+    {
+        /** @var int $seasonId */
+        $seasonId = Cache::remember('blizzard_current_pvp_season', 86400, function (): int {
+            /** @var array<string, mixed> $data */
+            $data = $this->get('data/wow/pvp-season/index', [
+                'namespace' => 'dynamic-'.$this->region,
+            ]);
+
+            /** @var array{id?: int} $currentSeason */
+            $currentSeason = $data['current_season'] ?? [];
+
+            return (int) ($currentSeason['id'] ?? 0);
+        });
+
+        return (int) $seasonId;
+    }
+
     /**
      * @return array{headers: array{Authorization: string, Battlenet-Namespace: string}, query: array{locale: string, namespace: string}}
      */

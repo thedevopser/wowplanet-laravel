@@ -21,6 +21,17 @@
                     >
                         Base de données
                     </a>
+                    <a
+                        href="/classements-pvp"
+                        :class="[
+                            'px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-all border whitespace-nowrap',
+                            currentPath.startsWith('/classements-pvp')
+                                ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/20'
+                                : 'bg-slate-800/80 border-white/5 text-slate-300 hover:text-white hover:bg-slate-700'
+                        ]"
+                    >
+                        Classements PvP
+                    </a>
                     <template v-if="store.isAuthenticated">
                         <a
                             href="/my-characters"
@@ -154,6 +165,17 @@
                         ]"
                     >
                         Base de données
+                    </a>
+                    <a
+                        href="/classements-pvp"
+                        :class="[
+                            'w-full px-3 py-2 rounded-md text-sm font-semibold transition-all border text-left',
+                            currentPath.startsWith('/classements-pvp')
+                                ? 'bg-blue-600 border-blue-400 text-white'
+                                : 'bg-slate-800/80 border-white/5 text-slate-300'
+                        ]"
+                    >
+                        Classements PvP
                     </a>
                     <template v-if="store.isAuthenticated">
                         <a
