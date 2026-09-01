@@ -59,6 +59,8 @@
                         </h3>
                         <p class="text-slate-500 text-xs sm:text-sm mt-1">
                             Agrégé sur {{ characterCount }} personnage{{ characterCount > 1 ? 's' : '' }}
+                            &middot; {{ scoredDimensions.length }} dimension{{ scoredDimensions.length > 1 ? 's' : '' }}
+                            &middot; <a href="/faq" class="hover:text-slate-400 underline decoration-dotted">formule v{{ score.version }}</a>
                             <span v-if="cachedAt" class="ml-2 text-slate-600">· maj {{ cachedAtFormatted }}</span>
                         </p>
                     </div>
@@ -96,15 +98,17 @@
                         v-for="dim in dimensionCards"
                         :key="dim.key"
                         class="bg-slate-800/40 border border-white/5 p-4 rounded-2xl"
+                        :class="dim.applicable ? '' : 'opacity-50'"
                     >
                         <div class="flex justify-between items-start mb-3">
                             <div class="flex items-center gap-2">
-                                <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.color }"></div>
+                                <div class="w-1.5 h-5 rounded-full" :style="{ backgroundColor: dim.applicable ? dim.color : '#475569' }"></div>
                                 <span class="text-sm font-bold text-slate-300">{{ dim.label }}</span>
                             </div>
-                            <span class="text-lg font-black tabular-nums" :style="{ color: dim.color }">
+                            <span v-if="dim.applicable" class="text-lg font-black tabular-nums" :style="{ color: dim.color }">
                                 {{ Math.round(dim.score) }}%
                             </span>
+                            <span v-else class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Non applicable</span>
                         </div>
                         <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-2">
                             <div
@@ -199,7 +203,7 @@ export default {
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import axios from 'axios';
-import { computeScore, getScoreColor, DIMENSION_LABELS, DIMENSION_COLORS, WEIGHTS } from '../utils/scoreCalculator';
+import { getScoreColor, dimensionColor, rankClass as rankClassFor, applicableDimensions } from '../utils/scoreDisplay';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import ScoreRadar from '../components/ScoreRadar.vue';
 import ShareScoreModal from '../components/ShareScoreModal.vue';
@@ -214,7 +218,7 @@ const showShareModal = ref(false);
 const expandedRec = ref(null);
 let pollTimer = null;
 
-const score = computed(() => virtualProfile.value ? computeScore(virtualProfile.value) : null);
+const score = computed(() => virtualProfile.value?.score || null);
 
 const progressPercent = computed(() => {
     if (!progress.value.total) return 0;
@@ -223,36 +227,13 @@ const progressPercent = computed(() => {
 
 const globalColor = computed(() => getScoreColor(score.value?.global || 0));
 
-const radarAxes = computed(() => {
-    if (!score.value) return [];
-    return Object.entries(score.value.dimensions).map(([key, dim]) => ({
-        label: DIMENSION_LABELS[key],
-        score: dim.score,
-    }));
-});
+const scoredDimensions = computed(() => applicableDimensions(score.value));
 
-const radarColors = computed(() => {
-    if (!score.value) return [];
-    return Object.keys(score.value.dimensions).map(key => DIMENSION_COLORS[key]);
-});
+const radarAxes = computed(() => scoredDimensions.value.map(d => ({ label: d.label, score: d.score })));
+const radarColors = computed(() => scoredDimensions.value.map(d => dimensionColor(d.key)));
 
-const rank = computed(() => {
-    const s = score.value?.global || 0;
-    if (s >= 90) return 'Légendaire';
-    if (s >= 75) return 'Épique';
-    if (s >= 50) return 'Rare';
-    if (s >= 25) return 'Commun';
-    return 'Débutant';
-});
-
-const rankClass = computed(() => {
-    const s = score.value?.global || 0;
-    if (s >= 90) return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
-    if (s >= 75) return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
-    if (s >= 50) return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-    if (s >= 25) return 'bg-green-500/10 text-green-400 border-green-500/30';
-    return 'bg-slate-500/10 text-slate-400 border-slate-500/30';
-});
+const rank = computed(() => score.value?.rank || 'Débutant');
+const rankClass = computed(() => rankClassFor(rank.value));
 
 const cachedAtFormatted = computed(() => {
     if (!cachedAt.value) return '';
@@ -260,18 +241,11 @@ const cachedAtFormatted = computed(() => {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 });
 
-const dimensionCards = computed(() => {
-    if (!score.value) return [];
-    return Object.entries(score.value.dimensions).map(([key, dim]) => ({
-        key,
-        label: DIMENSION_LABELS[key],
-        color: DIMENSION_COLORS[key],
-        score: dim.score,
-        completed: dim.completed,
-        total: dim.total,
-        weightLabel: Math.round(WEIGHTS[key] * 100) + '%',
-    }));
-});
+const dimensionCards = computed(() => (score.value?.dimensions || []).map(d => ({
+    ...d,
+    color: dimensionColor(d.key),
+    weightLabel: Math.round(d.weight * 100) + '%',
+})));
 
 const MAX_ITEMS_SHOWN = 20;
 
@@ -316,9 +290,9 @@ const recommendations = computed(() => {
     const vp = virtualProfile.value;
     const recs = [];
 
-    recs.push(...buildGroupRecs(vp.mounts || [], 'mount', 'Montures', DIMENSION_COLORS.mounts, 'source'));
-    recs.push(...buildGroupRecs(vp.pets || [], 'pet', 'Mascottes', DIMENSION_COLORS.pets, 'source'));
-    recs.push(...buildGroupRecs(vp.decor || [], 'decor', 'Décorations', DIMENSION_COLORS.decor, 'source'));
+    recs.push(...buildGroupRecs(vp.mounts || [], 'mount', 'Montures', dimensionColor('mounts'), 'source'));
+    recs.push(...buildGroupRecs(vp.pets || [], 'pet', 'Mascottes', dimensionColor('pets'), 'source'));
+    recs.push(...buildGroupRecs(vp.decor || [], 'decor', 'Décorations', dimensionColor('decor'), 'source'));
 
     for (const expId in (vp.collections || {})) {
         for (const cat of (vp.collections[expId]?.achievements?.categories || [])) {
@@ -327,7 +301,7 @@ const recommendations = computed(() => {
             const completed = cat.items.filter(i => i.is_completed);
             if (missing.length === 0 || completed.length === 0) continue;
             recs.push({
-                key: `ach:${expId}:${cat.name}`, name: cat.name, dimension: 'Hauts-faits', color: DIMENSION_COLORS.achievements,
+                key: `ach:${expId}:${cat.name}`, name: cat.name, dimension: 'Hauts-faits', color: dimensionColor('achievements'),
                 completed: completed.length, total: cat.items.length, missing: missing.length,
                 percent: (completed.length / cat.items.length) * 100,
                 missingItems: missing.slice(0, MAX_ITEMS_SHOWN).map(i => ({ id: i.id, name: i.name, wowheadUrl: wowheadUrl('achievement', i) })),
@@ -340,7 +314,7 @@ const recommendations = computed(() => {
             const completed = zone.items.filter(i => i.is_completed);
             if (missing.length === 0 || completed.length === 0) continue;
             recs.push({
-                key: `quest:${expId}:${zone.name}`, name: zone.name, dimension: 'Quêtes', color: DIMENSION_COLORS.quests,
+                key: `quest:${expId}:${zone.name}`, name: zone.name, dimension: 'Quêtes', color: dimensionColor('quests'),
                 completed: completed.length, total: zone.items.length, missing: missing.length,
                 percent: (completed.length / zone.items.length) * 100,
                 missingItems: missing.slice(0, MAX_ITEMS_SHOWN).map(i => ({ id: i.id, name: i.name, wowheadUrl: wowheadUrl('quest', i) })),

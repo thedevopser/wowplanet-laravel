@@ -115,17 +115,32 @@
                         <h2 class="text-lg sm:text-xl font-bold text-white">Qu&rsquo;est-ce que le score compte&nbsp;?</h2>
                         <p class="text-sm text-slate-300 leading-relaxed">
                             Le score compte est une <strong class="text-white">note globale sur 100</strong> qui &eacute;value votre progression
-                            sur l&rsquo;ensemble de vos personnages. Il est calcul&eacute; sur <strong class="text-white">7&nbsp;dimensions</strong>&nbsp;:
+                            sur l&rsquo;ensemble de vos personnages. Depuis la <strong class="text-white">formule v2</strong>, il est calcul&eacute;
+                            sur <strong class="text-white">9&nbsp;dimensions</strong>&nbsp;:
                         </p>
-                        <ul class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                        <ul class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
                             <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Qu&ecirc;tes</li>
                             <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Hauts-faits</li>
+                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">R&eacute;putations</li>
+                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Raids</li>
                             <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Montures</li>
+                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Garde-robe</li>
                             <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">Mascottes</li>
-                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">M&eacute;tiers</li>
                             <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">D&eacute;corations</li>
-                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center sm:col-span-2">R&eacute;putations</li>
+                            <li class="px-3 py-1.5 bg-slate-800/60 rounded-lg text-slate-300 text-center">M&eacute;tiers</li>
                         </ul>
+                        <p class="text-sm text-slate-300 leading-relaxed">
+                            La <strong class="text-white">garde-robe</strong> et les <strong class="text-white">raids</strong> sont arriv&eacute;s
+                            avec la v2&nbsp;: si votre note a baiss&eacute;, c&rsquo;est que la barre est simplement mont&eacute;e. Les raids sont
+                            not&eacute;s &agrave; la <strong class="text-white">difficult&eacute; maximale atteinte</strong>, boss par boss&nbsp;:
+                            un raid termin&eacute; en normal vaut la moiti&eacute; du m&ecirc;me raid termin&eacute; en mythique.
+                        </p>
+                        <p class="text-sm text-slate-300 leading-relaxed">
+                            Une dimension <strong class="text-white">sans aucune donn&eacute;e</strong> — vous ne raidez pas, vous n&rsquo;avez pas
+                            de m&eacute;tier — ne compte pas pour z&eacute;ro&nbsp;: elle sort du calcul et son poids est redistribu&eacute;.
+                            Le <strong class="text-white">PvP n&rsquo;entre pas</strong> dans le score&nbsp;: il ne concerne qu&rsquo;une partie des
+                            joueurs et p&eacute;naliserait injustement les profils PvE. Il reste consultable dans son onglet et dans les classements.
+                        </p>
                         <p class="text-sm text-slate-300 leading-relaxed">
                             Le r&eacute;sultat est visualis&eacute; sous forme de <strong class="text-white">radar chart</strong> et peut &ecirc;tre
                             <strong class="text-white">partag&eacute; sur Discord</strong>.

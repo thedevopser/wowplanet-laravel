@@ -33,15 +33,19 @@ beforeEach(() => {
     });
 });
 
-const baseDimensions = {
-    quests: { completed: 50, total: 100, score: 50 },
-    achievements: { completed: 30, total: 100, score: 30 },
-    reputations: { completed: 10, total: 20, score: 50 },
-    mounts: { completed: 2, total: 3, score: 66.7 },
-    pets: { completed: 1, total: 2, score: 50 },
-    decor: { completed: 1, total: 1, score: 100 },
-    professions: { completed: 5, total: 10, score: 50 },
-};
+const dimension = (key, label, completed, total, score, applicable = true) =>
+    ({ key, label, completed, total, score, applicable, weight: 0.1 });
+
+// Sept dimensions notées : la carte doit garder sa hauteur historique de 430 px.
+const baseDimensions = [
+    dimension('quests', 'Quêtes', 50, 100, 50),
+    dimension('achievements', 'Hauts-faits', 30, 100, 30),
+    dimension('reputations', 'Réputations', 10, 20, 50),
+    dimension('mounts', 'Montures', 2, 3, 66.7),
+    dimension('pets', 'Mascottes', 1, 2, 50),
+    dimension('decor', 'Décorations', 1, 1, 100),
+    dimension('professions', 'Métiers', 5, 10, 50),
+];
 
 describe('renderScoreCard', () => {
     it('returns a canvas element with width=700 and height=430', () => {
@@ -97,6 +101,37 @@ describe('renderScoreCard', () => {
         expect(mockCtx.fillText).toHaveBeenCalled();
     });
 
+    it('grows by one row per extra dimension', () => {
+        const canvas = renderScoreCard({
+            variant: 'personal',
+            characterName: 'TestChar',
+            globalScore: 52,
+            rank: 'Or',
+            dimensions: [
+                ...baseDimensions,
+                dimension('transmog', 'Garde-robe', 300, 1000, 30),
+                dimension('raids', 'Raids', 4, 8, 50),
+            ],
+        });
+
+        expect(canvas.height).toBe(490);
+    });
+
+    it('ignores non-applicable dimensions', () => {
+        const canvas = renderScoreCard({
+            variant: 'personal',
+            characterName: 'TestChar',
+            globalScore: 52,
+            rank: 'Or',
+            dimensions: [
+                ...baseDimensions,
+                dimension('raids', 'Raids', 0, 0, 0, false),
+            ],
+        });
+
+        expect(canvas.height).toBe(430);
+    });
+
     it('handles missing dimensions gracefully', () => {
         const canvas = renderScoreCard({
             variant: 'personal',
@@ -113,7 +148,7 @@ describe('renderScoreCard', () => {
 
         expect(canvas).toBeDefined();
         expect(canvas.width).toBe(700);
-        expect(canvas.height).toBe(430);
+        expect(canvas.height).toBe(220);
     });
 
     it('handles missing character info gracefully', () => {
@@ -121,7 +156,7 @@ describe('renderScoreCard', () => {
             variant: 'personal',
             globalScore: 0,
             rank: '',
-            dimensions: {},
+            dimensions: [],
         });
 
         expect(canvas).toBeDefined();

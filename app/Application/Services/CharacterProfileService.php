@@ -12,6 +12,8 @@ use App\Application\Services\Progress\ProfessionProgressAggregator;
 use App\Application\Services\Progress\QuestProgressAggregator;
 use App\Application\Services\Progress\RaidProgressAggregator;
 use App\Application\Services\Progress\ReputationProgressAggregator;
+use App\Domain\Services\ScoreCalculator;
+use App\Domain\ValueObjects\ScoreInput;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\FetchesProfileEndpoints;
 use Illuminate\Support\Facades\Cache;
@@ -31,6 +33,7 @@ class CharacterProfileService
         private readonly RaidProgressAggregator $raidProgressAggregator,
         private readonly EquipmentAggregator $equipmentAggregator,
         private readonly UserCharacterService $userCharacterService,
+        private readonly ScoreCalculator $scoreCalculator,
     ) {}
 
     public function getProfile(string $realm, string $name): CharacterProfileDTO
@@ -560,6 +563,15 @@ class CharacterProfileService
             appearancesCount: array_sum(array_column($appearances, 'completed')),
             raids: $raids,
             raidsCount: $this->countRaidBosses($raids),
+            score: $this->scoreCalculator->compute(new ScoreInput(
+                collections: $collections,
+                mounts: $mounts,
+                pets: $pets,
+                decor: $decor,
+                professions: $professions,
+                appearances: $appearances,
+                raids: $raids,
+            )),
         );
     }
 

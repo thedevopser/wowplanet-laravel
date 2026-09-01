@@ -14,6 +14,9 @@ import AccountScorePage from './AccountScorePage.vue';
 
 vi.mock('axios');
 
+const dimension = (key, label, completed, total, score, applicable = true) =>
+    ({ key, label, completed, total, score, applicable, weight: 0.1 });
+
 const virtualProfile = {
     characterCount: 3,
     cachedAt: '2024-03-01T10:00:00Z',
@@ -28,6 +31,22 @@ const virtualProfile = {
     pets: [{ id: 1, is_completed: true, source: 'Quête' }],
     decor: [{ id: 1, is_completed: true, source: 'Craft' }],
     professions: [{ profession_id: 1, expansions: { 1: { completed: 5, total: 10, skill_points: 50, max_skill_points: 100 } } }],
+    score: {
+        version: 2,
+        global: 42.5,
+        rank: 'Commun',
+        dimensions: [
+            dimension('quests', 'Quêtes', 50, 100, 50),
+            dimension('achievements', 'Hauts-faits', 30, 100, 30),
+            dimension('reputations', 'Réputations', 10, 20, 50),
+            dimension('raids', 'Raids', 0, 0, 0, false),
+            dimension('mounts', 'Montures', 1, 2, 50),
+            dimension('transmog', 'Garde-robe', 300, 1000, 30),
+            dimension('pets', 'Mascottes', 1, 1, 100),
+            dimension('decor', 'Décorations', 1, 1, 100),
+            dimension('professions', 'Métiers', 5, 10, 50),
+        ],
+    },
 };
 
 const stubs = { LoadingSpinner: true, ScoreRadar: true, ShareScoreModal: true };
@@ -79,6 +98,11 @@ describe('AccountScorePage', () => {
         expect(wrapper.text()).toContain('3 personnages');
         expect(wrapper.findComponent({ name: 'ScoreRadar' }).exists()).toBe(true);
         expect(wrapper.text()).toContain('Détail par dimension');
+        expect(wrapper.text()).toContain('Garde-robe');
+        expect(wrapper.text()).toContain('formule v2');
+        // Les raids, sans données, sortent du radar mais restent listés.
+        expect(wrapper.findComponent({ name: 'ScoreRadar' }).props('axes')).toHaveLength(8);
+        expect(wrapper.text()).toContain('Non applicable');
     });
 
     it('shows error state on API error', async () => {
