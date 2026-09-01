@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\DTOs;
 
+use App\Domain\ValueObjects\CompletionScore;
+
 readonly class CharacterProfileDTO
 {
     /**
@@ -49,5 +51,6 @@ readonly class CharacterProfileDTO
         public int $appearancesCount = 0,
         public ?array $raids = null,
         public int $raidsCount = 0,
+        public ?CompletionScore $score = null,
     ) {}
 }

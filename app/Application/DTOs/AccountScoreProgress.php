@@ -44,6 +44,12 @@ class AccountScoreProgress
     /** @var array{completed: int, total: int}|null */
     public ?array $bestProfessionStats = null;
 
+    /** @var array<string, array{slot: string, category: string|null, total: int, completed: int}> */
+    public array $bestAppearances = [];
+
+    /** @var array<int, array{instance_id: int, instance_name: string, modes: array<string, array<string, mixed>>}> */
+    public array $accountRaids = [];
+
     /**
      * @param  list<array{realmSlug: string, name: string}>  $characters
      */
@@ -62,6 +68,8 @@ class AccountScoreProgress
         $this->mergeCollections($characterProfileDTO);
         $this->mergeProfessions($characterProfileDTO);
         $this->trackBestProfessionStats($characterProfileDTO);
+        $this->mergeAppearances($characterProfileDTO);
+        $this->mergeRaids($characterProfileDTO);
     }
 
     /**
@@ -85,10 +93,109 @@ class AccountScoreProgress
             'petsCount' => count(array_filter($pets, fn (array $p): bool => ! empty($p['is_completed']))),
             'decorCount' => count(array_filter($decor, fn (array $d): bool => ! empty($d['is_completed']))),
             'bestProfessionStats' => $this->bestProfessionStats,
+            'appearances' => array_values($this->bestAppearances),
+            'raids' => $this->rebuildRaids(),
             'characterCount' => $this->processed,
             'errors' => $this->errors,
             'cachedAt' => now()->toISOString(),
         ];
+    }
+
+    /** La garde-robe est partagée par le compte : on retient le mieux servi par slot. */
+    private function mergeAppearances(CharacterProfileDTO $characterProfileDTO): void
+    {
+        foreach ($characterProfileDTO->appearances as $slot) {
+            $key = $slot['slot'];
+            $known = $this->bestAppearances[$key] ?? null;
+
+            if ($known === null || $slot['completed'] > $known['completed']) {
+                $this->bestAppearances[$key] = $slot;
+            }
+        }
+    }
+
+    /**
+     * Un compte a tué un boss dès qu'un de ses personnages l'a tué : on réunit les
+     * boss par raid et par difficulté.
+     */
+    private function mergeRaids(CharacterProfileDTO $characterProfileDTO): void
+    {
+        foreach ($characterProfileDTO->raids ?? [] as $raid) {
+            $instanceId = is_int($raid['instance_id'] ?? null) ? $raid['instance_id'] : 0;
+
+            $this->accountRaids[$instanceId] ??= [
+                'instance_id' => $instanceId,
+                'instance_name' => is_string($raid['instance_name'] ?? null) ? $raid['instance_name'] : '',
+                'modes' => [],
+            ];
+
+            /** @var list<array<string, mixed>> $modes */
+            $modes = is_array($raid['modes'] ?? null) ? $raid['modes'] : [];
+            foreach ($modes as $mode) {
+                $this->mergeRaidMode($instanceId, $mode);
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $mode
+     */
+    private function mergeRaidMode(int $instanceId, array $mode): void
+    {
+        $difficulty = is_string($mode['difficulty_type'] ?? null) ? $mode['difficulty_type'] : '';
+
+        /** @var array<string, mixed> $known */
+        $known = $this->accountRaids[$instanceId]['modes'][$difficulty] ?? array_merge($mode, ['encounters' => []]);
+
+        /** @var array<int, array<string, mixed>> $encounters */
+        $encounters = is_array($known['encounters']) ? $known['encounters'] : [];
+
+        /** @var list<array<string, mixed>> $incoming */
+        $incoming = is_array($mode['encounters'] ?? null) ? $mode['encounters'] : [];
+        foreach ($incoming as $encounter) {
+            if (is_int($encounter['id'] ?? null)) {
+                $encounters[$encounter['id']] ??= $encounter;
+            }
+        }
+
+        $known['encounters'] = $encounters;
+        $known['total_count'] = max(
+            is_int($known['total_count'] ?? null) ? $known['total_count'] : 0,
+            is_int($mode['total_count'] ?? null) ? $mode['total_count'] : 0,
+        );
+
+        $this->accountRaids[$instanceId]['modes'][$difficulty] = $known;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private function rebuildRaids(): ?array
+    {
+        if ($this->accountRaids === []) {
+            return null;
+        }
+
+        $raids = [];
+
+        foreach ($this->accountRaids as $accountRaid) {
+            $modes = [];
+
+            foreach ($accountRaid['modes'] as $mode) {
+                /** @var array<int, array<string, mixed>> $encounters */
+                $encounters = is_array($mode['encounters']) ? $mode['encounters'] : [];
+                ksort($encounters);
+
+                $modes[] = array_merge($mode, [
+                    'encounters' => array_values($encounters),
+                    'completed_count' => count($encounters),
+                ]);
+            }
+
+            $raids[] = array_merge($accountRaid, ['modes' => $modes]);
+        }
+
+        return $raids;
     }
 
     private function mergeCollections(CharacterProfileDTO $characterProfileDTO): void

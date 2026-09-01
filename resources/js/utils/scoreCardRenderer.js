@@ -1,14 +1,14 @@
-import { WEIGHTS, DIMENSION_LABELS, DIMENSION_COLORS, getScoreColor, getRankColorHex } from './scoreCalculator';
+import { dimensionColor, getScoreColor, getRankColorHex } from './scoreDisplay';
 import { classColors } from './classColors';
 
 const WIDTH = 700;
-const HEIGHT = 430;
+const ROW_H = 30;
+// Hauteur de la carte hors lignes de dimensions.
+const CHROME_H = 220;
 const GOLD = '#d4a844';
 const BG = '#0f172a';
 const BG_LIGHTER = '#1e293b';
 const FONT = 'system-ui, -apple-system, sans-serif';
-
-const DIMENSION_KEYS = ['quests', 'achievements', 'reputations', 'mounts', 'pets', 'decor', 'professions'];
 
 function roundRect(ctx, x, y, w, h, r) {
     if (ctx.roundRect) {
@@ -26,6 +26,9 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 export function renderScoreCard({ variant, characterName, characterRealm, characterClass, characterRace, characterLevel, classId, characterCount, globalScore, rank, dimensions }) {
+    const rows = Array.isArray(dimensions) ? dimensions.filter(d => d.applicable) : [];
+    const HEIGHT = CHROME_H + rows.length * ROW_H;
+
     const canvas = document.createElement('canvas');
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
@@ -116,7 +119,6 @@ export function renderScoreCard({ variant, characterName, characterRealm, charac
     ctx.textBaseline = 'top';
 
     const startY = badgeY + 42;
-    const rowH = 30;
     const labelX = 24;
     const barX = 160;
     const barW = 320;
@@ -124,19 +126,16 @@ export function renderScoreCard({ variant, characterName, characterRealm, charac
     const pctX = barX + barW + 14;
     const detailX = pctX + 50;
 
-    for (let i = 0; i < DIMENSION_KEYS.length; i++) {
-        const key = DIMENSION_KEYS[i];
-        const dim = dimensions?.[key];
-        if (!dim) continue;
-
-        const y = startY + i * rowH;
+    for (let i = 0; i < rows.length; i++) {
+        const dim = rows[i];
+        const y = startY + i * ROW_H;
         const pct = Math.round(dim.score || 0);
-        const color = DIMENSION_COLORS[key];
+        const color = dimensionColor(dim.key);
 
         // Label
         ctx.font = `600 13px ${FONT}`;
         ctx.fillStyle = '#cbd5e1';
-        ctx.fillText(DIMENSION_LABELS[key], labelX, y);
+        ctx.fillText(dim.label, labelX, y);
 
         // Bar background
         roundRect(ctx, barX, y + 1, barW, barH, 6);

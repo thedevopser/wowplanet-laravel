@@ -26,6 +26,16 @@ function mountCard(character = baseCharacter) {
 }
 
 describe('CharacterCard', () => {
+    it('affiche le badge de score fourni par le serveur', () => {
+        const wrapper = mountCard({ ...baseCharacter, score: { global: 61.2, rank: 'Rare', dimensions: [] } });
+
+        expect(wrapper.findComponent({ name: 'ScoreBadge' }).props('score')).toBe(61.2);
+    });
+
+    it('masque le badge quand le profil ne porte pas de score', () => {
+        expect(mountCard().findComponent({ name: 'ScoreBadge' }).exists()).toBe(false);
+    });
+
     it('displays character name', () => {
         const wrapper = mountCard();
 

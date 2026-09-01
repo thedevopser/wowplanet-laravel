@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Application\Services\CharacterProfileService;
 use App\Application\Services\UserCharacterService;
+use App\Domain\ValueObjects\ScoreWeights;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Models\WowAppearance;
 use App\Models\WowDecor;
@@ -195,6 +196,14 @@ test('get profile aggregates unlocked transmog appearances by slot', function ()
         ->and($weapon['total'])->toBe(1)
         ->and($weapon['completed'])->toBe(0)
         ->and($characterProfileDTO->appearancesCount)->toBe(1);
+
+    // La garde-robe alimente le score : 1 apparence sur 3, tous slots confondus.
+    $transmog = collect($characterProfileDTO->score->dimensions)->firstWhere('key', 'transmog');
+
+    expect($characterProfileDTO->score->version)->toBe(ScoreWeights::VERSION)
+        ->and($characterProfileDTO->score->dimensions)->toHaveCount(count(ScoreWeights::WEIGHTS))
+        ->and($transmog->completed)->toBe(1.0)
+        ->and($transmog->total)->toBe(3);
 });
 
 test('aggregate progress groups by expansion and zone', function (): void {

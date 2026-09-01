@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Application\Services;
 
 use App\Application\DTOs\AccountScoreProgress;
+use App\Domain\Services\ScoreCalculator;
+use App\Domain\ValueObjects\ScoreInput;
+use App\Domain\ValueObjects\ScoreWeights;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
@@ -20,6 +23,7 @@ class AccountScoreService
     public function __construct(
         private readonly CharacterProfileService $characterProfileService,
         private readonly UserCharacterService $userCharacterService,
+        private readonly ScoreCalculator $scoreCalculator,
     ) {}
 
     /**
@@ -119,14 +123,51 @@ class AccountScoreService
     private function finalize(AccountScoreProgress $accountScoreProgress, string $cacheKey, string $progressKey): array
     {
         $result = $accountScoreProgress->buildResult();
+        $result['score'] = $this->scoreCalculator->compute($this->toScoreInput($result));
+
         Cache::put($cacheKey, $result, self::CACHE_TTL);
         Cache::forget($progressKey);
 
         return ['status' => 'ready', 'data' => $result];
     }
 
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function toScoreInput(array $result): ScoreInput
+    {
+        /** @var array<int|string, array<string, mixed>> $collections */
+        $collections = is_array($result['collections'] ?? null) ? $result['collections'] : [];
+        /** @var list<array<string, mixed>> $mounts */
+        $mounts = is_array($result['mounts'] ?? null) ? $result['mounts'] : [];
+        /** @var list<array<string, mixed>> $pets */
+        $pets = is_array($result['pets'] ?? null) ? $result['pets'] : [];
+        /** @var list<array<string, mixed>> $decor */
+        $decor = is_array($result['decor'] ?? null) ? $result['decor'] : [];
+        /** @var list<array<string, mixed>> $professions */
+        $professions = is_array($result['professions'] ?? null) ? $result['professions'] : [];
+        /** @var list<array{slot?: string, total?: int, completed?: int}> $appearances */
+        $appearances = is_array($result['appearances'] ?? null) ? $result['appearances'] : [];
+        /** @var list<array<string, mixed>>|null $raids */
+        $raids = is_array($result['raids'] ?? null) ? $result['raids'] : null;
+        /** @var array{completed: int, total: int}|null $bestProfessionStats */
+        $bestProfessionStats = is_array($result['bestProfessionStats'] ?? null) ? $result['bestProfessionStats'] : null;
+
+        return new ScoreInput(
+            collections: $collections,
+            mounts: $mounts,
+            pets: $pets,
+            decor: $decor,
+            professions: $professions,
+            appearances: $appearances,
+            raids: $raids,
+            bestProfessionStats: $bestProfessionStats,
+        );
+    }
+
+    /** La version de la formule est dans la clé : un changement de barème purge le cache. */
     private function getCacheKey(): string
     {
-        return 'account_score:'.Session::getId();
+        return 'account_score:v'.ScoreWeights::VERSION.':'.Session::getId();
     }
 }

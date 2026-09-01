@@ -22,7 +22,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { getScoreColor } from '../utils/scoreCalculator';
+import { getScoreColor } from '../utils/scoreDisplay';
 
 const props = defineProps({
     score: { type: Number, default: 0 },
