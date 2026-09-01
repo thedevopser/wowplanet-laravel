@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\DocsController;
+use App\Http\Controllers\PvpController;
 use App\Http\Controllers\SeoController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,9 @@ Route::get('/base-de-donnees/mascottes/{category?}', [DatabaseController::class,
 Route::get('/base-de-donnees/decorations/{category?}', [DatabaseController::class, 'decors']);
 Route::get('/base-de-donnees/garde-robe/{slot?}', [DatabaseController::class, 'appearances']);
 Route::get('/base-de-donnees/professions/{profession?}', [DatabaseController::class, 'professions']);
+
+// Classements PvP : pas un catalogue, donc hors /base-de-donnees et hors DatabaseLayout.
+Route::get('/classements-pvp/{bracket?}', [PvpController::class, 'leaderboard']);
 
 Route::get('/faq', [SeoController::class, 'faqPage']);
 Route::get('/cgu', [SeoController::class, 'cguPage']);

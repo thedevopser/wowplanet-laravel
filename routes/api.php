@@ -4,12 +4,14 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterFavoriteController;
 use App\Http\Controllers\CharacterTaskController;
+use App\Http\Controllers\PvpController;
 use App\Http\Controllers\TalentController;
 use App\Http\Controllers\UserCharacterController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('throttle:api')->group(function (): void {
     Route::get('/character/{realm}/{name}/talents', [TalentController::class, 'show']);
+    Route::get('/character/{realm}/{name}/pvp', [PvpController::class, 'show']);
     Route::get('/character/{realm}/{name}', [CharacterController::class, 'show']);
 });
 

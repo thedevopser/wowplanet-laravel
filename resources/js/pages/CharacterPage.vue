@@ -49,6 +49,7 @@
                 <ScoreTab v-if="activeTab === 'score'" />
                 <MythicPlusTab v-if="activeTab === 'mythicplus'" />
                 <RaidsTab v-if="activeTab === 'raids'" />
+                <PvpTab v-if="activeTab === 'pvp'" :realm="realm" :name="name" />
                 <QuestsTab v-if="activeTab === 'quests'" />
                 <AchievementsTab v-if="activeTab === 'achievements'" />
                 <ReputationsTab v-if="activeTab === 'reputations'" />
@@ -94,6 +95,7 @@ import TransmogTab from '../components/TransmogTab.vue';
 import ScoreTab from '../components/ScoreTab.vue';
 import MythicPlusTab from '../components/MythicPlusTab.vue';
 import RaidsTab from '../components/RaidsTab.vue';
+import PvpTab from '../components/PvpTab.vue';
 import EquipmentTab from '../components/EquipmentTab.vue';
 
 const props = defineProps({
@@ -136,6 +138,8 @@ const contentTabs = computed(() => [
     { id: 'professions', label: 'Métiers', count: store.character?.professions?.length || undefined },
     { id: 'mythicplus', label: 'Mythique+', count: store.character?.mythicKeystone?.rating ? Math.round(store.character.mythicKeystone.rating) : undefined },
     { id: 'raids', label: 'Raids', count: store.character?.raidsCount || undefined },
+    // Pas de compteur : le PvP est chargé à l'ouverture de l'onglet, pas avec le profil.
+    { id: 'pvp', label: 'PvP', count: undefined },
     { id: 'equipment', label: 'Équipement', count: undefined },
     { id: 'mounts', label: 'Montures', count: store.character?.mountsCount },
     { id: 'pets', label: 'Mascottes', count: store.character?.petsCount },

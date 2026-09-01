@@ -74,6 +74,10 @@ class CharacterSeoService
                 'Politique de confidentialité | WowPlanet',
                 'Politique de confidentialité et gestion des données personnelles sur WowPlanet.',
             ],
+            'classements-pvp' => [
+                'Classements PvP | WowPlanet',
+                'Classements PvP officiels de World of Warcraft : arène 2c2 et 3c3, champs de bataille cotés, mêlée solo et blitz. Cotes de la saison en cours, mises à jour en direct.',
+            ],
             'addons' => [
                 'Addons WoW | WowPlanet',
                 'Découvrez MapTidy, WhatTodo et TankTruckReverse, les addons World of Warcraft développés par WowPlanet : filtrage des marqueurs de quêtes, liste de tâches à faire et bip de recul pour tanks.',
@@ -263,6 +267,13 @@ class CharacterSeoService
                 ->setLastModificationDate($now)
                 ->setChangeFrequency(Url::CHANGE_FREQUENCY_YEARLY)
                 ->setPriority(0.3),
+        );
+        // Les cotes bougent en continu pendant la saison.
+        $sitemap->add(
+            Url::create($appUrl.'/classements-pvp')
+                ->setLastModificationDate($now)
+                ->setChangeFrequency(Url::CHANGE_FREQUENCY_DAILY)
+                ->setPriority(0.6),
         );
 
         return $sitemap;
