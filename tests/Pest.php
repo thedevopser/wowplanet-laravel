@@ -55,8 +55,11 @@ function faviconFingerprints(string $publicPath): array
 {
     $fingerprints = [];
 
-    foreach (glob($publicPath.'/{favicon.ico,*-*x*.png,apple-touch-icon.png}', GLOB_BRACE) ?: [] as $file) {
-        $fingerprints[basename($file)] = (string) md5_file($file);
+    // GLOB_BRACE est absent des PHP liés à musl, dont l'image Alpine du projet.
+    foreach (['favicon.ico', '*-*x*.png', 'apple-touch-icon.png'] as $pattern) {
+        foreach (glob($publicPath.'/'.$pattern) ?: [] as $file) {
+            $fingerprints[basename($file)] = (string) md5_file($file);
+        }
     }
 
     return $fingerprints;
