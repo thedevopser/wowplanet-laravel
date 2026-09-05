@@ -3,6 +3,8 @@ import { mountWithPlugins } from '../tests/helpers';
 import EquipmentTab from './EquipmentTab.vue';
 
 const makeCharacter = (equipment = [], ilvl = 630) => ({
+    realm: 'hyjal',
+    name: 'arthas',
     avatarUrl: 'https://render.worldofwarcraft.com/avatar.jpg',
     ilvl,
     equipment,
