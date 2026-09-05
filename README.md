@@ -3,7 +3,7 @@
 Application web de suivi de progression **World of Warcraft** : profils de personnages,
 collections (montures, mascottes, transmog…), Mythic+, raids, score de compte.
 
-**Stack** : Laravel 12 + Vue 3 (SPA) · FrankenPHP · SQLite · données via l'**API Blizzard**.
+**Stack** : Laravel 12 + Vue 3 via Inertia · FrankenPHP · SQLite · données via l'**API Blizzard**.
 
 > L'application tourne dans Docker, l'outillage tourne en local : tests, lint, analyse
 > statique et build d'assets s'exécutent avec le PHP et le Node de la machine.
@@ -131,8 +131,9 @@ Les cibles locales n'ont pas besoin que la stack soit démarrée. Seules `make c
 
 - **Backend** — Clean Architecture (`Domain` → `Application` → `Infrastructure` / `Http`),
   Laravel 12, servi par FrankenPHP.
-- **Frontend** — SPA Vue 3 (Vue Router + Pinia). Le backend sert le template Blade, les données
-  transitent par les routes `api.php`.
+- **Frontend** — Vue 3 avec Inertia et Pinia, rendu serveur optionnel via le sidecar
+  `inertia-ssr`. Les controllers rendent les pages de `resources/js/pages/`, et les routes
+  `api.php` servent les appels XHR.
 
-Détails d'architecture et conventions : voir [`CLAUDE.md`](CLAUDE.md) et le dossier
-[`documentation/`](documentation/).
+Détails d'architecture et conventions : voir le dossier [`documentation/`](documentation/),
+également servi sur `/docs` en environnement local.
