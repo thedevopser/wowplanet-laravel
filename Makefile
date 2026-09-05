@@ -13,14 +13,14 @@ down: ## Stop the application
 	docker compose down
 
 install: ## Install dependencies (Composer & NPM)
-	docker compose exec app composer install
-	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npm install
+	composer install
+	npm install
 
 install-hooks: ## Install git pre-commit hook
 	@sh scripts/install-hooks.sh
 
 build-assets: ## Build assets for production
-	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npm run build
+	npm run build
 
 dev: ## Start Vite dev server (via Traefik HTTPS)
 	docker compose --profile dev up vite -d
@@ -41,35 +41,35 @@ clean: ## Clear Laravel caches
 	docker compose exec app php artisan cache:clear
 
 test: ## Run Pest tests
-	docker compose exec app vendor/bin/pest
+	vendor/bin/pest
 
 lint: ## Fix code style (Laravel Pint)
-	docker compose exec app vendor/bin/pint
+	vendor/bin/pint
 
 lint-check: ## Check code style without fixing (Laravel Pint)
-	docker compose exec app vendor/bin/pint --test
+	vendor/bin/pint --test
 
 static: ## Run Larastan static analysis
-	docker compose exec app vendor/bin/phpstan analyse --memory-limit=2G
+	vendor/bin/phpstan analyse --memory-limit=2G
 
 refactor: ## Run Rector automated refactoring
-	docker compose exec app vendor/bin/rector process
+	vendor/bin/rector process
 
 test-js: ## Run Vitest (Vue component tests)
-	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run
+	npx vitest run
 
 quality: lint static refactor test test-js ## Run all quality checks
 
-coverage-php: ## Run Pest with coverage (min 80%)
+coverage-php: ## Run Pest with coverage, min 80% (requires the app container: pcov)
 	docker compose exec app vendor/bin/pest --coverage --min=80
 
 coverage-js: ## Run Vitest with coverage
-	docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run --coverage
+	npx vitest run --coverage
 
-coverage: ## Coverage PHP + JS avec rapports HTML
+coverage: ## Coverage PHP + JS avec rapports HTML (PHP : conteneur requis)
 	@echo ""
 	@echo "\033[1;36m══════════════════════════════════════════════════════════════\033[0m"
-	@echo "\033[1;36m  PHP Coverage (Pest + pcov) — min 80%\033[0m"
+	@echo "\033[1;36m  PHP Coverage (Pest + pcov, dans le conteneur) — min 80%\033[0m"
 	@echo "\033[1;36m══════════════════════════════════════════════════════════════\033[0m"
 	@echo ""
 	@docker compose exec app vendor/bin/pest --coverage --min=80 --coverage-html=coverage/php
@@ -78,7 +78,7 @@ coverage: ## Coverage PHP + JS avec rapports HTML
 	@echo "\033[1;33m  JavaScript Coverage (Vitest + v8) — min 80%\033[0m"
 	@echo "\033[1;33m══════════════════════════════════════════════════════════════\033[0m"
 	@echo ""
-	@docker run --rm -v $(shell pwd):/app -w /app node:22-alpine npx vitest run --coverage
+	@npx vitest run --coverage
 	@echo ""
 	@echo "\033[1;32m══════════════════════════════════════════════════════════════\033[0m"
 	@echo "\033[1;32m  Rapports HTML :\033[0m"
