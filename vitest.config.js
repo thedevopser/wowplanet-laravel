@@ -12,7 +12,14 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             include: ['resources/js/**/*.{js,vue}'],
-            exclude: ['resources/js/**/*.{test,spec}.js', 'resources/js/tests/**', 'resources/js/app.js', 'resources/js/bootstrap.js'],
+            exclude: [
+                'resources/js/**/*.{test,spec}.js',
+                'resources/js/tests/**',
+                'resources/js/app.js',
+                'resources/js/bootstrap.js',
+                'resources/js/inertia.js',
+                'resources/js/ssr.js',
+            ],
             reporter: ['text', 'text-summary', 'html'],
             reportsDirectory: 'coverage/js',
             thresholds: {
