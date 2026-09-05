@@ -7,6 +7,7 @@ export default defineConfig({
     test: {
         environment: 'happy-dom',
         include: ['resources/js/**/*.{test,spec}.js'],
+        setupFiles: ['resources/js/tests/setup.js'],
         globals: true,
         coverage: {
             provider: 'v8',

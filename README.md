@@ -3,10 +3,10 @@
 Application web de suivi de progression **World of Warcraft** : profils de personnages,
 collections (montures, mascottes, transmog…), Mythic+, raids, score de compte.
 
-**Stack** : Laravel 12 + Vue 3 (SPA) · FrankenPHP · SQLite · données via l'**API Blizzard**.
+**Stack** : Laravel 12 + Vue 3 via Inertia · FrankenPHP · SQLite · données via l'**API Blizzard**.
 
-> Tout tourne dans Docker. Aucun runtime local (PHP, Node, Composer) n'est requis :
-> toutes les commandes passent par `docker compose` ou `make`.
+> L'application tourne dans Docker, l'outillage tourne en local : tests, lint, analyse
+> statique et build d'assets s'exécutent avec le PHP et le Node de la machine.
 
 ---
 
@@ -16,8 +16,13 @@ Pour lancer le projet en dev, il te faut sur ton PC :
 
 | Outil | Rôle |
 | --- | --- |
-| **Docker** + **Docker Compose** | Exécute app, worker et Vite. Seul runtime nécessaire. |
+| **Docker** + **Docker Compose** | Exécute app, worker et Vite. |
+| **PHP 8.4** + **Composer** | Outillage PHP : Pest, Pint, Larastan, Rector, Artisan. |
+| **Node 26** + **npm** | Outillage JS : Vitest, build des assets. |
 | **Traefik** (reverse-proxy local) | Sert le projet en HTTPS sur `wowplanet.dev.local`. Proxy partagé, **non inclus dans ce repo** — il doit déjà tourner sur le réseau Docker `dev-network`. |
+
+> La couverture PHP est la seule commande d'outillage qui reste dans le conteneur : elle a
+> besoin de **pcov**, installé dans l'image de dev et absent du PHP de la machine.
 
 Le `compose.yml` s'attache à un réseau Docker **externe** nommé `dev-network` et publie ses
 routes via des labels Traefik. Deux prérequis en découlent :
@@ -45,15 +50,15 @@ cp .env.example .env
 # 2. Démarrer le conteneur applicatif (sur dev-network)
 make up
 
-# 3. Installer les dépendances PHP + JS (via Docker, aucun outil local requis)
+# 3. Installer les dépendances PHP + JS (Composer et npm de la machine)
 make install
 
 # 4. Générer la clé applicative
-docker compose exec app php artisan key:generate
+php artisan key:generate
 
 # 5. Créer la base SQLite puis migrer
 touch database/database.sqlite
-docker compose exec app php artisan migrate
+php artisan migrate
 
 # 6. (optionnel) Installer le hook pre-commit qualité (lint + static + tests)
 make install-hooks
@@ -105,15 +110,18 @@ make down          # Stoppe l'application
 
 ## 5. Commandes utiles (dev quotidien)
 
-| Commande | Description |
-| --- | --- |
-| `make test` | Tests PHP (Pest). |
-| `make test-js` | Tests JS (Vitest). |
-| `make lint` | Corrige le style (Laravel Pint). |
-| `make static` | Analyse statique (Larastan). |
-| `make quality` | lint + static + refactor + tests. |
-| `make coverage` | Couverture PHP + JS (min 80 %). |
-| `make clean` | Vide les caches Laravel. |
+| Commande | Description | Exécution |
+| --- | --- | --- |
+| `make test` | Tests PHP (Pest). | local |
+| `make test-js` | Tests JS (Vitest). | local |
+| `make lint` | Corrige le style (Laravel Pint). | local |
+| `make static` | Analyse statique (Larastan). | local |
+| `make quality` | lint + static + refactor + tests. | local |
+| `make coverage` | Couverture PHP + JS (min 80 %). | PHP dans le conteneur, JS en local |
+| `make clean` | Vide les caches Laravel. | conteneur |
+
+Les cibles locales n'ont pas besoin que la stack soit démarrée. Seules `make coverage` et
+`make clean` s'adressent au conteneur applicatif.
 
 `make help` liste toutes les cibles disponibles.
 
@@ -123,8 +131,9 @@ make down          # Stoppe l'application
 
 - **Backend** — Clean Architecture (`Domain` → `Application` → `Infrastructure` / `Http`),
   Laravel 12, servi par FrankenPHP.
-- **Frontend** — SPA Vue 3 (Vue Router + Pinia). Le backend sert le template Blade, les données
-  transitent par les routes `api.php`.
+- **Frontend** — Vue 3 avec Inertia et Pinia, rendu serveur optionnel via le sidecar
+  `inertia-ssr`. Les controllers rendent les pages de `resources/js/pages/`, et les routes
+  `api.php` servent les appels XHR.
 
-Détails d'architecture et conventions : voir [`CLAUDE.md`](CLAUDE.md) et le dossier
-[`documentation/`](documentation/).
+Détails d'architecture et conventions : voir le dossier [`documentation/`](documentation/),
+également servi sur `/docs` en environnement local.
