@@ -25,12 +25,17 @@ function tearDownBlizzardTempStorage(object $test): void
 {
     app()->useStoragePath($test->originalStoragePath);
 
-    if (! is_dir($test->blizzardTmpDir)) {
+    removeDirectory($test->blizzardTmpDir);
+}
+
+function removeDirectory(string $directory): void
+{
+    if (! is_dir($directory)) {
         return;
     }
 
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($test->blizzardTmpDir, FilesystemIterator::SKIP_DOTS),
+        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::CHILD_FIRST,
     );
 
@@ -38,5 +43,21 @@ function tearDownBlizzardTempStorage(object $test): void
         $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
     }
 
-    rmdir($test->blizzardTmpDir);
+    rmdir($directory);
+}
+
+/**
+ * Hashes of the favicons tracked in the repository, to prove a test run leaves them alone.
+ *
+ * @return array<string, string>
+ */
+function faviconFingerprints(string $publicPath): array
+{
+    $fingerprints = [];
+
+    foreach (glob($publicPath.'/{favicon.ico,*-*x*.png,apple-touch-icon.png}', GLOB_BRACE) ?: [] as $file) {
+        $fingerprints[basename($file)] = (string) md5_file($file);
+    }
+
+    return $fingerprints;
 }
