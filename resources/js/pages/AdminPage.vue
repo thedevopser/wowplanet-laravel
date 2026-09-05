@@ -90,8 +90,8 @@
                 </div>
 
                 <!-- Import status -->
-                <div v-if="importJobId" class="mt-4 p-4 bg-slate-900/50 rounded-xl border border-white/5">
-                    <div class="flex items-center gap-2 mb-2">
+                <div v-if="importJobId || importOutput" class="mt-4 p-4 bg-slate-900/50 rounded-xl border border-white/5">
+                    <div v-if="importJobId" class="flex items-center gap-2 mb-2">
                         <div
                             :class="[
                                 'w-2 h-2 rounded-full',
