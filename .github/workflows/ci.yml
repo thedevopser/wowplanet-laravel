@@ -90,6 +90,13 @@ jobs:
       - name: Build the front-end assets
         run: npm run build
 
+      # npm run build chains vite build and vite build --ssr; the SSR sidecar
+      # runs in production, so a bundle that only breaks there must not pass.
+      - name: Check the produced bundles
+        run: |
+          test -f public/build/manifest.json
+          test -f bootstrap/ssr/ssr.js
+
       - name: Report the installed versions
         run: |
           php --version
@@ -134,6 +141,9 @@ jobs:
 
       - name: Run the Pest suite with coverage
         run: make coverage-php-ci
+
+      - name: Run the Vitest suite with coverage
+        run: make coverage-js
 
       # Catches the day someone swaps pint --test for pint, or drops --dry-run.
       - name: Check that no step rewrote the working tree
