@@ -1,6 +1,6 @@
 # Modèles Eloquent
 
-Tous les modèles utilisent SQLite. Les modèles WoW ont `$incrementing = false` car leur ID est celui de Blizzard.
+Tous les modèles utilisent PostgreSQL. Les modèles WoW ont `$incrementing = false` car leur ID est celui de Blizzard, et n'ont donc pas de séquence associée.
 
 ---
 
