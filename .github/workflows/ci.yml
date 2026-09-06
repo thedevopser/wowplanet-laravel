@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Tests and quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      # 8.4 is the FrankenPHP image version, not the ^8.2 of composer.json:
+      # testing on a version production never runs would prove nothing.
+      # Only the extensions production carries are requested; the runner
+      # preinstalls many more, pdo_mysql included, which is out of our hands.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, gd, intl, zip, pcntl
+          coverage: pcov
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Prepare the environment file
+        run: cp .env.example .env
+
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Generate the application key
+        run: php artisan key:generate
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Report the installed versions
+        run: |
+          php --version
+          php -m
+          node --version
+          npm --version
