@@ -1,7 +1,15 @@
-.PHONY: help build up down install-hooks test lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy prod-up prod-down worker worker-stop
+.PHONY: help build up down install install-hooks build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
+
+# Development database coordinates. Not read from .env on purpose: make would
+# parse the whole file as makefile syntax and choke on the first '#' inside a
+# secret. Override from the environment when they differ.
+DB_USERNAME ?= wowplanet
+DB_DATABASE ?= wowplanet
+DB_TEST_DATABASE ?= wowplanet_test
+DB_PORT_HOST ?= 55432
 
 help: ## Display this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build docker images
 	docker compose build --no-cache
@@ -33,6 +41,15 @@ worker: ## Start queue worker (dev)
 
 worker-stop: ## Stop queue worker (dev)
 	docker compose --profile dev stop worker
+
+psql: ## Open a psql shell on the application database
+	docker compose exec postgres psql -U $(DB_USERNAME) -d $(DB_DATABASE)
+
+psql-test: ## Open a psql shell on the test database
+	docker compose exec postgres psql -U $(DB_USERNAME) -d $(DB_TEST_DATABASE)
+
+redis-cli: ## Open a redis-cli shell
+	docker compose exec redis redis-cli
 
 clean: ## Clear Laravel caches
 	docker compose exec app php artisan config:clear
