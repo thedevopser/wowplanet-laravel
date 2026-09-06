@@ -1,4 +1,4 @@
-.PHONY: help build up down install install-hooks check-db build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor quality coverage coverage-php coverage-php-ci coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
+.PHONY: help build up down install install-hooks check-db build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor refactor-check quality coverage coverage-php coverage-php-ci coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
 
 # Development database coordinates. Not read from .env on purpose: make would
 # parse the whole file as makefile syntax and choke on the first '#' inside a
@@ -77,6 +77,9 @@ static: ## Run Larastan static analysis
 
 refactor: ## Run Rector automated refactoring
 	vendor/bin/rector process
+
+refactor-check: ## Report pending Rector refactorings without writing (exit 2 if any)
+	vendor/bin/rector process --dry-run
 
 test-js: ## Run Vitest (Vue component tests)
 	npx vitest run
