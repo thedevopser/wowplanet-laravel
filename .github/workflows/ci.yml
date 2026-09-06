@@ -17,14 +17,39 @@ jobs:
     name: Tests and quality
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: wowplanet_test
+          POSTGRES_USER: wowplanet
+          POSTGRES_PASSWORD: wowplanet
+          # Alpine carries no system locale, hence the ICU provider.
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8 --locale-provider=icu --icu-locale=fr-FR
+        ports:
+          # compose.yml ports, so .env.example needs no CI override.
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U wowplanet -d wowplanet_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
 
-      # 8.4 is the FrankenPHP image version, not the ^8.2 of composer.json:
-      # testing on a version production never runs would prove nothing.
-      # Only the extensions production carries are requested; the runner
-      # preinstalls many more, pdo_mysql included, which is out of our hands.
+      # 8.4 is the FrankenPHP version, not the ^8.2 of composer.json.
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -61,9 +86,40 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      # The Inertia feature tests render app.blade.php, which reads the manifest.
+      - name: Build the front-end assets
+        run: npm run build
+
       - name: Report the installed versions
         run: |
           php --version
           php -m
           node --version
           npm --version
+
+      # Plain SELECTs: the runner's psql predates the server, and its \l reads
+      # daticulocale, renamed datlocale in PG 17.
+      - name: Check the test database collation
+        env:
+          PGPASSWORD: wowplanet
+        run: |
+          psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test \
+            -c "SELECT datname, datlocprovider, datcollate, datctype, datlocale
+                FROM pg_database WHERE datname = 'wowplanet_test'"
+          provider=$(psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test -tAc \
+            "SELECT datlocprovider FROM pg_database WHERE datname = 'wowplanet_test'")
+          locale=$(psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test -tAc \
+            "SELECT datlocale FROM pg_database WHERE datname = 'wowplanet_test'")
+          if [ "$provider" != "i" ] || [ "$locale" != "fr-FR" ]; then
+            echo "Expected the ICU provider on fr-FR, got '$provider' on '$locale'." >&2
+            exit 1
+          fi
+
+      # phpunit.xml pins DB_DATABASE for the suite; this step runs outside it.
+      - name: Run the database migrations
+        env:
+          DB_DATABASE: wowplanet_test
+        run: php artisan migrate --force
+
+      - name: Run the Pest suite with coverage
+        run: make coverage-php-ci
