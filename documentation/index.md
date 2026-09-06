@@ -40,7 +40,7 @@ Requête HTTP
               ├─> BlizzardApiClient (Infrastructure/Blizzard/)
               ├─> Aggregators (Application/Services/Progress/)
               └─> Models (Eloquent)
-                    └─> SQLite
+                    └─> PostgreSQL
 ```
 
 ```

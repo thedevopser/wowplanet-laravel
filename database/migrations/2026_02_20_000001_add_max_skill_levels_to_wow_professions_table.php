@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('wow_professions', function (Blueprint $blueprint): void {
-            $blueprint->json('max_skill_levels')->nullable()->after('type');
+            $blueprint->jsonb('max_skill_levels')->nullable()->after('type');
         });
     }
 

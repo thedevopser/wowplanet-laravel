@@ -1,9 +1,12 @@
 <?php
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Tests\TestCase;
 
-pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');
+// PostgreSQL is transactional, so each test rolls back instead of re-migrating,
+// and the lazy variant spares that cost entirely to tests that never touch the
+// database.
+pest()->extend(TestCase::class)->use(LazilyRefreshDatabase::class)->in('Feature');
 
 /**
  * Set up a temporary blizzard storage directory.
