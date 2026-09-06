@@ -345,7 +345,9 @@ class DatabaseQueryService
     private function applySearch(Builder $builder, ?string $search): void
     {
         if ($search !== null && $search !== '') {
-            $builder->where('name_fr', 'LIKE', '%'.$search.'%');
+            // PostgreSQL makes LIKE case-sensitive where SQLite did not: without
+            // this, searching "bouclier" would stop matching "Bouclier".
+            $builder->whereLike('name_fr', '%'.$search.'%', caseSensitive: false);
         }
     }
 
