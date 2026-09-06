@@ -1,4 +1,4 @@
-.PHONY: help build up down install install-hooks build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
+.PHONY: help build up down install install-hooks check-db build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
 
 # Development database coordinates. Not read from .env on purpose: make would
 # parse the whole file as makefile syntax and choke on the first '#' inside a
@@ -57,7 +57,13 @@ clean: ## Clear Laravel caches
 	docker compose exec app php artisan view:clear
 	docker compose exec app php artisan cache:clear
 
-test: ## Run Pest tests
+# The suite runs on PostgreSQL, so it needs the stack. Fail on one readable line
+# instead of a Pest stack trace nobody reads to the end. A TCP probe answers the
+# only question asked here — is the stack up — and needs no credentials.
+check-db:
+	@php -r 'if (!@fsockopen("127.0.0.1", $(DB_PORT_HOST), $$errno, $$errstr, 2)) { fwrite(STDERR, "\033[31mPostgreSQL injoignable sur 127.0.0.1:$(DB_PORT_HOST).\033[0m\n\nLance la stack : make up\n\n"); exit(1); }'
+
+test: check-db ## Run Pest tests (requires PostgreSQL: make up)
 	vendor/bin/pest
 
 lint: ## Fix code style (Laravel Pint)
@@ -77,13 +83,13 @@ test-js: ## Run Vitest (Vue component tests)
 
 quality: lint static refactor test test-js ## Run all quality checks
 
-coverage-php: ## Run Pest with coverage, min 80% (requires the app container: pcov)
+coverage-php: check-db ## Run Pest with coverage, min 80% (requires the app container: pcov)
 	docker compose exec app vendor/bin/pest --coverage --min=80
 
 coverage-js: ## Run Vitest with coverage
 	npx vitest run --coverage
 
-coverage: ## Coverage PHP + JS avec rapports HTML (PHP : conteneur requis)
+coverage: check-db ## Coverage PHP + JS avec rapports HTML (PHP : conteneur requis)
 	@echo ""
 	@echo "\033[1;36m══════════════════════════════════════════════════════════════\033[0m"
 	@echo "\033[1;36m  PHP Coverage (Pest + pcov, dans le conteneur) — min 80%\033[0m"
