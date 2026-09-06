@@ -1,0 +1,159 @@
+name: CI
+
+# A branch with an open pull request would run twice on every push if this
+# listened to '**'. Integration goes through a pull request anyway, so nothing
+# heading for main escapes the pipeline.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Tests and quality
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: wowplanet_test
+          POSTGRES_USER: wowplanet
+          POSTGRES_PASSWORD: wowplanet
+          # Alpine carries no system locale, hence the ICU provider.
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8 --locale-provider=icu --icu-locale=fr-FR
+        ports:
+          # compose.yml ports, so .env.example needs no CI override.
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U wowplanet -d wowplanet_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      # 8.4 is the FrankenPHP version, not the ^8.2 of composer.json.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, gd, intl, zip, pcntl
+          coverage: pcov
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: npm
+
+      - name: Prepare the environment file
+        run: cp .env.example .env
+
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Generate the application key
+        run: php artisan key:generate
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      # The Inertia feature tests render app.blade.php, which reads the manifest.
+      - name: Build the front-end assets
+        run: npm run build
+
+      # npm run build chains vite build and vite build --ssr; the SSR sidecar
+      # runs in production, so a bundle that only breaks there must not pass.
+      - name: Check the produced bundles
+        run: |
+          test -f public/build/manifest.json
+          test -f bootstrap/ssr/ssr.js
+
+      - name: Report the installed versions
+        run: |
+          php --version
+          php -m
+          node --version
+          npm --version
+
+      # Same order as the pre-commit hook: Rector transforms, Pint formats,
+      # PHPStan reads the result. Here none of them writes.
+      - name: Check pending Rector refactorings
+        run: make refactor-check
+
+      - name: Check the code style
+        run: make lint-check
+
+      - name: Run the static analysis
+        run: make static
+
+      # Plain SELECTs: the runner's psql predates the server, and its \l reads
+      # daticulocale, renamed datlocale in PG 17.
+      - name: Check the test database collation
+        env:
+          PGPASSWORD: wowplanet
+        run: |
+          psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test \
+            -c "SELECT datname, datlocprovider, datcollate, datctype, datlocale
+                FROM pg_database WHERE datname = 'wowplanet_test'"
+          provider=$(psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test -tAc \
+            "SELECT datlocprovider FROM pg_database WHERE datname = 'wowplanet_test'")
+          locale=$(psql -h 127.0.0.1 -p 55432 -U wowplanet -d wowplanet_test -tAc \
+            "SELECT datlocale FROM pg_database WHERE datname = 'wowplanet_test'")
+          if [ "$provider" != "i" ] || [ "$locale" != "fr-FR" ]; then
+            echo "Expected the ICU provider on fr-FR, got '$provider' on '$locale'." >&2
+            exit 1
+          fi
+
+      # phpunit.xml pins DB_DATABASE for the suite; this step runs outside it.
+      - name: Run the database migrations
+        env:
+          DB_DATABASE: wowplanet_test
+        run: php artisan migrate --force
+
+      - name: Run the Pest suite with coverage
+        run: make coverage-php-ci
+
+      - name: Run the Vitest suite with coverage
+        run: make coverage-js
+
+      # Catches the day someone swaps pint --test for pint, or drops --dry-run.
+      - name: Check that no step rewrote the working tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff
+            echo "A quality step modified tracked files; every one must run read-only." >&2
+            exit 1
+          fi

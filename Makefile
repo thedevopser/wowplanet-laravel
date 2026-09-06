@@ -1,4 +1,4 @@
-.PHONY: help build up down install install-hooks check-db build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor quality coverage coverage-php coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
+.PHONY: help build up down install install-hooks check-db build-assets dev dev-stop worker worker-stop psql psql-test redis-cli clean test test-js lint lint-check static refactor refactor-check quality coverage coverage-php coverage-php-ci coverage-js build-prod build-prod-ssr build-prod-all push push-ssr push-all deploy redeploy prod-up prod-down
 
 # Development database coordinates. Not read from .env on purpose: make would
 # parse the whole file as makefile syntax and choke on the first '#' inside a
@@ -78,6 +78,9 @@ static: ## Run Larastan static analysis
 refactor: ## Run Rector automated refactoring
 	vendor/bin/rector process
 
+refactor-check: ## Report pending Rector refactorings without writing (exit 2 if any)
+	vendor/bin/rector process --dry-run
+
 test-js: ## Run Vitest (Vue component tests)
 	npx vitest run
 
@@ -85,6 +88,9 @@ quality: lint static refactor test test-js ## Run all quality checks
 
 coverage-php: check-db ## Run Pest with coverage, min 80% (requires the app container: pcov)
 	docker compose exec app vendor/bin/pest --coverage --min=80
+
+coverage-php-ci: ## Same as coverage-php, on the calling PHP (CI: pcov on the runner, no stack)
+	vendor/bin/pest --coverage --min=80
 
 coverage-js: ## Run Vitest with coverage
 	npx vitest run --coverage
