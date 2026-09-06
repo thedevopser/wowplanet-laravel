@@ -1,9 +1,12 @@
 name: CI
 
+# A branch with an open pull request would run twice on every push if this
+# listened to '**'. Integration goes through a pull request anyway, so nothing
+# heading for main escapes the pipeline.
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
     branches:
       - main
