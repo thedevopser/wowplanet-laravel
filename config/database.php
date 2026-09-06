@@ -16,7 +16,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => env('DB_CONNECTION', 'pgsql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -41,6 +41,16 @@ return [
             'journal_mode' => 'wal',
             'synchronous' => 'normal',
             'transaction_mode' => 'DEFERRED',
+        ],
+
+        // Read-only source for app:migrate-legacy-sqlite. Drop this connection once
+        // production has switched over and the sqlite-data volume is retired.
+        'sqlite_legacy' => [
+            'driver' => 'sqlite',
+            'database' => env('LEGACY_SQLITE_DATABASE', database_path('database.sqlite')),
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+            'busy_timeout' => 5000,
         ],
 
         'mysql' => [

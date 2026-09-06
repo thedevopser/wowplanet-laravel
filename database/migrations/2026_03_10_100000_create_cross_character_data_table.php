@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('cross_character_data', function (Blueprint $blueprint): void {
             $blueprint->string('bnet_user_id')->primary();
-            $blueprint->json('data');
+            $blueprint->jsonb('data');
             $blueprint->integer('character_count')->default(0);
             $blueprint->timestamp('fetched_at')->nullable();
         });
