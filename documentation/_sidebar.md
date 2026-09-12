@@ -10,6 +10,7 @@
   - [Modèles Eloquent](backend/07-models.md)
   - [Jobs](backend/08-jobs.md)
   - [Commandes Artisan](backend/09-commands.md)
+  - [Qualité et CI](backend/10-qualite-ci.md)
 
 - **Frontend**
   - [Stores Pinia](frontend/01-stores.md)
