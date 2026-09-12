@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard;
 
+use App\Infrastructure\Blizzard\Responses\ResponsePayload;
+use App\Infrastructure\Blizzard\Responses\SeasonIndexResponse;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -111,6 +113,18 @@ class BlizzardApiClient
     }
 
     /**
+     * Porte typée : la réponse en ressort sous forme de lecteur, et le `mixed` s'arrête ici.
+     *
+     * @param  array<string, mixed>  $query
+     *
+     * @throws GuzzleException
+     */
+    public function getResponse(string $endpoint, array $query = []): ResponsePayload
+    {
+        return ResponsePayload::forEndpoint($endpoint, $this->get($endpoint, $query));
+    }
+
+    /**
      * @param  array<string, mixed>  $query
      * @return array<string, mixed>
      *
@@ -164,37 +178,39 @@ class BlizzardApiClient
     public function getCurrentMythicSeasonId(): int
     {
         /** @var int $seasonId */
-        $seasonId = Cache::remember('blizzard_current_m_plus_season', 86400, function (): int {
-            /** @var array<string, mixed> $data */
-            $data = $this->get('data/wow/mythic-keystone/season/index', [
-                'namespace' => 'dynamic-'.$this->region,
-            ]);
+        $seasonId = Cache::remember(
+            'blizzard_current_m_plus_season',
+            86400,
+            fn (): int => $this->fetchCurrentSeasonId('data/wow/mythic-keystone/season/index'),
+        );
 
-            /** @var array{id?: int} $currentSeason */
-            $currentSeason = $data['current_season'] ?? [];
-
-            return (int) ($currentSeason['id'] ?? 0);
-        });
-
-        return (int) $seasonId;
+        return $seasonId;
     }
 
     public function getCurrentPvpSeasonId(): int
     {
         /** @var int $seasonId */
-        $seasonId = Cache::remember('blizzard_current_pvp_season', 86400, function (): int {
-            /** @var array<string, mixed> $data */
-            $data = $this->get('data/wow/pvp-season/index', [
-                'namespace' => 'dynamic-'.$this->region,
-            ]);
+        $seasonId = Cache::remember(
+            'blizzard_current_pvp_season',
+            86400,
+            fn (): int => $this->fetchCurrentSeasonId('data/wow/pvp-season/index'),
+        );
 
-            /** @var array{id?: int} $currentSeason */
-            $currentSeason = $data['current_season'] ?? [];
+        return $seasonId;
+    }
 
-            return (int) ($currentSeason['id'] ?? 0);
-        });
+    /**
+     * Hors saison, l'index n'en porte aucune : 0 reste la valeur d'absence attendue par les appelants.
+     *
+     * @throws GuzzleException
+     */
+    private function fetchCurrentSeasonId(string $endpoint): int
+    {
+        $seasonIndexResponse = SeasonIndexResponse::fromPayload($this->getResponse($endpoint, [
+            'namespace' => 'dynamic-'.$this->region,
+        ]));
 
-        return (int) $seasonId;
+        return $seasonIndexResponse->currentSeasonId ?? 0;
     }
 
     /**
