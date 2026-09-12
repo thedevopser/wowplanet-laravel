@@ -118,6 +118,9 @@ jobs:
       - name: Run the static analysis
         run: make static
 
+      - name: Check the documentation coverage
+        run: make docs-coverage
+
       # Plain SELECTs: the runner's psql predates the server, and its \l reads
       # daticulocale, renamed datlocale in PG 17.
       - name: Check the test database collation

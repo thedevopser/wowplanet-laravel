@@ -19,6 +19,7 @@ Application Laravel 12 + Vue 3 de suivi de progression World of Warcraft. Archit
 | [backend/07-models.md](backend/07-models.md) | Modèles Eloquent |
 | [backend/08-jobs.md](backend/08-jobs.md) | Jobs de queue |
 | [backend/09-commands.md](backend/09-commands.md) | Commandes Artisan |
+| [backend/10-qualite-ci.md](backend/10-qualite-ci.md) | Qualité, pipeline de CI, seuils de couverture, hook pre-commit |
 
 ### Frontend JavaScript
 
