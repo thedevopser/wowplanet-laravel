@@ -113,6 +113,22 @@ Notifie les moteurs de recherche de l'existence du sitemap.
 
 ---
 
+## `app:wow-reference-sync`
+
+Charge les tables de référence DB2 depuis wago.tools dans les tables `wow_ref_*`.
+
+**Signature** : `app:wow-reference-sync {--table=}` — **Classe** : `WowReferenceSyncCommand`
+
+Elle lit le build LIVE, télécharge les six tables du `ReferenceCatalog`, les écrit dans le magasin `storage/app/wow-reference/` puis les charge par `COPY`. La sortie rend la volumétrie table par table, avec l'écart au chargement précédent.
+
+Rien n'est écrit en base avant que **tous** les téléchargements ne soient acquis, et le chargement tient dans une seule transaction. Un téléchargement refusé, un fichier sans en-tête, une colonne disparue ou une volumétrie effondrée sous la moitié du dernier chargement interrompent la commande sans toucher au socle existant : un socle à moitié chargé est pire qu'un socle périmé.
+
+`--table` restreint la synchronisation à une seule table DB2, désignée par son nom chez wago.
+
+Elle remplace `app:download-db2` pour la partie DB2. Le détail des classes est dans [Couche Infrastructure](05-infrastructure.md).
+
+---
+
 ## `docs:coverage`
 
 Mesure la part du code nommée dans les pages de `documentation/`, et échoue quand elle recule.

@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    'wago' => [
+        'base_url' => env('WAGO_BASE_URL', 'https://wago.tools'),
+        'product' => env('WAGO_PRODUCT', 'wow'),
+        'timeout' => (int) env('WAGO_TIMEOUT', 120),
+    ],
+
     'blizzard' => [
         'client_id' => env('BLIZZARD_CLIENT_ID'),
         'client_secret' => env('BLIZZARD_CLIENT_SECRET'),

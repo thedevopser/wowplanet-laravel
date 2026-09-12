@@ -38,6 +38,13 @@ return [
             'report' => false,
         ],
 
+        'reference' => [
+            'driver' => 'local',
+            'root' => storage_path('app/wow-reference'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

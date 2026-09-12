@@ -186,3 +186,22 @@ Build WoW du dernier import réussi, une ligne par entité importée. Table `wow
 | `imported_at` | Date de l'import. |
 
 C'est la seule table applicative sans `bnet_user_id` : elle ne porte pas de donnée utilisateur mais un état de pipeline. Lue et écrite par `ImportBuildGate`.
+
+---
+
+## `WowReferenceDownload`
+
+Inventaire du magasin de fichiers de référence : un fichier DB2 téléchargé, une ligne. Table `wow_reference_downloads`, clé primaire `filename`, sans séquence ni horodatage Eloquent.
+
+| Colonne | Rôle |
+|---|---|
+| `filename` | Nom du fichier dans le magasin, slug de la table et build. |
+| `source_table` | Nom de la table DB2 chez wago (`Faction`, `AreaTable`…). |
+| `build` | Build WoW LIVE au moment du téléchargement. |
+| `bytes` | Taille du fichier téléchargé. |
+| `row_count` | Nombre de lignes effectivement chargées en base. |
+| `downloaded_at` | Date du téléchargement. |
+
+Les lignes s'accumulent d'un build à l'autre : c'est cet inventaire que la purge du magasin consommera. `row_count` sert de garde-fou à la synchronisation suivante, qui refuse une source dont la volumétrie s'effondre sous la moitié du dernier chargement plutôt que d'écraser le socle.
+
+Le nom échappe volontairement au préfixe `wow_ref_`, pour qu'aucun traitement balayant la famille des tables de référence ne vide l'inventaire avec elles.

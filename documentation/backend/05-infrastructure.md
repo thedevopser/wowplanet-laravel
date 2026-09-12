@@ -307,3 +307,54 @@ Objet en lecture seule portant le résultat : les noms complets des classes manq
 |---|---|---|
 | `percentage()` | `float` | Part documentée du périmètre. Un périmètre vide vaut 100 %, l'absence de classe à décrire n'étant pas un échec. |
 | `missingByLayer()` | `array<string, list<string>>` | Classes manquantes groupées par couche, pour une sortie directement exploitable comme liste de travail. |
+
+---
+
+## Socle de référence DB2 (`app/Infrastructure/Reference/`)
+
+Les correspondances que l'API Blizzard n'expose sur aucun endpoint — extension d'une quête, faction d'une zone, renom d'une réputation — viennent des tables DB2 publiées par wago.tools. Elles sont chargées une fois par patch dans des tables `wow_ref_*` par la commande [`app:wow-reference-sync`](09-commands.md), au lieu d'être reparsées depuis le disque à chaque import.
+
+### `ReferenceCatalog`
+
+Déclare les six tables DB2 retenues et, pour chacune, les seules colonnes utiles : `Faction`, `ContentTuning`, `AreaTable`, `QuestV2CliTask`, `SkillLineAbility`, `CurrencyTypes`.
+
+Les noms de colonnes sources appartiennent à un build donné et changent d'un patch à l'autre. Blizzard a par exemple scindé les masques de race en deux moitiés — `RaceMask` est devenu `RaceMasks_0` et `RaceMasks_1` — le jour où les identifiants de race ont dépassé la largeur d'origine. Une colonne déclarée ici mais absente de la source fait échouer la synchronisation, ce qui est le comportement recherché : c'est le seul moment où un renommage se voit.
+
+### `ReferenceTable`, `ReferenceColumn`, `ReferenceColumnType`
+
+Descripteurs en lecture seule, sans dépendance au framework. `ReferenceTable` porte le nom de la table DB2, son slug, la locale à demander et ses colonnes ; elle en dérive le nom de la table PostgreSQL (`wow_ref_` + slug) et le nom du fichier stocké (slug + build). `ReferenceColumnType` distingue les colonnes numériques des colonnes textuelles, seule information dont le projecteur a besoin pour décider si une cellule vide vaut `NULL` ou chaîne vide.
+
+### `Db2CsvProjector`
+
+Réduit un CSV DB2 aux colonnes déclarées, dans l'ordre de la table cible, et rend un générateur de lignes déjà encodées. Les colonnes sont repérées par nom, un réordonnancement de la source est donc sans effet, et une colonne absente lève `MissingColumnException`.
+
+### `CopyText`
+
+Encodage d'une ligne au format texte de `COPY`. Ce format sépare par tabulation, marque le nul par `\N` et n'accorde aucun sens aux guillemets ni aux virgules : seuls la barre oblique inverse et les caractères de mise en page sont neutralisés, la barre oblique en premier pour ne pas ré-échapper les échappements produits ensuite.
+
+`NULL_MARKER_SQL` existe parce que `copyFromArray()` recopie le marqueur dans la clause `NULL AS '…'` sans l'échapper : une barre oblique simple y est consommée par l'analyseur SQL, et PostgreSQL finit par chercher un nul écrit `N`.
+
+### `ReferenceLoader`
+
+Remplace le contenu d'une table de référence par `COPY`, cinq mille lignes à la fois, sur une connexion `Pdo\Pgsql`. `TRUNCATE` étant transactionnel sur PostgreSQL, un chargement qui casse en cours de route laisse la table telle qu'elle était, sans passer par une table de transit.
+
+### `ReferenceStore`
+
+Magasin des CSV téléchargés, sur le disque `reference` (`storage/app/wow-reference/`), **distinct de `storage/app/blizzard/`**. Le nom de fichier porte le build : deux synchronisations d'un même build écrivent le même fichier, deux builds différents en laissent deux.
+
+### `WagoClient`
+
+Frontière wago.tools. `liveBuild()` lit la version LIVE sur `/api/builds`, `fetch()` télécharge une table sur `/db2/{table}/csv`. Le produit est épinglé sur `wow` dans les deux cas : sans lui, wago sert son dernier build tous produits confondus, souvent un PTR dont la localisation française est incomplète.
+
+### Exceptions
+
+Toutes descendent de `ReferenceSyncException`, ce qui permet à la commande de rattraper la famille entière et de rendre un message plutôt qu'une pile.
+
+| Exception | Levée quand |
+|---|---|
+| `BuildUnavailableException` | wago ne rend pas de version pour le produit configuré. |
+| `DownloadFailedException` | Téléchargement refusé, ou corps vide. |
+| `MalformedSourceException` | Fichier servi sans ligne d'en-tête. |
+| `MissingColumnException` | Une colonne déclarée a disparu de la source. |
+| `TruncatedSourceException` | Volumétrie effondrée sous la moitié du dernier chargement. |
+| `UnknownTableException` | `--table` désigne une table absente du catalogue. |
