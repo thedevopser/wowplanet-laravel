@@ -46,6 +46,6 @@ return [
     |
     */
 
-    'max_undocumented' => 46,
+    'max_undocumented' => 45,
 
 ];

@@ -7,6 +7,7 @@ DB_USERNAME ?= wowplanet
 DB_DATABASE ?= wowplanet
 DB_TEST_DATABASE ?= wowplanet_test
 DB_PORT_HOST ?= 55432
+REDIS_PORT_HOST ?= 56379
 
 help: ## Display this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +63,7 @@ clean: ## Clear Laravel caches
 # only question asked here — is the stack up — and needs no credentials.
 check-db:
 	@php -r 'if (!@fsockopen("127.0.0.1", $(DB_PORT_HOST), $$errno, $$errstr, 2)) { fwrite(STDERR, "\033[31mPostgreSQL injoignable sur 127.0.0.1:$(DB_PORT_HOST).\033[0m\n\nLance la stack : make up\n\n"); exit(1); }'
+	@php -r 'if (!@fsockopen("127.0.0.1", $(REDIS_PORT_HOST), $$errno, $$errstr, 2)) { fwrite(STDERR, "\033[31mRedis injoignable sur 127.0.0.1:$(REDIS_PORT_HOST).\033[0m\n\nLance la stack : make up\n\n"); exit(1); }'
 
 test: check-db ## Run Pest tests (requires PostgreSQL: make up)
 	vendor/bin/pest

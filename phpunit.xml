@@ -28,6 +28,8 @@
         <env name="INERTIA_SSR_ENABLED" value="false"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- Vrai Redis, index 15 : le store array ne prouverait rien sur l'atomicité. -->
+        <env name="REDIS_BUDGET_DB" value="15"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

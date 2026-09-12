@@ -68,7 +68,23 @@ Mutualisé par les importeurs spécialisés. Fournit les mécanismes de requête
 
 ### `RateLimitingMiddleware`
 
-Middleware Guzzle qui limite les requêtes à 80/seconde en insérant des pauses (`BACKOFF_US = 50 000 µs`).
+Middleware Guzzle qui limite les requêtes à 80/seconde en insérant des pauses (`BACKOFF_US = 50 000 µs`). C'est le point de passage unique de tous les appels Blizzard, site et imports confondus, et c'est là que chaque requête est comptée au budget horaire.
+
+---
+
+### `HourlyBudgetGuard`
+
+Second garde-fou, complémentaire du précédent : là où le middleware régule la seconde, celui-ci tient une fenêtre glissante d'une heure sur le quota Blizzard de 36 000 requêtes. `HOURLY_LIMIT` est fixé à 34 000, marge de sécurité comprise.
+
+Un compteur par minute dans Redis, incrémenté par `INCRBY` et détruit par son propre TTL. Consommer ne lit rien : deux processus qui comptent en même temps — le worker et une requête du site — s'additionnent au lieu de s'écraser. La lecture se fait par un `MGET` des soixante clés de la fenêtre, et n'est nécessaire qu'au moment de décider d'attendre.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `consume(int $count)` | `void` | Compte des requêtes. Un lot coûte une opération, pas une par requête. |
+| `secondsUntilAvailable(int $count, ?int $ceiling)` | `int` | Secondes à attendre avant de pouvoir consommer `$count` sous le plafond. Les imports passent un plafond réservé, inférieur à `HOURLY_LIMIT`, pour laisser de la marge au trafic du site. |
+| `usedInWindow()` | `int` | Appels comptés sur l'heure glissante. |
+
+**Le budget a son propre index Redis**, distinct de celui du cache. Ce n'est pas cosmétique : `cache:clear` émet un `FLUSHDB`, et remettre ce compteur à zéro autoriserait un import à consommer un second quota dans la même heure réelle, alors que Blizzard, lui, ne réinitialise rien.
 
 ---
 

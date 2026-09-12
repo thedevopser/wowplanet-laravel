@@ -1,12 +1,18 @@
 <?php
 
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 
 // PostgreSQL is transactional, so each test rolls back instead of re-migrating,
 // and the lazy variant spares that cost entirely to tests that never touch the
-// database.
-pest()->extend(TestCase::class)->use(LazilyRefreshDatabase::class)->in('Feature');
+// database. The budget counter left the cache for its own Redis index, so
+// Cache::flush() no longer resets it: a count leaking from one test to the next
+// saturates the quota and sends importers into their retry paths.
+pest()->extend(TestCase::class)
+    ->use(LazilyRefreshDatabase::class)
+    ->beforeEach(fn () => Redis::connection('budget')->flushdb())
+    ->in('Feature');
 
 /**
  * Set up a temporary blizzard storage directory.
