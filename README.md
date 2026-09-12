@@ -1,3 +1,5 @@
+*Français · [English](README.en.md)*
+
 # WowPlanet
 
 Application web de suivi de progression **World of Warcraft** : profils de personnages,
