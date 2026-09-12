@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\Responses\Exceptions\MissingFieldException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
@@ -93,6 +94,37 @@ test('get uses custom namespace when provided', function (): void {
     $request = $history[0]['request'];
     expect($request->getHeaderLine('Battlenet-Namespace'))->toBe('static-eu');
 });
+
+// ─── getResponse ────────────────────────────────────────────
+
+test('getResponse returns a typed reader over the decoded body', function (): void {
+    Cache::put('blizzard_access_token', 'my-token', 3600);
+
+    $mockHandler = new MockHandler([
+        new Response(200, [], json_encode(['id' => 40, 'name' => 'Saison 40'])),
+    ]);
+
+    $guzzle = new Client(['handler' => HandlerStack::create($mockHandler), 'base_uri' => 'https://eu.api.blizzard.com/']);
+    $client = new BlizzardApiClient($guzzle);
+
+    $responsePayload = $client->getResponse('data/wow/pvp-season/40');
+
+    expect($responsePayload->requiredInt('id'))->toBe(40)
+        ->and($responsePayload->requiredString('name'))->toBe('Saison 40');
+});
+
+test('getResponse names the endpoint in the contract errors it raises', function (): void {
+    Cache::put('blizzard_access_token', 'my-token', 3600);
+
+    $mockHandler = new MockHandler([
+        new Response(200, [], json_encode(['name' => 'Saison 40'])),
+    ]);
+
+    $guzzle = new Client(['handler' => HandlerStack::create($mockHandler), 'base_uri' => 'https://eu.api.blizzard.com/']);
+    $client = new BlizzardApiClient($guzzle);
+
+    $client->getResponse('data/wow/pvp-season/40')->requiredInt('id');
+})->throws(MissingFieldException::class, 'Missing field [id] in the response of [data/wow/pvp-season/40]');
 
 // ─── getWithUserToken ───────────────────────────────────────
 
@@ -269,6 +301,19 @@ test('getCurrentPvpSeasonId fetches and caches the current season', function ():
     // Deuxième appel servi par le cache : aucune requête supplémentaire dans la queue
     expect($client->getCurrentPvpSeasonId())->toBe(40);
 });
+
+test('getCurrentPvpSeasonId rejects a current season without an id', function (): void {
+    Cache::put('blizzard_access_token', 'season-token', 3600);
+
+    $mockHandler = new MockHandler([
+        new Response(200, [], json_encode(['current_season' => ['key' => ['href' => 'https://eu.api.blizzard.com/']]])),
+    ]);
+
+    $guzzle = new Client(['handler' => HandlerStack::create($mockHandler), 'base_uri' => 'https://eu.api.blizzard.com/']);
+    $client = new BlizzardApiClient($guzzle);
+
+    $client->getCurrentPvpSeasonId();
+})->throws(MissingFieldException::class, 'Missing field [current_season.id] in the response of [data/wow/pvp-season/index]');
 
 test('getCurrentPvpSeasonId returns 0 when the index has no current season', function (): void {
     Cache::put('blizzard_access_token', 'season-token', 3600);
