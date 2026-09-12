@@ -75,6 +75,9 @@ lint-check: ## Check code style without fixing (Laravel Pint)
 static: ## Run Larastan static analysis
 	vendor/bin/phpstan analyse --memory-limit=2G
 
+docs-coverage: ## Report classes documented nowhere (fails above the declared ceiling)
+	php artisan docs:coverage
+
 refactor: ## Run Rector automated refactoring
 	vendor/bin/rector process
 
@@ -84,7 +87,7 @@ refactor-check: ## Report pending Rector refactorings without writing (exit 2 if
 test-js: ## Run Vitest (Vue component tests)
 	npx vitest run
 
-quality: lint static refactor test test-js ## Run all quality checks
+quality: lint static refactor docs-coverage test test-js ## Run all quality checks
 
 coverage-php: check-db ## Run Pest with coverage, min 80% (requires the app container: pcov)
 	docker compose exec app vendor/bin/pest --coverage --min=80

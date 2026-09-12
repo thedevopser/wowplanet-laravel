@@ -25,15 +25,18 @@ Une étape finale le prouve plutôt que de le supposer : elle vérifie que l'arb
 | 3 | Rector (`make refactor-check`) | Une refactorisation reste à appliquer. |
 | 4 | Style (`make lint-check`) | Un fichier s'écarte du preset Pint. |
 | 5 | Analyse statique (`make static`) | Larastan trouve une erreur au niveau maximum. |
-| 6 | Collation de la base de test | La base n'est pas en ICU sur `fr-FR`. |
-| 7 | Migrations | Une migration échoue sur une base neuve. |
-| 8 | Pest avec couverture (`make coverage-php-ci`) | Un test échoue, ou la couverture PHP passe sous 80 %. |
-| 9 | Vitest avec couverture (`make coverage-js`) | Un test échoue, ou un seuil JS n'est pas tenu. |
-| 10 | Arbre de travail inchangé | Une étape a réécrit un fichier suivi. |
+| 6 | Couverture de documentation (`make docs-coverage`) | Le nombre de classes documentées nulle part dépasse le plafond déclaré. |
+| 7 | Collation de la base de test | La base n'est pas en ICU sur `fr-FR`. |
+| 8 | Migrations | Une migration échoue sur une base neuve. |
+| 9 | Pest avec couverture (`make coverage-php-ci`) | Un test échoue, ou la couverture PHP passe sous 80 %. |
+| 10 | Vitest avec couverture (`make coverage-js`) | Un test échoue, ou un seuil JS n'est pas tenu. |
+| 11 | Arbre de travail inchangé | Une étape a réécrit un fichier suivi. |
 
-Deux points méritent une explication.
+Trois points méritent une explication.
 
 **Le build vient en premier, et les bundles sont contrôlés séparément.** Les tests fonctionnels Inertia rendent `app.blade.php`, qui lit le manifeste : sans build préalable, ils échouent pour une mauvaise raison. Et `npm run build` enchaîne le build client et le build SSR — le sidecar SSR tournant en production, un bundle qui ne casse que de ce côté ne doit pas passer, d'où la vérification explicite des deux fichiers.
+
+**La couverture de documentation plafonne un compte, pas un ratio.** L'étape échoue dès qu'une classe de plus qu'hier n'est décrite nulle part. Un pourcentage aurait aussi bougé en supprimant une classe documentée, donc échoué sans faute. Le détail de la commande est dans [Commandes Artisan](09-commands.md).
 
 **La collation est vérifiée à chaque exécution.** L'image PostgreSQL est sur Alpine, qui n'embarque aucune locale système : la collation `fr-FR` vient du fournisseur ICU, réglé par `POSTGRES_INITDB_ARGS`. C'est le tri des noms accentués qui en dépend, et une base créée sans ce réglage passerait inaperçue jusqu'à ce qu'un test d'ordre échoue de façon incompréhensible. L'étape interroge `pg_database` par de simples `SELECT`, parce que le `psql` du runner est plus ancien que le serveur et que `\l` y lit une colonne renommée en PostgreSQL 17.
 
@@ -55,6 +58,7 @@ Le hook pre-commit applique exactement le même ordre, à une différence près 
 
 | Mesure | Seuil |
 | --- | --- |
+| Classes documentées nulle part | 46 au plus, et ce plafond ne remonte jamais |
 | PHP, lignes | 80 % |
 | JS, lignes | 80 % |
 | JS, instructions | 80 % |

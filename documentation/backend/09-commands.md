@@ -110,3 +110,26 @@ Notifie les moteurs de recherche de l'existence du sitemap.
 
 - **Bing** : ping via `https://www.bing.com/ping?sitemap=<url>`
 - **Google** : affiche les instructions de soumission manuelle (Google a supprimé le ping automatique en 2023)
+
+---
+
+## `docs:coverage`
+
+Mesure la part du code nommée dans les pages de `documentation/`, et échoue quand elle recule.
+
+**Signature** : `docs:coverage` — **Classe** : `DocsCoverageCommand`
+
+Elle rend le pourcentage de couverture, puis la liste des classes documentées nulle part, groupées par couche. Son code de sortie ne dépend pas du pourcentage mais d'un **compte** : elle échoue dès que le nombre de classes non documentées dépasse le plafond de `config/documentation.php`.
+
+Le plafond ne remonte jamais. Une classe neuve non documentée le fait monter d'un, et le pipeline passe au rouge — c'est tout l'objet de la commande. Un ratio, lui, aurait aussi bougé en supprimant une classe documentée, et aurait donc échoué sans faute.
+
+| Clé de `config/documentation.php` | Rôle |
+|---|---|
+| `source_paths` | Répertoires parcourus, chacun enraciné sur le namespace `App\`. |
+| `pages_path` | Arborescence Markdown fouillée, sous-répertoires compris. |
+| `exclude` | Classes hors périmètre, chacune avec la raison qui l'en sort. |
+| `max_undocumented` | Plafond de classes tolérées sans page. |
+
+Une classe compte comme documentée quand son nom court ouvre une portion entre backticks. La correspondance porte sur le jeton entier : `CharacterMedia` ne satisfait pas `Character`.
+
+La commande ne modifie aucun fichier, et une étape bloquante du pipeline l'exécute. Voir [Qualité et CI](10-qualite-ci.md).

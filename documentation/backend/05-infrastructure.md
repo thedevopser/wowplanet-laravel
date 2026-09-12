@@ -242,3 +242,24 @@ Contrat pour accéder aux mappings statiques zones/quêtes/hauts-faits par exten
 ### `StaticExpansionMapping`
 
 Implémentation concrète de `ExpansionMapping` basée sur des tableaux PHP statiques chargés depuis `storage/app/blizzard/`. Met en cache les structures en mémoire (lazy loading via propriétés nullable).
+
+---
+
+## Couverture de documentation (`app/Infrastructure/Documentation/`)
+
+Outillage de la commande `docs:coverage`, décrite dans [Commandes Artisan](09-commands.md).
+
+### `DocumentationCoverage`
+
+Fonction pure : une liste de noms de classes, le texte des pages et une liste d'exclusions entrent, un rapport sort. Aucun accès disque — le parcours des répertoires appartient à la commande, ce qui rend le calcul testable sans monter d'arborescence.
+
+Une classe est reconnue quand son nom court ouvre une portion entre backticks. La correspondance porte sur le jeton entier, sans quoi `CharacterMedia` satisferait `Character` et la mesure ne voudrait plus rien dire.
+
+### `CoverageReport`
+
+Objet en lecture seule portant le résultat : les noms complets des classes manquantes, le nombre de documentées, la taille du périmètre et le nombre d'exclusions.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `percentage()` | `float` | Part documentée du périmètre. Un périmètre vide vaut 100 %, l'absence de classe à décrire n'étant pas un échec. |
+| `missingByLayer()` | `array<string, list<string>>` | Classes manquantes groupées par couche, pour une sortie directement exploitable comme liste de travail. |
