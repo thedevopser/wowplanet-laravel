@@ -215,9 +215,9 @@ final readonly class QuestImporter
             $endpoints[$pair['id_b']] = 'data/wow/quest/'.$pair['id_b'];
         }
 
-        $this->info(sprintf('  Fetching %d unique quest details concurrently (batches of %d)...', count($endpoints), self::CONCURRENT_BATCH_SIZE));
+        $this->info(sprintf('  Fetching %d unique quest details concurrently...', count($endpoints)));
 
-        return $this->fetchBatchAsync($endpoints, 50);
+        return $this->fetchBatchAsync($endpoints);
     }
 
     /**

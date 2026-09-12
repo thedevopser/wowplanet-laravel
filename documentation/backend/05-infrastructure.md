@@ -67,7 +67,13 @@ Façade qui délègue chaque type d'import à l'importeur spécialisé correspon
 
 ### Trait `ImportsFromBlizzardApi`
 
-Mutualisé par les importeurs spécialisés. Fournit les mécanismes de requêtes batch asynchrones avec rate limiting et retry.
+Mutualisé par les importeurs spécialisés. Fournit les mécanismes de requêtes asynchrones avec reprise sur erreur.
+
+`fetchBatchAsync()` maintient une **concurrence constante** : dès qu'une requête se termine, la suivante part, au lieu d'attendre le traînard d'un lot. Les promesses sont produites par un générateur, donc créées au fur et à mesure et non toutes d'avance — c'est ce qui borne la mémoire sur les gros balayages.
+
+La régulation par seconde n'est pas de son ressort : elle appartient à `RateLimitingMiddleware`, seul endroit où elle est correcte. Le nombre de requêtes en vol se règle par `BLIZZARD_IMPORT_CONCURRENCY`, 20 par défaut.
+
+Une réponse 429 fait redescendre la concurrence de moitié à chaque tentative, plancher à 5, et le journal le dit. Un 304 est compté comme inchangé, jamais comme un échec.
 
 **Constantes**
 

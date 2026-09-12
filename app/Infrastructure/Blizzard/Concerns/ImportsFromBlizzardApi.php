@@ -6,10 +6,11 @@ namespace App\Infrastructure\Blizzard\Concerns;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Promise\Utils;
+use GuzzleHttp\Promise\EachPromise;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
+use Psr\Http\Message\ResponseInterface;
 
 trait ImportsFromBlizzardApi
 {
@@ -17,7 +18,7 @@ trait ImportsFromBlizzardApi
 
     private const MAX_RETRIES = 5;
 
-    private const CONCURRENT_BATCH_SIZE = 20;
+    private const DEFAULT_CONCURRENCY = 20;
 
     private const NOT_MODIFIED = 304;
 
@@ -69,14 +70,18 @@ trait ImportsFromBlizzardApi
      * Server errors (504/500/timeout) are retried once then abandoned.
      *
      * @param  array<string|int, string>  $endpoints  [key => endpoint_url]
-     * @param  positive-int  $batchSize
+     * @param  positive-int|null  $concurrency  Requêtes en vol, par défaut celle de la configuration
      * @return array<string|int, array<string, mixed>|null> [key => response_data|null]
      */
-    protected function fetchBatchAsync(array $endpoints, int $batchSize = self::CONCURRENT_BATCH_SIZE): array
+    protected function fetchBatchAsync(array $endpoints, ?int $concurrency = null): array
     {
         /** @var string $region */
         $region = config('services.blizzard.region', 'eu');
         $namespace = 'static-'.$region;
+
+        /** @var int $configuredConcurrency */
+        $configuredConcurrency = config('services.blizzard.import_concurrency', self::DEFAULT_CONCURRENCY);
+        $concurrency ??= max(1, $configuredConcurrency);
 
         $results = [];
         $stats = ['ok' => 0, 'not_found' => 0, 'not_modified' => 0, 'timeout' => 0, 'error' => 0];
@@ -88,102 +93,86 @@ trait ImportsFromBlizzardApi
         $maxAttempts = self::MAX_RATE_LIMIT_RETRIES;
 
         for ($attempt = 0; $attempt <= $maxAttempts; $attempt++) {
-            $currentBatchSize = $attempt === 0 ? $batchSize : max(5, intdiv($batchSize, 2));
+            $currentConcurrency = $attempt === 0 ? $concurrency : max(5, intdiv($concurrency, 2 ** $attempt));
 
             if ($attempt > 0) {
                 $delay = self::RATE_LIMIT_WAIT_S * (2 ** ($attempt - 1));
-                $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds, concurrency %d)...', count($pending), $attempt, $maxAttempts, $delay, $currentBatchSize));
+                $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds, concurrency stepped down to %d)...', count($pending), $attempt, $maxAttempts, $delay, $currentConcurrency));
                 Sleep::sleep($delay);
             }
 
             $failed = [];
-            $batchIndex = 0;
 
-            foreach (array_chunk($pending, $currentBatchSize, true) as $batch) {
-                // Throttle: pause between batches to respect Blizzard rate limit (~100 req/s)
-                if ($batchIndex > 0) {
-                    Sleep::usleep(500_000); // 500ms
-                }
+            /** @var array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
+            $settled = $this->settlePool($pending, $namespace, $currentConcurrency);
 
-                $batchIndex++;
-                $promises = [];
-                foreach ($batch as $key => $endpoint) {
-                    $promises[$key] = $this->blizzardApiClient->getAsync($endpoint, [
-                        'namespace' => $namespace,
-                    ]);
-                }
+            foreach ($settled as $key => $result) {
+                if ($result['state'] === 'fulfilled' && isset($result['value'])) {
+                    $response = $result['value'];
+                    $statusCode = $response->getStatusCode();
 
-                /** @var array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
-                $settled = Utils::settle($promises)->wait();
+                    // Un 304 a un corps vide : sans cette sortie il tomberait dans le
+                    // décodage JSON, lèverait, serait compté en échec puis retenté.
+                    if ($statusCode === self::NOT_MODIFIED) {
+                        $results[$key] = null;
+                        $stats['not_modified']++;
 
-                foreach ($settled as $key => $result) {
-                    if ($result['state'] === 'fulfilled' && isset($result['value'])) {
-                        $response = $result['value'];
-                        $statusCode = $response->getStatusCode();
+                        continue;
+                    }
 
-                        // Un 304 a un corps vide : sans cette sortie il tomberait dans le
-                        // décodage JSON, lèverait, serait compté en échec puis retenté.
-                        if ($statusCode === self::NOT_MODIFIED) {
+                    if ($statusCode >= 400) {
+                        if ($this->shouldRetryInBatch($key, $statusCode, $serverErrorCounts)) {
+                            $failed[$key] = $pending[$key];
+                        } else {
                             $results[$key] = null;
-                            $stats['not_modified']++;
-
-                            continue;
+                            $stats['error']++;
                         }
 
-                        if ($statusCode >= 400) {
-                            if ($this->shouldRetryInBatch($key, $statusCode, $serverErrorCounts)) {
-                                $failed[$key] = $pending[$key];
-                            } else {
-                                $results[$key] = null;
-                                $stats['error']++;
-                            }
-
-                            Log::debug(sprintf('Async API error [%s]: HTTP %d', $pending[$key] ?? '?', $statusCode));
-
-                            continue;
-                        }
-
-                        try {
-                            /** @var array<string, mixed> $decoded */
-                            $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
-                        } catch (\JsonException $e) {
-                            if ($this->shouldRetryInBatch($key, 0, $serverErrorCounts)) {
-                                $failed[$key] = $pending[$key];
-                            } else {
-                                $results[$key] = null;
-                                $stats['error']++;
-                            }
-
-                            Log::debug(sprintf('Async API error [%s]: invalid JSON (%s)', $pending[$key] ?? '?', $e->getMessage()));
-
-                            continue;
-                        }
-
-                        $results[$key] = $decoded;
-                        $stats['ok']++;
+                        Log::debug(sprintf('Async API error [%s]: HTTP %d', $pending[$key] ?? '?', $statusCode));
 
                         continue;
                     }
 
-                    $reason = $result['reason'] ?? null;
+                    try {
+                        /** @var array<string, mixed> $decoded */
+                        $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+                    } catch (\JsonException $e) {
+                        if ($this->shouldRetryInBatch($key, 0, $serverErrorCounts)) {
+                            $failed[$key] = $pending[$key];
+                        } else {
+                            $results[$key] = null;
+                            $stats['error']++;
+                        }
 
-                    if ($this->isNotFoundError($reason)) {
-                        $results[$key] = null;
-                        $stats['not_found']++;
+                        Log::debug(sprintf('Async API error [%s]: invalid JSON (%s)', $pending[$key] ?? '?', $e->getMessage()));
 
                         continue;
                     }
 
-                    $errorCode = $this->extractStatusCode($reason);
-                    if ($this->shouldRetryInBatch($key, $errorCode, $serverErrorCounts)) {
-                        $failed[$key] = $pending[$key];
-                    } else {
-                        $results[$key] = null;
-                        $stats['error']++;
-                    }
+                    $results[$key] = $decoded;
+                    $stats['ok']++;
 
-                    Log::debug(sprintf('Async API error [%s]: %s', $pending[$key] ?? '?', $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
+                    continue;
                 }
+
+                $reason = $result['reason'] ?? null;
+
+                if ($this->isNotFoundError($reason)) {
+                    $results[$key] = null;
+                    $stats['not_found']++;
+
+                    continue;
+                }
+
+                $errorCode = $this->extractStatusCode($reason);
+                if ($this->shouldRetryInBatch($key, $errorCode, $serverErrorCounts)) {
+                    $failed[$key] = $pending[$key];
+                } else {
+                    $results[$key] = null;
+                    $stats['error']++;
+                }
+
+                Log::debug(sprintf('Async API error [%s]: %s', $pending[$key] ?? '?', $reason instanceof \Throwable ? $reason->getMessage() : 'unknown'));
             }
 
             $pending = $failed;
@@ -209,6 +198,42 @@ trait ImportsFromBlizzardApi
         ));
 
         return $results;
+    }
+
+    /**
+     * Un pool à concurrence constante : dès qu'une requête se termine, la suivante part,
+     * au lieu d'attendre le traînard de chaque lot. La régulation par seconde reste au
+     * middleware, seul endroit où elle est correcte.
+     *
+     * @param  array<string|int, string>  $endpoints
+     * @param  positive-int  $concurrency
+     * @return array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}>
+     */
+    private function settlePool(array $endpoints, string $namespace, int $concurrency): array
+    {
+        $settled = [];
+
+        $promises = function () use ($endpoints, $namespace): \Generator {
+            foreach ($endpoints as $key => $endpoint) {
+                yield $key => $this->blizzardApiClient->getAsync($endpoint, [
+                    'namespace' => $namespace,
+                ]);
+            }
+        };
+
+        $eachPromise = new EachPromise($promises(), [
+            'concurrency' => $concurrency,
+            'fulfilled' => function (ResponseInterface $response, string|int $key) use (&$settled): void {
+                $settled[$key] = ['state' => 'fulfilled', 'value' => $response];
+            },
+            'rejected' => function (mixed $reason, string|int $key) use (&$settled): void {
+                $settled[$key] = ['state' => 'rejected', 'reason' => $reason instanceof \Throwable ? $reason : new \RuntimeException('unknown rejection')];
+            },
+        ]);
+
+        $eachPromise->promise()->wait();
+
+        return $settled;
     }
 
     /**

@@ -8,6 +8,7 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
@@ -189,4 +190,75 @@ test('fetchBatchAsync treats a 304 as unchanged instead of decoding an empty bod
     $results = makeApiConsumer($client)->fetchBatch([7 => 'data/wow/mount/index']);
 
     expect($results)->toBe([7 => null]);
+});
+
+test('a successful batch never pauses between requests', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], '{"ok":true}')));
+
+    $endpoints = [];
+    for ($id = 1; $id <= 60; $id++) {
+        $endpoints[$id] = 'data/wow/mount/'.$id;
+    }
+
+    $results = makeApiConsumer($client)->fetchBatch($endpoints);
+
+    expect($results)->toHaveCount(60);
+    Sleep::assertNeverSlept();
+});
+
+test('the concurrency comes from configuration rather than a buried constant', function (): void {
+    config(['services.blizzard.import_concurrency' => 3]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    $inFlight = 0;
+    $peak = 0;
+    $client->shouldReceive('getAsync')
+        ->andReturnUsing(function () use (&$inFlight, &$peak): \GuzzleHttp\Promise\PromiseInterface {
+            $inFlight++;
+            $peak = max($peak, $inFlight);
+
+            return Create::promiseFor(new Response(200, [], '{}'))
+                ->then(function (Response $response) use (&$inFlight): Response {
+                    $inFlight--;
+
+                    return $response;
+                });
+        });
+
+    $endpoints = [];
+    for ($id = 1; $id <= 20; $id++) {
+        $endpoints[$id] = 'data/wow/mount/'.$id;
+    }
+
+    makeApiConsumer($client)->fetchBatch($endpoints);
+
+    expect($peak)->toBeLessThanOrEqual(3);
+});
+
+test('it steps the concurrency down after rate limiting and says so', function (): void {
+    config(['services.blizzard.import_concurrency' => 20]);
+    Log::spy();
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->andReturnUsing(function (): \GuzzleHttp\Promise\PromiseInterface {
+            static $calls = 0;
+            $calls++;
+
+            return Create::promiseFor(new Response($calls === 1 ? 429 : 200, [], '{"ok":true}'));
+        });
+
+    $results = makeApiConsumer($client)->fetchBatch([1 => 'data/wow/mount/1']);
+
+    expect($results[1])->toBe(['ok' => true]);
+
+    Log::shouldHaveReceived('info')
+        ->withArgs(fn (string $message): bool => str_contains($message, 'concurrency stepped down to 10'))
+        ->once();
 });

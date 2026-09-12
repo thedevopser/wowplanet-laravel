@@ -47,6 +47,10 @@ return [
         'import_hourly_ceiling' => (int) env('BLIZZARD_IMPORT_HOURLY_CEILING', 30000),
         'import_chunk_timebox' => (int) env('BLIZZARD_IMPORT_CHUNK_TIMEBOX', 600),
         'appearance_slice' => (int) env('BLIZZARD_APPEARANCE_SLICE', 2000),
+
+        // Requêtes en vol simultanées côté import. Le plafond réel reste celui de
+        // RateLimitingMiddleware, 80 par seconde, marge délibérée sous les 100 de Blizzard.
+        'import_concurrency' => (int) env('BLIZZARD_IMPORT_CONCURRENCY', 20),
     ],
 
     'discord' => [
