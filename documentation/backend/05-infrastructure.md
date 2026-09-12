@@ -24,6 +24,28 @@ Client HTTP vers l'API Blizzard (OAuth2 client credentials). Gère automatiqueme
 
 ---
 
+### `BlizzardNamespace`
+
+Lecture de l'en-tête `battlenet-namespace`, renvoyé par Blizzard sur chaque réponse. Les namespaces versionnés ont la forme `static-12.1.0_68914-eu`, dont le segment central identifie le build WoW servi. Un namespace sans build — `profile-eu` — n'en rend aucun plutôt qu'une valeur approchante.
+
+C'est le levier le moins coûteux du pipeline d'import : les données `static` ne changent qu'au patch, donc comparer ce build à celui du dernier import rend la plupart des réimports inutiles.
+
+---
+
+### `ImportBuildGate`
+
+Décide s'il y a lieu de réimporter une entité, en comparant le build servi par l'API à celui du dernier import réussi.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `isUpToDate(string $entity, ?string $currentBuild)` | `bool` | Faux si l'entité n'a jamais été importée, si son build diffère, ou si le build courant est inconnu — dans le doute on importe. |
+| `remember(string $entity, string $build, ?string $lastModified)` | `void` | Enregistre le build d'un import réussi. |
+| `lastModifiedFor(string $entity)` | `string\|null` | Date à renvoyer en `If-Modified-Since` à la prochaine revalidation. |
+
+L'état vit dans `wow_import_states`, **en base et non en cache** : c'est un état d'import, il doit survivre à un `cache:clear`. Il est tenu **par entité et non globalement**, parce qu'un patch peut ne toucher que les recettes et que réimporter les 22 000 apparences pour autant serait absurde.
+
+---
+
 ### `BlizzardBatchImporter`
 
 Façade qui délègue chaque type d'import à l'importeur spécialisé correspondant.

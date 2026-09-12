@@ -11,9 +11,15 @@ use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\ResponseInterface;
 
 class BlizzardApiClient
 {
+    private const NOT_MODIFIED = 304;
+
+    /** Le plus petit index statique du catalogue : treize entrées pour lire un en-tête. */
+    private const BUILD_PROBE_ENDPOINT = 'data/wow/playable-class/index';
+
     private readonly string $clientId;
 
     private readonly string $clientSecret;
@@ -21,6 +27,10 @@ class BlizzardApiClient
     private readonly string $region;
 
     private readonly string $namespace;
+
+    private ?string $lastSeenBuild = null;
+
+    private ?string $lastModifiedSeen = null;
 
     public function __construct(private readonly Client $client)
     {
@@ -106,10 +116,90 @@ class BlizzardApiClient
             'query' => array_merge(['locale' => 'fr_FR'], $query),
         ]);
 
+        $this->recordBuild($response);
+
         /** @var array<string, mixed> $decoded */
         $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
 
         return $decoded;
+    }
+
+    public function lastSeenBuild(): ?string
+    {
+        return $this->lastSeenBuild;
+    }
+
+    public function lastModifiedSeen(): ?string
+    {
+        return $this->lastModifiedSeen;
+    }
+
+    /**
+     * Revalidation d'un index : rend `null` quand Blizzard répond 304, ce qui veut dire
+     * inchangé et non échoué. Le corps d'un 304 étant vide, il ne doit jamais atteindre
+     * le décodage JSON.
+     *
+     * @param  array<string, mixed>  $query
+     *
+     * @throws GuzzleException
+     */
+    public function getIfModifiedSince(string $endpoint, ?string $lastModified, array $query = []): ?ResponsePayload
+    {
+        $accessToken = $this->getAccessToken();
+
+        [$endpoint, $query] = $this->mergeEndpointQuery($endpoint, $query);
+        $namespace = is_string($query['namespace'] ?? null) ? $query['namespace'] : $this->namespace;
+
+        $headers = [
+            'Authorization' => 'Bearer '.$accessToken,
+            'Battlenet-Namespace' => $namespace,
+        ];
+
+        if ($lastModified !== null) {
+            $headers['If-Modified-Since'] = $lastModified;
+        }
+
+        $response = $this->client->get($endpoint, [
+            'headers' => $headers,
+            'query' => array_merge(['locale' => 'fr_FR'], $query),
+        ]);
+
+        $this->recordBuild($response);
+
+        if ($response->getStatusCode() === self::NOT_MODIFIED) {
+            return null;
+        }
+
+        $this->lastModifiedSeen = $response->getHeaderLine('Last-Modified') ?: null;
+
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($response->getBody()->getContents(), true, 512, JSON_THROW_ON_ERROR);
+
+        return ResponsePayload::forEndpoint($endpoint, $decoded);
+    }
+
+    /**
+     * Le build sert à décider s'il y a lieu d'importer : la sonde ne part donc que
+     * si aucune réponse n'a encore livré le sien.
+     *
+     * @throws GuzzleException
+     */
+    public function currentBuild(): ?string
+    {
+        if ($this->lastSeenBuild === null) {
+            $this->get(self::BUILD_PROBE_ENDPOINT, ['namespace' => 'static-'.$this->region]);
+        }
+
+        return $this->lastSeenBuild;
+    }
+
+    private function recordBuild(ResponseInterface $response): void
+    {
+        $build = BlizzardNamespace::build($response->getHeaderLine('battlenet-namespace'));
+
+        if ($build !== null) {
+            $this->lastSeenBuild = $build;
+        }
     }
 
     /**

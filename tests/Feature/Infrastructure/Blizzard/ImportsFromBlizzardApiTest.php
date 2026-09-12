@@ -178,3 +178,15 @@ test('fetchBatchAsync abandons rejected connection errors after limited retries'
 
     expect($results[8])->toBeNull();
 });
+
+test('fetchBatchAsync treats a 304 as unchanged instead of decoding an empty body', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->once()
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(304, [], '')));
+
+    $results = makeApiConsumer($client)->fetchBatch([7 => 'data/wow/mount/index']);
+
+    expect($results)->toBe([7 => null]);
+});

@@ -19,6 +19,8 @@ trait ImportsFromBlizzardApi
 
     private const CONCURRENT_BATCH_SIZE = 20;
 
+    private const NOT_MODIFIED = 304;
+
     /** Max retries for 429 rate-limit errors (with exponential backoff). */
     private const MAX_RATE_LIMIT_RETRIES = 3;
 
@@ -77,7 +79,7 @@ trait ImportsFromBlizzardApi
         $namespace = 'static-'.$region;
 
         $results = [];
-        $stats = ['ok' => 0, 'not_found' => 0, 'timeout' => 0, 'error' => 0];
+        $stats = ['ok' => 0, 'not_found' => 0, 'not_modified' => 0, 'timeout' => 0, 'error' => 0];
         $pending = $endpoints;
 
         /** @var array<string|int, int> $serverErrorCounts Track per-endpoint server error retries */
@@ -118,6 +120,15 @@ trait ImportsFromBlizzardApi
                     if ($result['state'] === 'fulfilled' && isset($result['value'])) {
                         $response = $result['value'];
                         $statusCode = $response->getStatusCode();
+
+                        // Un 304 a un corps vide : sans cette sortie il tomberait dans le
+                        // décodage JSON, lèverait, serait compté en échec puis retenté.
+                        if ($statusCode === self::NOT_MODIFIED) {
+                            $results[$key] = null;
+                            $stats['not_modified']++;
+
+                            continue;
+                        }
 
                         if ($statusCode >= 400) {
                             if ($this->shouldRetryInBatch($key, $statusCode, $serverErrorCounts)) {
@@ -189,9 +200,10 @@ trait ImportsFromBlizzardApi
 
         $total = count($endpoints);
         $this->info(sprintf(
-            '  API batch: %d/%d OK, %d not found, %d errors',
+            '  API batch: %d/%d OK, %d unchanged, %d not found, %d errors',
             $stats['ok'],
             $total,
+            $stats['not_modified'],
             $stats['not_found'],
             $stats['error'],
         ));

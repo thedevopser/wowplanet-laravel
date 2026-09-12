@@ -171,3 +171,18 @@ Recette de métier. ID Blizzard comme clé primaire.
 | `is_active` | `bool` | Toujours disponible |
 
 **Relation** : `profession()` → `BelongsTo<WowProfession>`
+
+---
+
+## `WowImportState`
+
+Build WoW du dernier import réussi, une ligne par entité importée. Table `wow_import_states`, clé primaire `entity`, sans séquence ni horodatage Eloquent.
+
+| Colonne | Rôle |
+|---|---|
+| `entity` | Entité importée : `quests`, `mounts`, `appearances`… |
+| `build` | Build WoW servi par l'API au moment de l'import. |
+| `last_modified` | En-tête `Last-Modified` du dernier index revalidé, renvoyé tel quel en `If-Modified-Since`. |
+| `imported_at` | Date de l'import. |
+
+C'est la seule table applicative sans `bnet_user_id` : elle ne porte pas de donnée utilisateur mais un état de pipeline. Lue et écrite par `ImportBuildGate`.

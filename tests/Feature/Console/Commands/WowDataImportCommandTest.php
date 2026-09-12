@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
+use App\Infrastructure\Blizzard\ImportBuildGate;
 use App\Infrastructure\Parsers\LuaAddonParser;
 use App\Jobs\ImportAppearancesJob;
+use App\Models\WowImportState;
 use Illuminate\Support\Facades\Bus;
 
 beforeEach(function (): void {
@@ -12,6 +15,9 @@ beforeEach(function (): void {
 
     $this->importerMock = $this->mock(BlizzardBatchImporter::class);
     $this->parserMock = $this->mock(LuaAddonParser::class);
+    $this->apiClientMock = $this->mock(BlizzardApiClient::class);
+
+    $this->apiClientMock->shouldReceive('currentBuild')->andReturn('12.1.0_68914')->byDefault();
 
     // Default: parser returns empty arrays
     $this->parserMock->shouldReceive('buildAreaExpansionMap')->andReturn([])->byDefault();
@@ -88,4 +94,61 @@ test('command displays stats table after import', function (): void {
     $this->artisan('app:wow-data-import')
         ->assertSuccessful()
         ->expectsOutputToContain('Import Complete!');
+});
+
+// ─── détection de build ─────────────────────────────────────
+
+test('it imports nothing when every requested entity already sits on the current build', function (): void {
+    $gate = new ImportBuildGate;
+    foreach (['achievements', 'quests', 'mounts', 'pets', 'professions', 'decor', 'appearances'] as $entity) {
+        $gate->remember($entity, '12.1.0_68914');
+    }
+
+    $this->importerMock->shouldNotReceive('importAchievements');
+    $this->importerMock->shouldNotReceive('importQuests');
+    $this->importerMock->shouldNotReceive('importMounts');
+
+    $this->artisan('app:wow-data-import')
+        ->expectsOutputToContain('12.1.0_68914')
+        ->assertSuccessful();
+
+    Bus::assertNotDispatched(ImportAppearancesJob::class);
+});
+
+test('it reimports an unchanged build when --force is passed', function (): void {
+    $gate = new ImportBuildGate;
+    $gate->remember('quests', '12.1.0_68914');
+
+    $this->importerMock->shouldReceive('importQuests')->once();
+    $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
+
+    $this->artisan('app:wow-data-import', ['--type' => 'quests', '--force' => true])->assertSuccessful();
+});
+
+test('it imports the entities that lag behind and leaves the others alone', function (): void {
+    (new ImportBuildGate)->remember('quests', '12.1.0_68914');
+
+    $this->importerMock->shouldNotReceive('importQuests');
+    $this->importerMock->shouldReceive('importMounts')->once();
+
+    $this->artisan('app:wow-data-import', ['--type' => 'mounts'])->assertSuccessful();
+    $this->artisan('app:wow-data-import', ['--type' => 'quests'])->assertSuccessful();
+});
+
+test('it records the build against each entity it imports', function (): void {
+    $this->importerMock->shouldReceive('importMounts')->once();
+
+    $this->artisan('app:wow-data-import', ['--type' => 'mounts'])->assertSuccessful();
+
+    expect(WowImportState::query()->where('entity', 'mounts')->value('build'))->toBe('12.1.0_68914');
+});
+
+test('it imports as usual when the build cannot be determined', function (): void {
+    $this->apiClientMock->shouldReceive('currentBuild')->andReturn(null);
+
+    $this->importerMock->shouldReceive('importMounts')->once();
+
+    $this->artisan('app:wow-data-import', ['--type' => 'mounts'])->assertSuccessful();
+
+    expect(WowImportState::query()->where('entity', 'mounts')->exists())->toBeFalse();
 });
