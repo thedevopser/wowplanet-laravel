@@ -25,6 +25,13 @@ class ReferenceMaps
     private const ZONE_FACTION_GROUPS = [2 => 'Alliance', 4 => 'Horde'];
 
     /**
+     * Gabarit d'icône du CDN Blizzard, celui-là même que l'API sert pour les mascottes
+     * et les hauts faits. Les montures sont les seules à devoir le composer : ni leur
+     * détail ni aucun espace de media n'expose leur icône.
+     */
+    private const ICON_URL = 'https://render.worldofwarcraft.com/%s/icons/56/%d.jpg';
+
+    /**
      * @return array<int, int> [quest_id => expansion_id]
      */
     public function questExpansions(): array
@@ -84,6 +91,45 @@ class ReferenceMaps
             if ($faction !== null) {
                 $map[ReferenceValue::int($row->id)] = $faction;
             }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<int, int> [mount_id => source_spell_id]
+     */
+    public function mountSpells(): array
+    {
+        $rows = DB::table('wow_ref_mount')->whereNotNull('source_spell_id')->get(['id', 'source_spell_id']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[ReferenceValue::int($row->id)] = ReferenceValue::int($row->source_spell_id);
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<int, string> [mount_id => icon_url]
+     */
+    public function mountIcons(): array
+    {
+        /** @var string $region */
+        $region = config('services.blizzard.region', 'eu');
+
+        // Un sort porte parfois plusieurs lignes SpellMisc, une par difficulté. La plus
+        // petite tranche l'égalité pour que deux imports rendent la même icône.
+        $rows = DB::table('wow_ref_mount')
+            ->join('wow_ref_spell_misc', 'wow_ref_mount.source_spell_id', '=', 'wow_ref_spell_misc.spell_id')
+            ->whereNotNull('wow_ref_spell_misc.spell_icon_file_data_id')
+            ->orderByDesc('wow_ref_spell_misc.id')
+            ->get(['wow_ref_mount.id as mount_id', 'wow_ref_spell_misc.spell_icon_file_data_id as file_data_id']);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[ReferenceValue::int($row->mount_id)] = sprintf(self::ICON_URL, $region, ReferenceValue::int($row->file_data_id));
         }
 
         return $map;

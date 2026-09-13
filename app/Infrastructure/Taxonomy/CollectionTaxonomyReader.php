@@ -21,19 +21,20 @@ final readonly class CollectionTaxonomyReader
     {
         $taxonomy = [];
 
-        /** @var list<array{entry_id: int, category: string|null, source: string|null}> $rows */
+        /** @var list<array{entry_id: int, category: string|null, source: string|null, obtainable: bool}> $rows */
         $rows = WowCollectionTaxonomy::query()
             ->where('entity', $collectionEntity)
-            ->get(['entry_id', 'category', 'source'])
+            ->get(['entry_id', 'category', 'source', 'obtainable'])
             ->map(static fn (WowCollectionTaxonomy $wowCollectionTaxonomy): array => [
                 'entry_id' => $wowCollectionTaxonomy->entry_id,
                 'category' => $wowCollectionTaxonomy->category,
                 'source' => $wowCollectionTaxonomy->source,
+                'obtainable' => $wowCollectionTaxonomy->obtainable,
             ])
             ->all();
 
         foreach ($rows as $row) {
-            $taxonomy[$row['entry_id']] = new TaxonomyEntry($row['category'], $row['source']);
+            $taxonomy[$row['entry_id']] = new TaxonomyEntry($row['category'], $row['source'], $row['obtainable']);
         }
 
         return $taxonomy;

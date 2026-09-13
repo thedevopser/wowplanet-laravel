@@ -6,13 +6,13 @@ use App\Infrastructure\Taxonomy\CollectionEntity;
 use App\Models\WowCollectionTaxonomy;
 use Illuminate\Support\Facades\Schema;
 
-test('it carries the discriminator, the Blizzard identifier and the two curated levels', function (): void {
-    expect(Schema::hasColumns('wow_collection_taxonomy', ['entity', 'entry_id', 'category', 'source']))->toBeTrue();
+test('it carries the discriminator, the Blizzard identifier and the curated ranking', function (): void {
+    expect(Schema::hasColumns('wow_collection_taxonomy', ['entity', 'entry_id', 'category', 'source', 'obtainable']))->toBeTrue();
 });
 
-test('it holds no column beyond those four', function (): void {
+test('it holds no column beyond those five', function (): void {
     expect(Schema::getColumnListing('wow_collection_taxonomy'))
-        ->toEqualCanonicalizing(['entity', 'entry_id', 'category', 'source']);
+        ->toEqualCanonicalizing(['entity', 'entry_id', 'category', 'source', 'obtainable']);
 });
 
 test('it lets two collections curate the same Blizzard identifier', function (): void {

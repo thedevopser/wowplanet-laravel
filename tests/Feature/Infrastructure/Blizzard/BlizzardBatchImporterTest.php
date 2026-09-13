@@ -15,6 +15,7 @@ use App\Models\WowQuest;
 use App\Models\WowRecipe;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
@@ -202,146 +203,93 @@ test('importAchievements leaves the catalog untouched when the hierarchy is unre
 
 // ─── Mount Import ───────────────────────────────────────────
 
-test('importMounts creates mounts from SimpleArmory data', function (): void {
-    bbiWriteCollectionJson('mounts.json', [
-        [
-            'name' => 'Classic',
-            'subcats' => [
-                [
-                    'name' => 'Reputation',
-                    'items' => [
-                        ['ID' => 1, 'icon' => 'ability_mount_drake_blue', 'spellid' => 12345, 'creatureId' => 0],
-                        ['ID' => 2, 'icon' => 'ability_mount_horse', 'spellid' => 0, 'creatureId' => 0],
-                    ],
-                ],
-            ],
-        ],
-    ]);
+test('importMounts takes the identity from the API and the ranking from the taxonomy', function (): void {
     bbiCurate(CollectionEntity::Mount, [1 => ['Classic', 'Reputation'], 2 => ['Classic', 'Reputation']]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'mount/index', 'mounts', [
-        1 => 'Loup noir',
-        2 => 'Destrier squelette',
+    DB::table('wow_ref_mount')->insert([['id' => 1, 'source_spell_id' => 12345]]);
+    DB::table('wow_ref_spell_misc')->insert([['id' => 1, 'spell_id' => 12345, 'spell_icon_file_data_id' => 132261]]);
+
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockNameIndex($mock, 'mount/index', 'mounts', [1 => 'Loup noir', 2 => 'Destrier squelette']);
+    bbiMockSearchSweep($mock, 'data/wow/search/mount', [
+        ['id' => 1, 'name' => ['fr_FR' => 'Loup noir'], 'source' => ['type' => 'VENDOR']],
     ]);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importMounts();
+    resolve(BlizzardBatchImporter::class)->importMounts();
 
-    expect(WowMount::query()->count())->toBe(2);
-    expect(WowMount::query()->find(1)->name_fr)->toBe('Loup noir');
-    expect(WowMount::query()->find(1)->category)->toBe('Classic');
-    expect(WowMount::query()->find(1)->source)->toBe('Reputation');
-    expect(WowMount::query()->find(1)->source_spell_id)->toBe(12345);
-    expect(WowMount::query()->find(1)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/ability_mount_drake_blue.jpg');
-    expect(WowMount::query()->find(2)->name_fr)->toBe('Destrier squelette');
+    expect(WowMount::query()->count())->toBe(2)
+        ->and(WowMount::query()->findOrFail(1)->name_fr)->toBe('Loup noir')
+        ->and(WowMount::query()->findOrFail(1)->category)->toBe('Classic')
+        ->and(WowMount::query()->findOrFail(1)->source)->toBe('Reputation')
+        ->and(WowMount::query()->findOrFail(1)->source_spell_id)->toBe(12345)
+        ->and(WowMount::query()->findOrFail(1)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/132261.jpg')
+        ->and(WowMount::query()->findOrFail(2)->name_fr)->toBe('Destrier squelette');
 });
 
 // ─── Pet Import ─────────────────────────────────────────────
 
-test('importPets creates pets from SimpleArmory data with API French names', function (): void {
-    bbiWriteCollectionJson('pets.json', [
-        [
-            'name' => 'Classic',
-            'subcats' => [
-                [
-                    'name' => 'Drop',
-                    'items' => [
-                        ['ID' => 1, 'icon' => 'spell_nature_pet', 'spellid' => 50001, 'creatureId' => 9999],
-                        ['ID' => 2, 'icon' => 'spell_shadow_pet', 'spellid' => 50002, 'creatureId' => 8888],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-
+test('importPets takes the identity from the API detail and the ranking from the taxonomy', function (): void {
     bbiCurate(CollectionEntity::Pet, [1 => ['Classic', 'Drop'], 2 => ['Classic', 'Drop']]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'pet/index', 'pets', [
-        1 => 'Dragonnet',
-        2 => 'Petit chat',
-    ]);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importPets();
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockNameIndex($mock, 'pet/index', 'pets', [1 => 'Dragonnet', 2 => 'Petit chat']);
+    bbiMockPetDetail($mock, 1, ['id' => 1, 'name' => 'Dragonnet', 'creature' => ['id' => 9999], 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/136118.jpg']);
+    bbiMockPetDetail($mock, 2, ['id' => 2, 'name' => 'Petit chat', 'creature' => ['id' => 8888]]);
 
-    expect(WowPet::query()->count())->toBe(2);
-    expect(WowPet::query()->find(1)->name_fr)->toBe('Dragonnet');
-    expect(WowPet::query()->find(1)->creature_id)->toBe(9999);
-    expect(WowPet::query()->find(1)->category)->toBe('Classic');
-    expect(WowPet::query()->find(1)->source)->toBe('Drop');
-    expect(WowPet::query()->find(1)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/spell_nature_pet.jpg');
-    expect(WowPet::query()->find(2)->name_fr)->toBe('Petit chat');
+    resolve(BlizzardBatchImporter::class)->importPets();
+
+    expect(WowPet::query()->count())->toBe(2)
+        ->and(WowPet::query()->findOrFail(1)->name_fr)->toBe('Dragonnet')
+        ->and(WowPet::query()->findOrFail(1)->creature_id)->toBe(9999)
+        ->and(WowPet::query()->findOrFail(1)->category)->toBe('Classic')
+        ->and(WowPet::query()->findOrFail(1)->source)->toBe('Drop')
+        ->and(WowPet::query()->findOrFail(1)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/136118.jpg')
+        ->and(WowPet::query()->findOrFail(2)->name_fr)->toBe('Petit chat');
 });
 
 // ─── Decor Import ───────────────────────────────────────────
 
-test('importDecor creates decor items from SimpleArmory data', function (): void {
-    bbiWriteCollectionJson('decors.json', [
-        [
-            'name' => 'The War Within',
-            'subcats' => [
-                [
-                    'name' => 'Quest',
-                    'items' => [
-                        ['ID' => 1, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245000'],
-                        ['ID' => 2, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245001'],
-                    ],
-                ],
-            ],
-        ],
-    ]);
+test('importDecor binds a decor to its item and to the icon of that item', function (): void {
     bbiCurate(CollectionEntity::Decor, [1 => ['The War Within', 'Quest'], 2 => ['The War Within', 'Quest']]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
-        1 => 'Foyer orné',
-        2 => 'Tapis elfique',
+
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockNameIndex($mock, 'decor/index', 'decor_items', [1 => 'Foyer orné', 2 => 'Tapis elfique']);
+    bbiMockSearchSweep($mock, 'data/wow/search/decor', [
+        ['id' => 1, 'name' => ['fr_FR' => 'Foyer orné'], 'item' => ['id' => 245000]],
+        ['id' => 2, 'name' => ['fr_FR' => 'Tapis elfique'], 'item' => ['id' => 245001]],
     ]);
+    bbiMockItemMedia($mock, [245000 => 'https://render.worldofwarcraft.com/eu/icons/56/135234.jpg']);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importDecor();
+    resolve(BlizzardBatchImporter::class)->importDecor();
 
-    expect(WowDecor::query()->count())->toBe(2);
-    expect(WowDecor::query()->find(1)->name_fr)->toBe('Foyer orné');
-    expect(WowDecor::query()->find(1)->category)->toBe('The War Within');
-    expect(WowDecor::query()->find(1)->source)->toBe('Quest');
-    expect(WowDecor::query()->find(1)->item_id)->toBe(245000);
+    expect(WowDecor::query()->count())->toBe(2)
+        ->and(WowDecor::query()->findOrFail(1)->name_fr)->toBe('Foyer orné')
+        ->and(WowDecor::query()->findOrFail(1)->category)->toBe('The War Within')
+        ->and(WowDecor::query()->findOrFail(1)->source)->toBe('Quest')
+        ->and(WowDecor::query()->findOrFail(1)->item_id)->toBe(245000)
+        ->and(WowDecor::query()->findOrFail(1)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/135234.jpg');
 });
 
-test('importDecor marks notObtainable items as inactive', function (): void {
-    bbiWriteCollectionJson('decors.json', [
-        [
-            'name' => 'Undiscovered',
-            'subcats' => [
-                [
-                    'name' => 'Undiscovered Sources',
-                    'items' => [
-                        ['ID' => 10, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '300000', 'notObtainable' => true],
-                    ],
-                ],
-            ],
-        ],
-        [
-            'name' => 'The War Within',
-            'subcats' => [
-                [
-                    'name' => 'Quest',
-                    'items' => [
-                        ['ID' => 1, 'spellid' => 0, 'creatureId' => 0, 'itemId' => '245000'],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-    bbiCurate(CollectionEntity::Decor, [1 => ['The War Within', 'Quest'], 10 => ['Undiscovered', 'Undiscovered Sources']]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
-        1 => 'Foyer orné',
-        10 => 'Décor caché',
+test('importDecor deactivates a decor the curation marks as no longer obtainable', function (): void {
+    bbiCurate(CollectionEntity::Decor, [1 => ['The War Within', 'Quest']]);
+    WowCollectionTaxonomy::factory()->create([
+        'entity' => CollectionEntity::Decor,
+        'entry_id' => 10,
+        'category' => 'Undiscovered',
+        'source' => 'Undiscovered Sources',
+        'obtainable' => false,
     ]);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importDecor();
+    $mock = $this->mock(BlizzardApiClient::class);
+    bbiMockNameIndex($mock, 'decor/index', 'decor_items', [1 => 'Foyer orné', 10 => 'Décor caché']);
+    bbiMockSearchSweep($mock, 'data/wow/search/decor', []);
+    bbiMockItemMedia($mock, []);
 
-    expect(WowDecor::query()->count())->toBe(2);
-    expect(WowDecor::query()->find(1)->is_active)->toBeTrue();
-    expect(WowDecor::query()->find(10)->is_active)->toBeFalse();
-    expect(WowDecor::query()->find(10)->category)->toBe('Undiscovered');
+    resolve(BlizzardBatchImporter::class)->importDecor();
+
+    expect(WowDecor::query()->count())->toBe(2)
+        ->and(WowDecor::query()->findOrFail(1)->is_active)->toBeTrue()
+        ->and(WowDecor::query()->findOrFail(10)->is_active)->toBeFalse()
+        ->and(WowDecor::query()->findOrFail(10)->category)->toBe('Undiscovered');
 });
 
 // ─── Profession Import ──────────────────────────────────────
@@ -474,17 +422,6 @@ function bbiWriteAchievementsJson(array $supercats): void
 }
 
 /**
- * Write a SimpleArmory collection JSON file (mounts.json, pets.json, decors.json).
- *
- * @param  list<array<string, mixed>>  $categories
- */
-function bbiWriteCollectionJson(string $filename, array $categories): void
-{
-    $json = json_encode($categories, JSON_THROW_ON_ERROR);
-    file_put_contents(storage_path('app/blizzard/'.$filename), $json);
-}
-
-/**
  * Range des entrées dans la taxonomie curée, d'où les importers tirent leur rangement.
  *
  * @param  array<int, array{0: string|null, 1: string|null}>  $rankings  identifiant => [catégorie, source]
@@ -499,6 +436,51 @@ function bbiCurate(CollectionEntity $collectionEntity, array $rankings): void
             'source' => $ranking[1],
         ]);
     }
+}
+
+/**
+ * Mocke un balayage de recherche par fenêtres d'identifiants.
+ *
+ * @param  list<array<string, mixed>>  $documents
+ */
+function bbiMockSearchSweep(\Mockery\MockInterface $mock, string $endpoint, array $documents): void
+{
+    $mock->shouldReceive('getAsync')
+        ->withArgs(fn (string $requested): bool => str_starts_with($requested, $endpoint))
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'results' => array_map(static fn (array $document): array => ['data' => $document], $documents),
+        ]))));
+}
+
+/**
+ * Mocke le balayage des media d'items, d'où viennent les icônes des décorations.
+ *
+ * @param  array<int, string>  $icons  [item_id => icon_url]
+ */
+function bbiMockItemMedia(\Mockery\MockInterface $mock, array $icons): void
+{
+    $mock->shouldReceive('getAsync')
+        ->withArgs(fn (string $requested): bool => str_starts_with($requested, 'data/wow/search/media')
+            && str_contains($requested, 'tags=item'))
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+            'results' => array_map(
+                static fn (string $url, int $id): array => ['data' => ['id' => $id, 'assets' => [['key' => 'icon', 'value' => $url]]]],
+                $icons,
+                array_keys($icons),
+            ),
+        ]))));
+}
+
+/**
+ * Mocke le détail d'une mascotte.
+ *
+ * @param  array<string, mixed>  $detail
+ */
+function bbiMockPetDetail(\Mockery\MockInterface $mock, int $id, array $detail): void
+{
+    $mock->shouldReceive('getAsync')
+        ->withArgs(fn (string $requested): bool => $requested === 'data/wow/pet/'.$id)
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode($detail))));
 }
 
 /**

@@ -51,7 +51,7 @@ final readonly class CollectionTaxonomyLoader
 
     /**
      * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null, notObtainable: bool}>  $curated
-     * @return list<array{entity: string, entry_id: int, category: string|null, source: string|null}>
+     * @return list<array{entity: string, entry_id: int, category: string|null, source: string|null, obtainable: bool}>
      */
     private function rows(CollectionEntity $collectionEntity, array $curated): array
     {
@@ -63,6 +63,7 @@ final readonly class CollectionTaxonomyLoader
                 'entry_id' => $entryId,
                 'category' => $entry['category'] !== '' ? $entry['category'] : null,
                 'source' => $entry['source'] !== '' ? $entry['source'] : null,
+                'obtainable' => ! $entry['notObtainable'],
             ];
         }
 

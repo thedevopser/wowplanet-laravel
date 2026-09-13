@@ -171,6 +171,35 @@ sweep(array $windows, MediaSearchTag $tag): array<int, MediaSearchDocument>
 
 ---
 
+### `CollectionSearchSweep`
+
+Balayage des montures et des décorations sur la même grille.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `sweepMounts(array $windows)` | `array<int, MountSearchDocument>` | Montures de ces fenêtres, indexées par identifiant. |
+| `sweepDecors(array $windows)` | `array<int, DecorSearchDocument>` | Décorations de ces fenêtres, indexées par identifiant. |
+
+Ces deux recherches portent le même contenu que le détail unitaire correspondant : quatre fenêtres rendent les 1 669 montures et vingt-huit les 2 124 décorations, contre 3 793 appels de détail. Les mascottes n'ont pas d'équivalent — `data/wow/search/pet` répond 404 — et passent donc par leur détail, un appel par mascotte.
+
+Contrairement au balayage d'items, les documents sont petits et les fenêtres peu nombreuses : le résultat tient en mémoire d'un bloc et n'a pas à être remis au fil de l'eau.
+
+---
+
+### `RenderedIconProbe`
+
+```
+servedUrls(array $urls): list<string>
+```
+
+Contrôle qu'une icône composée est bien servie par le CDN de rendu, et ne rend que celles qui répondent.
+
+Les icônes de montures sont les seules que l'application compose elle-même, à partir du `SpellIconFileDataID` du socle. Or le CDN ne publie pas tous les identifiants de fichier du client : **70 montures sur 1 659 répondent 403**, et aucune variante de taille, de région ou d'icône active ne répond à leur place. Une URL qui échoue est **pire qu'une absence d'URL** — le front rend son gabarit de repli sur un `null`, et une image brisée sur un lien mort.
+
+Ce CDN n'est pas l'API Blizzard et ne consomme pas son quota, mais le contrôle reste borné : les URL en double ne sont demandées qu'une fois, par lots de cinquante, et `MountImporter` ne soumet que celles qui ne figurent pas déjà en base. Une URL déjà écrite a déjà passé le contrôle : en régime stable, une passe n'envoie aucune requête.
+
+---
+
 ### Hiérarchie des hauts faits
 
 `AchievementCategorySweep` récupère l'arborescence complète : l'index des catégories, puis le détail de chacune — cent soixante-dix appels aujourd'hui.
@@ -208,10 +237,17 @@ Lecture typée des documents rendus par les endpoints de recherche, construite s
 | `MediaSearchDocument` | `id`, `iconUrl`, `fileDataId` |
 | `AchievementCategoryDocument` | `id`, `name`, `parentId`, `achievements` (identifiant → nom) |
 | `AchievementDocument` | `id`, `points`, `faction` |
+| `MountSearchDocument` | `id`, `nameFr`, `sourceType` |
+| `DecorSearchDocument` | `id`, `nameFr`, `itemId` |
+| `PetDocument` | `id`, `nameFr`, `iconUrl`, `creatureId`, `sourceType` |
 
 Le nom français tombe sur le nom anglais quand la locale française manque. Un media sans asset `icon` est un cas normal, traité par un repli côté appelant, pas une réponse invalide.
 
 Une catégorie porte ses propres hauts faits **et** des sous-catégories qui portent les leurs : une racine n'est pas un simple conteneur, et « Quêtes » en compte trente-quatre en propre. `AchievementDocument` est réduit aux deux champs que la hiérarchie ne porte pas — les points, et la faction lue dans `requirements.faction.type` : ce sont les seules raisons d'appeler le détail d'un haut fait.
+
+Les trois documents de collection sont réduits de la même façon. `MountSearchDocument` ignore délibérément la faction que le document porte : aucune colonne ne l'accueille. `PetDocument` lit un détail, pas une recherche, donc son nom est du texte et non une carte de locales — et il porte l'icône en clair, ce qu'aucun autre endpoint de collection ne fait.
+
+`TrimmedText::firstNonEmpty(?string ...$candidates)` rend la première valeur utilisable parmi plusieurs, débarrassée de son remplissage. Deux besoins s'y rejoignent : le français manque parfois là où l'américain est rempli, et certains libellés de l'API traînent un CRLF — le haut fait 13503 en est le cas connu.
 
 ---
 
@@ -222,13 +258,21 @@ Chaque importeur lit les données sources, les transforme et les sauvegarde via 
 | Classe | Source principale | Modèle cible |
 |---|---|---|
 | `AchievementImporter` | hiérarchie `achievement-category` + détail de chaque haut fait + balayage des media | `WowAchievement` |
-| `MountImporter` | `mount/index` (API) + taxonomie curée + `mounts.json` pour l'icône | `WowMount` |
-| `PetImporter` | `pet/index` (API) + taxonomie curée + `pets.json` pour l'icône | `WowPet` |
-| `DecorImporter` | `decor/index` (API) + taxonomie curée + `decors.json` pour l'icône | `WowDecor` |
+| `MountImporter` | `mount/index` + balayage `search/mount` + taxonomie curée + socle pour le sort et l'icône | `WowMount` |
+| `PetImporter` | `pet/index` + détail de chaque mascotte + taxonomie curée | `WowPet` |
+| `DecorImporter` | `decor/index` + balayage `search/decor` + balayage des media d'items + taxonomie curée | `WowDecor` |
 | `QuestImporter` | API Blizzard (liste par zone) + DB2 area/quest maps | `WowQuest` |
 | `ProfessionImporter` | `skill_line_ability.csv` + API Blizzard | `WowProfession`, `WowRecipe` |
 
-Pour les trois collections, le partage d'autorité est explicite : **l'API tranche l'existence**, la **taxonomie curée tranche le rangement**. Une entrée que l'API ignore n'entre pas au catalogue ; une entrée que la taxonomie ne range pas entre sans catégorie ni source, et figure au rapport d'entrées à arbitrer. Voir [Taxonomie des collections](#taxonomie-des-collections-appinfrastructuretaxonomy).
+Pour les trois collections, le partage d'autorité est explicite : **l'API tranche l'existence**, la **taxonomie curée tranche le rangement**. Une entrée que l'API ignore n'entre pas au catalogue ; une entrée que la taxonomie ne range pas entre avec le type de source de l'API en valeur d'attente, et figure au rapport d'entrées à arbitrer. Voir [Taxonomie des collections](#taxonomie-des-collections-appinfrastructuretaxonomy).
+
+**L'index est obligatoire, l'enrichissement ne l'est pas.** Un index manquant ferait disparaître du lot des entrées que le balayage des lignes périmées supprimerait ensuite : l'import s'interrompt sans toucher au catalogue. Une fenêtre de recherche ou un détail manquant, en revanche, laisse la ligne avec ce qu'elle avait. Une ligne identique à celle déjà en base n'est pas réécrite.
+
+**Les montures sont le seul cas où le socle de référence est indispensable.** L'API n'expose l'icône d'une monture nulle part — `data/wow/media/mount/{id}` répond 404, `search/media?tags=mount` rend zéro résultat, et l'espace de media des sorts est creux —, ni le sort source qui porte son lien Wowhead. `Mount.SourceSpellID` puis `SpellMisc.SpellIconFileDataID` sont le seul chemin, et ils couvrent 1 686 montures sur 1 689.
+
+**Les mascottes sont le seul cas sans endpoint de recherche.** `data/wow/search/pet` répond 404 : leur identité vient du détail, un appel par mascotte. C'est sans regret, ce détail étant le seul des trois à porter l'icône en clair, avec l'identifiant de créature du lien Wowhead.
+
+**Le marqueur d'obtention des décorations est de la curation, jamais de l'API.** L'API atteste qu'une décoration existe, jamais qu'un joueur peut encore l'obtenir : un événement de pré-lancement clos ou une promotion retirée laissent une entrée hors d'atteinte, qui compterait au dénominateur et rendrait le 100 % inatteignable. Il vit donc dans la taxonomie, colonne `obtainable`. Les montures et les mascottes ne le lisent pas : leurs fichiers curés le portent, mais aucun import ne l'a jamais appliqué sur ces deux entités.
 
 ---
 
@@ -273,7 +317,7 @@ Les fichiers de collection ne servent plus qu'à **amorcer la taxonomie** et à 
 
 ## Taxonomie des collections (`app/Infrastructure/Taxonomy/`)
 
-Le rangement des montures, mascottes et décorations — catégorie de niveau 1, source de niveau 2 — est de la curation éditoriale que ni l'API Blizzard ni les DB2 ne portent. L'API n'expose qu'un vocabulaire de onze valeurs de `source.type`, là où la curation compte 170 sources pour les seules montures. Cette taxonomie est donc **notre donnée** : amorcée une fois depuis SimpleArmory, puis enrichie sans jamais être réécrite.
+Le rangement des montures, mascottes et décorations — catégorie de niveau 1, source de niveau 2 — est de la curation éditoriale que ni l'API Blizzard ni les DB2 ne portent. L'API n'expose qu'un vocabulaire de douze valeurs de `source.type`, là où la curation compte 170 sources pour les seules montures. Cette taxonomie est donc **notre donnée** : amorcée une fois depuis SimpleArmory, puis enrichie sans jamais être réécrite.
 
 Elle vit dans la table `wow_collection_taxonomy`, hors de la famille `wow_ref_*` pour qu'aucun traitement balayant les tables de référence DB2 ne puisse vider la curation.
 
@@ -360,7 +404,9 @@ Les correspondances que l'API Blizzard n'expose sur aucun endpoint — extension
 
 ### `ReferenceCatalog`
 
-Déclare les six tables DB2 retenues et, pour chacune, les seules colonnes utiles : `Faction`, `ContentTuning`, `AreaTable`, `QuestV2CliTask`, `SkillLineAbility`, `CurrencyTypes`.
+Déclare les huit tables DB2 retenues et, pour chacune, les seules colonnes utiles : `Faction`, `ContentTuning`, `AreaTable`, `QuestV2CliTask`, `SkillLineAbility`, `CurrencyTypes`, `Mount`, `SpellMisc`.
+
+`SpellMisc` est la plus lourde du socle — 417 583 lignes pour 45 Mo — et n'est retenue que pour deux colonnes, `SpellID` et `SpellIconFileDataID`. C'est le prix de l'icône des montures, que l'API n'expose nulle part.
 
 Les noms de colonnes sources appartiennent à un build donné et changent d'un patch à l'autre. Blizzard a par exemple scindé les masques de race en deux moitiés — `RaceMask` est devenu `RaceMasks_0` et `RaceMasks_1` — le jour où les identifiants de race ont dépassé la largeur d'origine. Une colonne déclarée ici mais absente de la source fait échouer la synchronisation, ce qui est le comportement recherché : c'est le seul moment où un renommage se voit.
 
@@ -415,10 +461,14 @@ Les correspondances que l'import tire du socle.
 | `questFactions()` | `array<int, string>` | `wow_ref_quest_v2_cli_task`, masque de race |
 | `recipeFactions()` | `array<int, string>` | `wow_ref_skill_line_ability`, masque de race |
 | `zoneFactions()` | `array<int, string>` | `wow_ref_area_table`, `FactionGroupMask` : 2 pour l'Alliance, 4 pour la Horde |
+| `mountSpells()` | `array<int, int>` | `wow_ref_mount`, `SourceSpellID` |
+| `mountIcons()` | `array<int, string>` | `wow_ref_mount` joint à `wow_ref_spell_misc` par le sort source |
 
 Les cartes sont construites une fois en début de passe et gardées en mémoire : quelques dizaines de milliers d'entiers ne pèsent rien, là où un aller-retour SQL par quête coûterait la passe entière. Une quête sans titre est ignorée partout, comme le faisait la lecture du CSV : elle n'entre au catalogue sous aucune forme.
 
 Les recettes sont indexées par `SkillLineAbility.ID`, qui est bien l'identifiant de recette que l'API retourne.
+
+L'icône d'une monture se compose à partir de `SpellIconFileDataID` sur le gabarit `https://render.worldofwarcraft.com/{région}/icons/56/{fileDataId}.jpg`, celui-là même que l'API sert pour les mascottes et les hauts faits. Un sort porte parfois plusieurs lignes `SpellMisc`, une par difficulté : la plus petite tranche l'égalité pour que deux imports rendent la même icône.
 
 ---
 

@@ -5,87 +5,86 @@ declare(strict_types=1);
 namespace App\Infrastructure\Blizzard\Importers;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
+use App\Infrastructure\Blizzard\CollectionSearchSweep;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
-use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Blizzard\RenderedIconProbe;
+use App\Infrastructure\Blizzard\SearchIdWindow;
+use App\Infrastructure\Reference\ReferenceMaps;
+use App\Infrastructure\Taxonomy\ApiSourceTypeVocabulary;
 use App\Infrastructure\Taxonomy\CollectionEntity;
 use App\Infrastructure\Taxonomy\CollectionTaxonomyReader;
 use App\Infrastructure\Taxonomy\TaxonomyEntry;
 use App\Models\WowMount;
 
 /**
- * Catalogue des montures : l'API tranche l'existence, la taxonomie curée tranche le rangement.
+ * Catalogue des montures : l'API tranche l'existence, la taxonomie tranche le rangement.
  *
- * L'API fait autorité sur l'existence et le nom : elle n'expose que ce qui est live
- * sur retail, là où SimpleArmory (construit sur les DB2 dataminés du client) référence
- * déjà le contenu des patchs à venir. Une monture absente de l'API n'est donc pas encore
- * obtenable et reste hors catalogue.
+ * Trois sources, chacune pour ce qu'elle seule porte. L'index tranche l'existence et le nom :
+ * il n'expose que ce qui est live sur retail, donc une monture qu'il ignore n'est pas encore
+ * obtenable et reste hors catalogue. Le balayage de recherche apporte le type de source. Et
+ * le socle de référence apporte le sort source et, par lui, l'icône.
  *
- * La catégorie et la source viennent de `wow_collection_taxonomy`, plus du fichier curé.
- * Une monture que la taxonomie ne range pas entre quand même, sans rangement, et figure au
- * rapport d'entrées à arbitrer : l'invisibilité silencieuse était le défaut à corriger.
+ * Le socle est ici indispensable et non un confort : l'API n'expose l'icône d'une monture
+ * nulle part — `data/wow/media/mount/{id}` est en 404 et l'espace de media des sorts est
+ * creux —, ni le sort qui porte son lien Wowhead. `Mount.SourceSpellID` puis
+ * `SpellMisc.SpellIconFileDataID` sont le seul chemin.
  *
- * Le fichier curé ne sert plus qu'à l'icône et à l'identifiant de sort, que l'API n'expose
- * pas encore ici. Il reste donc une source requise, et son absence interrompt l'import
- * plutôt que d'effacer les icônes de tout le catalogue.
+ * L'index est obligatoire, le reste ne l'est pas. Un index manquant ferait disparaître du lot
+ * des montures que le balayage des lignes périmées supprimerait ensuite : l'import s'interrompt.
+ * Une fenêtre de recherche ou un socle vide, en revanche, laisse la ligne avec ce qu'elle avait.
+ *
+ * Une monture que la taxonomie ne range pas entre quand même, avec le type de source de l'API
+ * en valeur d'attente, et figure au rapport d'entrées à arbitrer : l'invisibilité silencieuse
+ * était le défaut à corriger.
  */
 final readonly class MountImporter
 {
     use ImportsFromBlizzardApi;
 
+    private const INDEX_ENDPOINT = 'data/wow/mount/index';
+
+    private const SAVE_CHUNK = 500;
+
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
         private CollectionTaxonomyReader $collectionTaxonomyReader,
+        private CollectionSearchSweep $collectionSearchSweep,
+        private ReferenceMaps $referenceMaps,
+        private RenderedIconProbe $renderedIconProbe,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
 
     public function import(): void
     {
-        $saMounts = $this->loadSimpleArmoryData();
-        if ($saMounts === []) {
+        $names = $this->fetchNames();
+        if ($names === []) {
             return;
         }
 
-        $frenchNames = $this->loadFrenchNames();
-        if ($frenchNames === []) {
-            return;
-        }
+        $existing = $this->existingRows();
 
-        $rows = $this->buildRows($saMounts, $frenchNames, $this->collectionTaxonomyReader->for(CollectionEntity::Mount));
+        $rows = $this->buildRows(
+            $names,
+            $this->fetchSourceTypes(array_keys($names)),
+            $this->collectionTaxonomyReader->for(CollectionEntity::Mount),
+            $this->referenceIdentity($existing),
+            $existing,
+        );
 
-        $this->saveRows($rows);
+        $this->saveRows($rows, array_keys($names));
     }
 
     /**
-     * @return array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>
-     */
-    private function loadSimpleArmoryData(): array
-    {
-        $this->info('Parsing SimpleArmory mounts.json...');
-
-        $mounts = SimpleArmoryParser::parseCollection('mounts.json');
-        if ($mounts === []) {
-            $this->info('ERROR: Could not parse mounts.json.');
-
-            return [];
-        }
-
-        $factionCount = count(array_filter($mounts, static fn (array $m): bool => $m['faction'] !== null));
-        $this->info(sprintf('  Found %d mounts (%d faction-specific).', count($mounts), $factionCount));
-
-        return $mounts;
-    }
-
-    /**
-     * Noms français depuis l'index Mount de l'API officielle.
+     * Noms français depuis l'index de l'API, qui tranche l'existence.
      *
      * @return array<int, string>
      */
-    private function loadFrenchNames(): array
+    private function fetchNames(): array
     {
         $this->info('Fetching mount index from Blizzard API...');
 
-        $index = $this->fetchWithRetry('data/wow/mount/index');
+        $index = $this->fetchWithRetry(self::INDEX_ENDPOINT);
         if ($index === null) {
             $this->info('  ERROR: mount index unavailable, aborting import (catalog left untouched).');
 
@@ -116,71 +115,190 @@ final readonly class MountImporter
     }
 
     /**
-     * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saMounts
-     * @param  array<int, string>  $frenchNames
+     * Types de source par balayage de recherche : quatre fenêtres couvrent tout le catalogue,
+     * là où le détail unitaire demanderait un appel par monture.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, string>
+     */
+    private function fetchSourceTypes(array $ids): array
+    {
+        $windows = [];
+        foreach ($ids as $id) {
+            $windows[SearchIdWindow::holding($id)] = true;
+        }
+
+        $windows = array_keys($windows);
+        sort($windows);
+
+        $this->info(sprintf('Sweeping %d mount search windows...', count($windows)));
+
+        $sourceTypes = [];
+        foreach ($this->collectionSearchSweep->sweepMounts($windows) as $id => $mountSearchDocument) {
+            if ($mountSearchDocument->sourceType !== null) {
+                $sourceTypes[$id] = $mountSearchDocument->sourceType;
+            }
+        }
+
+        return $sourceTypes;
+    }
+
+    /**
+     * Sort source et icône, que seul le socle porte.
+     *
+     * @param  array<int, array{name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>  $existing
+     * @return array<int, array{spell_id: int|null, icon_url: string|null}>
+     */
+    private function referenceIdentity(array $existing): array
+    {
+        $spells = $this->referenceMaps->mountSpells();
+        $icons = $this->probeIcons($this->referenceMaps->mountIcons(), $existing);
+
+        $identity = [];
+        foreach (array_keys($spells + $icons) as $id) {
+            $identity[$id] = ['spell_id' => $spells[$id] ?? null, 'icon_url' => $icons[$id] ?? null];
+        }
+
+        return $identity;
+    }
+
+    /**
+     * Écarte les icônes composées que le CDN de rendu ne sert pas.
+     *
+     * Une URL déjà en base a déjà passé ce contrôle le jour où elle a été écrite : seules
+     * les nouvelles sont soumises, ce qui laisse une passe suivante sans aucune requête.
+     *
+     * @param  array<int, string>  $icons
+     * @param  array<int, array{name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>  $existing
+     * @return array<int, string>
+     */
+    private function probeIcons(array $icons, array $existing): array
+    {
+        $known = [];
+        foreach ($existing as $row) {
+            if ($row['icon_url'] !== null) {
+                $known[$row['icon_url']] = true;
+            }
+        }
+
+        $candidates = array_values(array_unique(array_filter(
+            $icons,
+            static fn (string $url): bool => ! isset($known[$url]),
+        )));
+
+        if ($candidates !== []) {
+            $this->info(sprintf('Checking %d newly composed icons against the render CDN...', count($candidates)));
+        }
+
+        foreach ($this->renderedIconProbe->servedUrls($candidates) as $url) {
+            $known[$url] = true;
+        }
+
+        $served = array_filter($icons, static fn (string $url): bool => isset($known[$url]));
+
+        $refused = count($icons) - count($served);
+        if ($refused > 0) {
+            $this->info(sprintf('  %d icons the CDN does not serve: those mounts stay without one, rather than with a broken image.', $refused));
+        }
+
+        return $served;
+    }
+
+    /**
+     * @return array<int, array{name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>
+     */
+    private function existingRows(): array
+    {
+        $rows = [];
+
+        foreach (WowMount::query()->get(['id', 'name_fr', 'source', 'category', 'source_spell_id', 'icon_url', 'is_active']) as $mount) {
+            $rows[$mount->id] = [
+                'name_fr' => $mount->name_fr,
+                'source' => $mount->source,
+                'category' => $mount->category,
+                'source_spell_id' => $mount->source_spell_id,
+                'icon_url' => $mount->icon_url,
+                'is_active' => $mount->is_active,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Une ligne identique à celle déjà en base n'est pas réécrite : sans cela, chaque passe
+     * toucherait les seize cents lignes et le mode incrémental ne voudrait plus rien dire.
+     *
+     * @param  array<int, string>  $names
+     * @param  array<int, string>  $sourceTypes
      * @param  array<int, TaxonomyEntry>  $taxonomy
+     * @param  array<int, array{spell_id: int|null, icon_url: string|null}>  $reference
+     * @param  array<int, array{name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>  $existing
      * @return list<array{id: int, name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>
      */
-    private function buildRows(array $saMounts, array $frenchNames, array $taxonomy): array
+    private function buildRows(array $names, array $sourceTypes, array $taxonomy, array $reference, array $existing): array
     {
         $rows = [];
         $awaitingArbitration = 0;
-        $withIcons = 0;
+        $unchanged = 0;
 
-        foreach ($frenchNames as $id => $nameFr) {
+        foreach ($names as $id => $nameFr) {
             $entry = $taxonomy[$id] ?? null;
             if (! $entry instanceof TaxonomyEntry) {
                 $awaitingArbitration++;
             }
 
-            $mount = $saMounts[$id] ?? null;
+            $previous = $existing[$id] ?? null;
 
-            $iconUrl = $mount !== null && $mount['icon'] !== null
-                ? SimpleArmoryParser::buildIconUrl($mount['icon'])
-                : null;
-            if ($iconUrl !== null) {
-                $withIcons++;
-            }
-
-            $rows[] = [
-                'id' => $id,
+            $row = [
                 'name_fr' => $nameFr,
-                'source' => $entry?->source,
+                'source' => $entry instanceof TaxonomyEntry
+                    ? $entry->source
+                    : ApiSourceTypeVocabulary::toPendingSource($sourceTypes[$id] ?? null),
                 'category' => $entry?->category,
-                'source_spell_id' => $mount !== null && $mount['spellid'] > 0 ? $mount['spellid'] : null,
-                'icon_url' => $iconUrl,
+                'source_spell_id' => $reference[$id]['spell_id'] ?? $previous['source_spell_id'] ?? null,
+                'icon_url' => $reference[$id]['icon_url'] ?? $previous['icon_url'] ?? null,
                 'is_active' => true,
             ];
+
+            if ($row === $previous) {
+                $unchanged++;
+
+                continue;
+            }
+
+            $rows[] = ['id' => $id] + $row;
         }
 
-        $notLive = count(array_diff_key($saMounts, $frenchNames));
-
-        $this->info(sprintf('  %d mounts in catalog, %d with icon URL.', count($rows), $withIcons));
-        $this->info(sprintf('  %d skipped (not in live API index), %d awaiting arbitration (absent from the taxonomy).', $notLive, $awaitingArbitration));
+        $this->info(sprintf(
+            '  %d mounts in catalog, %d with icon URL, %d already up to date.',
+            count($names),
+            count(array_filter($names, static fn (string $name, int $id): bool => ($reference[$id]['icon_url'] ?? null) !== null, ARRAY_FILTER_USE_BOTH)),
+            $unchanged,
+        ));
+        $this->info(sprintf('  %d awaiting arbitration (absent from the taxonomy).', $awaitingArbitration));
 
         return $rows;
     }
 
     /**
      * @param  list<array{id: int, name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>  $rows
+     * @param  list<int>  $catalogIds
      */
-    private function saveRows(array $rows): void
+    private function saveRows(array $rows, array $catalogIds): void
     {
         $this->info(sprintf('Saving %d mounts...', count($rows)));
 
-        $count = 0;
-        foreach (array_chunk($rows, 500) as $chunk) {
+        foreach (array_chunk($rows, self::SAVE_CHUNK) as $chunk) {
             WowMount::query()->upsert(
                 $chunk,
                 uniqueBy: ['id'],
                 update: ['name_fr', 'source', 'category', 'source_spell_id', 'icon_url', 'is_active'],
             );
-            $count += count($chunk);
-            $this->info(sprintf('  Saved %d...', $count));
         }
 
-        $this->deleteRowsOutsideCatalog(WowMount::class, array_column($rows, 'id'), 'mounts');
+        $this->deleteRowsOutsideCatalog(WowMount::class, $catalogIds, 'mounts');
 
-        $this->info(sprintf('Mount import complete: %d items.', $count));
+        $this->info(sprintf('Mount import complete: %d items.', count($catalogIds)));
     }
 }

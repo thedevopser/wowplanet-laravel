@@ -194,3 +194,23 @@ test('it fails loudly when the curated file holds no usable entry', function ():
     expect(fn (): array => loadTaxonomy(CollectionEntity::Pet))
         ->toThrow(TaxonomySourceUnavailableException::class, 'pets.json');
 });
+
+test('it seeds the curated marker of an entry that can no longer be obtained', function (): void {
+    writeTaxonomySource(CollectionEntity::Decor, [[
+        'name' => 'Quartiers',
+        'subcats' => [[
+            'name' => 'Promotion',
+            'items' => [
+                ['ID' => 533, 'name' => 'Pilier', 'notObtainable' => true],
+                ['ID' => 534, 'name' => 'Lampe'],
+            ],
+        ]],
+    ]]);
+
+    loadTaxonomy(CollectionEntity::Decor);
+
+    $rows = WowCollectionTaxonomy::query()->where('entity', CollectionEntity::Decor)->pluck('obtainable', 'entry_id');
+
+    expect($rows[533])->toBeFalse()
+        ->and($rows[534])->toBeTrue();
+});

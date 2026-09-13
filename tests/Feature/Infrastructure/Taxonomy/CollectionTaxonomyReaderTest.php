@@ -59,3 +59,19 @@ test('it reads a whole collection in one pass', function (): void {
 
     expect(readTaxonomy(CollectionEntity::Decor))->toHaveCount(50);
 });
+
+test('it reads an entry curated as no longer obtainable', function (): void {
+    WowCollectionTaxonomy::factory()->create([
+        'entity' => CollectionEntity::Decor,
+        'entry_id' => 533,
+        'obtainable' => false,
+    ]);
+
+    expect(readTaxonomy(CollectionEntity::Decor)[533]->obtainable)->toBeFalse();
+});
+
+test('it holds an entry obtainable unless the curation says otherwise', function (): void {
+    WowCollectionTaxonomy::factory()->create(['entity' => CollectionEntity::Decor, 'entry_id' => 534]);
+
+    expect(readTaxonomy(CollectionEntity::Decor)[534]->obtainable)->toBeTrue();
+});

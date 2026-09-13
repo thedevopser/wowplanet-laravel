@@ -7,9 +7,14 @@ namespace App\Infrastructure\Taxonomy;
 /**
  * Conversion du vocabulaire de source de l'API vers celui de la taxonomie.
  *
- * L'API ne connaît que onze types de source là où la taxonomie curée en compte 170
+ * L'API ne connaît que douze types de source là où la taxonomie curée en compte 170
  * pour les seules montures : la conversion est donc une valeur d'attente pour une
  * entrée que personne n'a encore rangée, jamais un remplacement d'une source curée.
+ *
+ * `DISCOVERY` désigne les montures et mascottes secrètes, pas la Saison de la découverte
+ * de Classic : le balayage complet des 1 669 montures et des 2 179 mascottes de retail
+ * n'en compte que 34, dont l'Hippogriffe oublié depuis longtemps et le Vif-sabot
+ * insaisissable. Blizzard libelle lui-même sa source « Découverte ».
  *
  * Les onze libellés produits existent déjà dans les dictionnaires de traduction des
  * trois onglets de collection. N'en ajouter un douzième qu'en l'y ajoutant aussi,
@@ -32,6 +37,7 @@ final class ApiSourceTypeVocabulary
         'TRADINGPOST' => 'Trading Post',
         'WORLDEVENT' => 'World Events',
         'WILDPET' => 'Wild Pet',
+        'DISCOVERY' => 'Discovery',
     ];
 
     public static function toPendingSource(?string $sourceType): ?string

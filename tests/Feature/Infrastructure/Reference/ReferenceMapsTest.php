@@ -170,3 +170,58 @@ test('it returns empty maps when the reference tables are empty', function (): v
         ->and($referenceMaps->recipeFactions())->toBe([])
         ->and($referenceMaps->zoneFactions())->toBe([]);
 });
+
+function seedReferenceMount(int $id, ?int $sourceSpellId): void
+{
+    DB::table('wow_ref_mount')->insert(['id' => $id, 'source_spell_id' => $sourceSpellId]);
+}
+
+function seedReferenceSpellMisc(int $id, ?int $spellId, ?int $iconFileDataId): void
+{
+    DB::table('wow_ref_spell_misc')->insert([
+        'id' => $id,
+        'spell_id' => $spellId,
+        'spell_icon_file_data_id' => $iconFileDataId,
+    ]);
+}
+
+test('it reads the source spell of a mount', function (): void {
+    seedReferenceMount(6, 458);
+    seedReferenceMount(14, 580);
+
+    expect((new ReferenceMaps)->mountSpells())->toBe([6 => 458, 14 => 580]);
+});
+
+test('it leaves out a mount without a source spell rather than mapping it to zero', function (): void {
+    seedReferenceMount(6, 458);
+    seedReferenceMount(9, null);
+
+    expect((new ReferenceMaps)->mountSpells())->toBe([6 => 458]);
+});
+
+test('it builds the mount icon from the icon file of its source spell', function (): void {
+    seedReferenceMount(6, 458);
+    seedReferenceSpellMisc(1, 458, 132261);
+
+    expect((new ReferenceMaps)->mountIcons())
+        ->toBe([6 => 'https://render.worldofwarcraft.com/eu/icons/56/132261.jpg']);
+});
+
+test('it leaves out a mount whose source spell carries no icon file', function (): void {
+    seedReferenceMount(6, 458);
+    seedReferenceMount(9, 470);
+    seedReferenceSpellMisc(1, 458, 132261);
+    seedReferenceSpellMisc(2, 470, null);
+
+    expect((new ReferenceMaps)->mountIcons())->toHaveCount(1)
+        ->and((new ReferenceMaps)->mountIcons())->toHaveKey(6);
+});
+
+test('it picks the lowest spell misc row when a spell carries several', function (): void {
+    seedReferenceMount(6, 458);
+    seedReferenceSpellMisc(7, 458, 222222);
+    seedReferenceSpellMisc(2, 458, 132261);
+
+    expect((new ReferenceMaps)->mountIcons())
+        ->toBe([6 => 'https://render.worldofwarcraft.com/eu/icons/56/132261.jpg']);
+});

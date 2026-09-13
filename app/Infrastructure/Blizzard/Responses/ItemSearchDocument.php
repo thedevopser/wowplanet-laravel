@@ -52,23 +52,11 @@ final readonly class ItemSearchDocument
 
         return new self(
             id: $responsePayload->requiredInt('id'),
-            nameFr: self::firstNonEmpty($name?->optionalString('fr_FR'), $name?->optionalString('en_US')),
+            nameFr: TrimmedText::firstNonEmpty($name?->optionalString('fr_FR'), $name?->optionalString('en_US')),
             quality: self::QUALITY_RANKS[$responsePayload->optionalObject('quality')?->optionalString('type') ?? ''] ?? self::DEFAULT_QUALITY,
             mediaId: $responsePayload->optionalObject('media')?->optionalInt('id'),
-            categoryFr: self::firstNonEmpty($responsePayload->optionalObject('item_class')?->optionalObject('name')?->optionalString('fr_FR')),
+            categoryFr: TrimmedText::firstNonEmpty($responsePayload->optionalObject('item_class')?->optionalObject('name')?->optionalString('fr_FR')),
             appearanceIds: $appearanceIds,
         );
-    }
-
-    private static function firstNonEmpty(?string ...$candidates): ?string
-    {
-        foreach ($candidates as $candidate) {
-            $trimmed = trim($candidate ?? '');
-            if ($trimmed !== '') {
-                return $trimmed;
-            }
-        }
-
-        return null;
     }
 }

@@ -119,7 +119,9 @@ Charge les tables de référence DB2 depuis wago.tools dans les tables `wow_ref_
 
 **Signature** : `app:wow-reference-sync {--table=}` — **Classe** : `WowReferenceSyncCommand`
 
-Elle lit le build LIVE, télécharge les six tables du `ReferenceCatalog`, les écrit dans le magasin `storage/app/wow-reference/` puis les charge par `COPY`. La sortie rend la volumétrie table par table, avec l'écart au chargement précédent.
+Elle lit le build LIVE, télécharge les huit tables du `ReferenceCatalog`, les écrit dans le magasin `storage/app/wow-reference/` puis les charge par `COPY`. La sortie rend la volumétrie table par table, avec l'écart au chargement précédent.
+
+`SpellMisc` pèse à elle seule 45 Mo pour 417 583 lignes, contre une quarantaine de milliers pour les six premières : c'est le prix de l'icône des montures, que l'API n'expose sur aucun endpoint.
 
 Rien n'est écrit en base avant que **tous** les téléchargements ne soient acquis, et le chargement tient dans une seule transaction. Un téléchargement refusé, un fichier sans en-tête, une colonne disparue ou une volumétrie effondrée sous la moitié du dernier chargement interrompent la commande sans toucher au socle existant : un socle à moitié chargé est pire qu'un socle périmé.
 

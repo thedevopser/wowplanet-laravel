@@ -18,10 +18,11 @@ test('it converts every source type the API is known to return', function (strin
     'TRADINGPOST' => ['TRADINGPOST', 'Trading Post'],
     'WORLDEVENT' => ['WORLDEVENT', 'World Events'],
     'WILDPET' => ['WILDPET', 'Wild Pet'],
+    'DISCOVERY' => ['DISCOVERY', 'Discovery'],
 ]);
 
-test('it covers the eleven source types the API survey measured, and no more', function (): void {
-    expect(ApiSourceTypeVocabulary::pendingSources())->toHaveCount(11);
+test('it covers the twelve source types the API survey measured, and no more', function (): void {
+    expect(ApiSourceTypeVocabulary::pendingSources())->toHaveCount(12);
 });
 
 test('it rejects a source type it does not know rather than inventing a label', function (): void {

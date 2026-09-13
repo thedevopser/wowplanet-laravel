@@ -6,22 +6,37 @@ namespace App\Infrastructure\Blizzard\Importers;
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
-use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Blizzard\Responses\PetDocument;
+use App\Infrastructure\Blizzard\Responses\ResponsePayload;
+use App\Infrastructure\Taxonomy\ApiSourceTypeVocabulary;
 use App\Infrastructure\Taxonomy\CollectionEntity;
 use App\Infrastructure\Taxonomy\CollectionTaxonomyReader;
 use App\Infrastructure\Taxonomy\TaxonomyEntry;
 use App\Models\WowPet;
 
 /**
- * Catalogue des mascottes : l'API tranche l'existence, la taxonomie curée tranche le rangement.
+ * Catalogue des mascottes : l'API tranche l'existence, la taxonomie tranche le rangement.
  *
- * Voir MountImporter pour le détail du partage d'autorité : l'API tranche l'existence et le nom,
- * `wow_collection_taxonomy` la catégorie et la source, et le fichier curé ne garde que l'icône
- * et l'identifiant de créature.
+ * Voir MountImporter pour le détail du partage d'autorité. La différence tient au chemin :
+ * `data/wow/search/pet` n'existe pas — il répond 404 —, donc l'identité vient du détail, un
+ * appel par mascotte. C'est sans regret, le détail des mascottes étant le seul des trois à
+ * porter l'icône en clair : les 2 179 de l'index en ont une, et une créature avec.
+ *
+ * L'index est obligatoire, les détails ne le sont pas : un détail manquant laisse la ligne
+ * avec l'icône, la créature et la source qu'elle avait.
  */
 final readonly class PetImporter
 {
     use ImportsFromBlizzardApi;
+
+    private const INDEX_ENDPOINT = 'data/wow/pet/index';
+
+    private const DETAIL_ENDPOINT = 'data/wow/pet/';
+
+    /** Les détails sont petits, mais deux mille corps décodés gardés ensemble ne le sont pas. */
+    private const DETAIL_BATCH = 1000;
+
+    private const SAVE_CHUNK = 500;
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
@@ -32,51 +47,31 @@ final readonly class PetImporter
 
     public function import(): void
     {
-        $saPets = $this->loadSimpleArmoryData();
-        if ($saPets === []) {
+        $names = $this->fetchNames();
+        if ($names === []) {
             return;
         }
 
-        $frenchNames = $this->loadFrenchNames();
-        if ($frenchNames === []) {
-            return;
-        }
+        $rows = $this->buildRows(
+            $names,
+            $this->fetchDetails(array_keys($names)),
+            $this->collectionTaxonomyReader->for(CollectionEntity::Pet),
+            $this->existingRows(),
+        );
 
-        $rows = $this->buildRows($saPets, $frenchNames, $this->collectionTaxonomyReader->for(CollectionEntity::Pet));
-
-        $this->saveRows($rows);
+        $this->saveRows($rows, array_keys($names));
     }
 
     /**
-     * @return array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>
-     */
-    private function loadSimpleArmoryData(): array
-    {
-        $this->info('Parsing SimpleArmory pets.json...');
-
-        $pets = SimpleArmoryParser::parseCollection('pets.json');
-        if ($pets === []) {
-            $this->info('ERROR: Could not parse pets.json.');
-
-            return [];
-        }
-
-        $factionCount = count(array_filter($pets, static fn (array $p): bool => $p['faction'] !== null));
-        $this->info(sprintf('  Found %d pets (%d faction-specific).', count($pets), $factionCount));
-
-        return $pets;
-    }
-
-    /**
-     * Noms français depuis l'index Pet de l'API officielle (id = species id).
+     * Noms français depuis l'index de l'API, qui tranche l'existence (id = species id).
      *
      * @return array<int, string>
      */
-    private function loadFrenchNames(): array
+    private function fetchNames(): array
     {
         $this->info('Fetching pet index from Blizzard API...');
 
-        $index = $this->fetchWithRetry('data/wow/pet/index');
+        $index = $this->fetchWithRetry(self::INDEX_ENDPOINT);
         if ($index === null) {
             $this->info('  ERROR: pet index unavailable, aborting import (catalog left untouched).');
 
@@ -107,71 +102,134 @@ final readonly class PetImporter
     }
 
     /**
-     * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saPets
-     * @param  array<int, string>  $frenchNames
+     * @param  list<int>  $ids
+     * @return array<int, PetDocument>
+     */
+    private function fetchDetails(array $ids): array
+    {
+        $this->info(sprintf('Fetching the detail of %d pets...', count($ids)));
+
+        $documents = [];
+        $missing = 0;
+
+        foreach (array_chunk($ids, self::DETAIL_BATCH) as $chunk) {
+            $endpoints = [];
+            foreach ($chunk as $id) {
+                $endpoints[$id] = self::DETAIL_ENDPOINT.$id;
+            }
+
+            foreach ($this->fetchBatchAsync($endpoints) as $id => $decoded) {
+                if ($decoded === null) {
+                    $missing++;
+
+                    continue;
+                }
+
+                $documents[(int) $id] = PetDocument::fromPayload(
+                    ResponsePayload::forEndpoint(self::DETAIL_ENDPOINT.$id, $decoded),
+                );
+            }
+        }
+
+        if ($missing > 0) {
+            $this->info(sprintf('  %d details unavailable: those rows keep the icon, creature and source they had.', $missing));
+        }
+
+        return $documents;
+    }
+
+    /**
+     * @return array<int, array{name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>
+     */
+    private function existingRows(): array
+    {
+        $rows = [];
+
+        foreach (WowPet::query()->get(['id', 'name_fr', 'category', 'source', 'creature_id', 'icon_url', 'is_active']) as $pet) {
+            $rows[$pet->id] = [
+                'name_fr' => $pet->name_fr,
+                'category' => $pet->category,
+                'source' => $pet->source,
+                'creature_id' => $pet->creature_id,
+                'icon_url' => $pet->icon_url,
+                'is_active' => $pet->is_active,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<int, string>  $names
+     * @param  array<int, PetDocument>  $details
      * @param  array<int, TaxonomyEntry>  $taxonomy
+     * @param  array<int, array{name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>  $existing
      * @return list<array{id: int, name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>
      */
-    private function buildRows(array $saPets, array $frenchNames, array $taxonomy): array
+    private function buildRows(array $names, array $details, array $taxonomy, array $existing): array
     {
         $rows = [];
         $awaitingArbitration = 0;
+        $unchanged = 0;
         $withIcons = 0;
 
-        foreach ($frenchNames as $id => $nameFr) {
+        foreach ($names as $id => $nameFr) {
             $entry = $taxonomy[$id] ?? null;
             if (! $entry instanceof TaxonomyEntry) {
                 $awaitingArbitration++;
             }
 
-            $pet = $saPets[$id] ?? null;
+            $previous = $existing[$id] ?? null;
+            $petDocument = $details[$id] ?? null;
 
-            $iconUrl = $pet !== null && $pet['icon'] !== null
-                ? SimpleArmoryParser::buildIconUrl($pet['icon'])
-                : null;
-            if ($iconUrl !== null) {
+            $row = [
+                'name_fr' => $nameFr,
+                'category' => $entry?->category,
+                'source' => $entry instanceof TaxonomyEntry
+                    ? $entry->source
+                    : ApiSourceTypeVocabulary::toPendingSource($petDocument?->sourceType),
+                'creature_id' => $petDocument->creatureId ?? $previous['creature_id'] ?? null,
+                'icon_url' => $petDocument->iconUrl ?? $previous['icon_url'] ?? null,
+                'is_active' => true,
+            ];
+
+            if ($row['icon_url'] !== null) {
                 $withIcons++;
             }
 
-            $rows[] = [
-                'id' => $id,
-                'name_fr' => $nameFr,
-                'category' => $entry?->category,
-                'source' => $entry?->source,
-                'creature_id' => $pet !== null && $pet['creatureId'] > 0 ? $pet['creatureId'] : null,
-                'icon_url' => $iconUrl,
-                'is_active' => true,
-            ];
+            if ($row === $previous) {
+                $unchanged++;
+
+                continue;
+            }
+
+            $rows[] = ['id' => $id] + $row;
         }
 
-        $notLive = count(array_diff_key($saPets, $frenchNames));
-
-        $this->info(sprintf('  %d pets in catalog, %d with icon URL.', count($rows), $withIcons));
-        $this->info(sprintf('  %d skipped (not in live API index), %d awaiting arbitration (absent from the taxonomy).', $notLive, $awaitingArbitration));
+        $this->info(sprintf('  %d pets in catalog, %d with icon URL, %d already up to date.', count($names), $withIcons, $unchanged));
+        $this->info(sprintf('  %d awaiting arbitration (absent from the taxonomy).', $awaitingArbitration));
 
         return $rows;
     }
 
     /**
      * @param  list<array{id: int, name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>  $rows
+     * @param  list<int>  $catalogIds
      */
-    private function saveRows(array $rows): void
+    private function saveRows(array $rows, array $catalogIds): void
     {
         $this->info(sprintf('Saving %d pets...', count($rows)));
 
-        $count = 0;
-        foreach (array_chunk($rows, 500) as $chunk) {
+        foreach (array_chunk($rows, self::SAVE_CHUNK) as $chunk) {
             WowPet::query()->upsert(
                 $chunk,
                 uniqueBy: ['id'],
                 update: ['name_fr', 'category', 'source', 'creature_id', 'icon_url', 'is_active'],
             );
-            $count += count($chunk);
-            $this->info(sprintf('  Saved %d...', $count));
         }
 
-        $this->deleteRowsOutsideCatalog(WowPet::class, array_column($rows, 'id'), 'pets');
+        $this->deleteRowsOutsideCatalog(WowPet::class, $catalogIds, 'pets');
 
-        $this->info(sprintf('Pet import complete: %d items.', $count));
+        $this->info(sprintf('Pet import complete: %d items.', count($catalogIds)));
     }
 }

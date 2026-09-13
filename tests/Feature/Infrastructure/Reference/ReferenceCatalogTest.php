@@ -39,3 +39,19 @@ test('every table carries the DB2 identifier as its first column', function (): 
 test('an unknown source resolves to nothing rather than to a wrong table', function (): void {
     expect((new ReferenceCatalog)->find('Inconnue'))->toBeNull();
 });
+
+test('the mount table carries the source spell that links a mount to its icon', function (): void {
+    $mount = (new ReferenceCatalog)->find('Mount');
+
+    expect($mount)->not->toBeNull()
+        ->and($mount->table())->toBe('wow_ref_mount')
+        ->and($mount->targetColumns())->toBe(['id', 'source_spell_id']);
+});
+
+test('the spell misc table carries the icon file of a spell', function (): void {
+    $spellMisc = (new ReferenceCatalog)->find('SpellMisc');
+
+    expect($spellMisc)->not->toBeNull()
+        ->and($spellMisc->table())->toBe('wow_ref_spell_misc')
+        ->and($spellMisc->targetColumns())->toBe(['id', 'spell_id', 'spell_icon_file_data_id']);
+});

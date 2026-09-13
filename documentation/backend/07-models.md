@@ -210,7 +210,7 @@ Le nom échappe volontairement au préfixe `wow_ref_`, pour qu'aucun traitement 
 
 ## `WowCollectionTaxonomy`
 
-Table `wow_collection_taxonomy`. Rangement curé d'une entrée de collection : sa catégorie de niveau 1 et sa source de niveau 2.
+Table `wow_collection_taxonomy`. Rangement curé d'une entrée de collection : sa catégorie de niveau 1, sa source de niveau 2, et le marqueur `obtainable` qui dit si un joueur peut encore l'obtenir.
 
 | Colonne | Rôle |
 |---|---|

@@ -59,6 +59,15 @@ final class ReferenceCatalog
                 new ReferenceColumn('Name_lang', 'name_lang', ReferenceColumnType::Text),
                 new ReferenceColumn('MaxQty', 'max_qty', ReferenceColumnType::Integer),
             ]),
+            new ReferenceTable('Mount', 'mount', null, [
+                new ReferenceColumn('ID', 'id', ReferenceColumnType::Integer),
+                new ReferenceColumn('SourceSpellID', 'source_spell_id', ReferenceColumnType::Integer),
+            ]),
+            new ReferenceTable('SpellMisc', 'spell_misc', null, [
+                new ReferenceColumn('ID', 'id', ReferenceColumnType::Integer),
+                new ReferenceColumn('SpellID', 'spell_id', ReferenceColumnType::Integer),
+                new ReferenceColumn('SpellIconFileDataID', 'spell_icon_file_data_id', ReferenceColumnType::Integer),
+            ]),
         ];
     }
 

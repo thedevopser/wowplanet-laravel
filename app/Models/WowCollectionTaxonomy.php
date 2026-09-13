@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $entry_id
  * @property string|null $category
  * @property string|null $source
+ * @property bool $obtainable
  *
  * @method static \Illuminate\Database\Eloquent\Builder<static> query()
  */
@@ -45,6 +46,7 @@ class WowCollectionTaxonomy extends Model
         'entry_id',
         'category',
         'source',
+        'obtainable',
     ];
 
     /**
@@ -55,6 +57,7 @@ class WowCollectionTaxonomy extends Model
         return [
             'entity' => CollectionEntity::class,
             'entry_id' => 'integer',
+            'obtainable' => 'boolean',
         ];
     }
 }

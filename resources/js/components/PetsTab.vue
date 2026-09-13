@@ -172,6 +172,7 @@ const SOURCE_FR = {
     'Raid Drop': 'Butin de raid',
     'Dungeon Drop': 'Butin de donjon',
     'Drop': 'Butin',
+    'Discovery': 'Découverte',
     'Zone Drop': 'Butin de zone',
     'Reputation': 'Réputation',
     'Paragon Reputation': 'Réputation parangon',
