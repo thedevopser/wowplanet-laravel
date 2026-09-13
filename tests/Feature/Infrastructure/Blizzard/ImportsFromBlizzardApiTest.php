@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Application\Import\ImportProgressStore;
+use App\Application\Import\ImportRun;
+use App\Application\Import\ImportStage;
+use App\Application\Import\ImportWaitReason;
+use App\Application\Import\ImportWaitReporter;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use GuzzleHttp\Exception\RequestException;
@@ -261,4 +266,71 @@ test('it steps the concurrency down after rate limiting and says so', function (
     Log::shouldHaveReceived('info')
         ->withArgs(fn (string $message): bool => str_contains($message, 'concurrency stepped down to 10'))
         ->once();
+});
+
+// ─── attentes publiées au suivi ─────────────────────────────
+
+test('a batch in flight is published, so waiting is not mistaken for blocking', function (): void {
+    $store = new ImportProgressStore;
+    $store->save(ImportRun::start('job-1', [ImportStage::Mounts], now()->getTimestamp()));
+
+    resolve(ImportWaitReporter::class)->follow('job-1');
+
+    $duringBatch = null;
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->andReturnUsing(function () use ($store, &$duringBatch): \GuzzleHttp\Promise\PromiseInterface {
+            $duringBatch ??= $store->find('job-1')?->wait;
+
+            return Create::promiseFor(new Response(200, [], '{"ok":true}'));
+        });
+
+    makeApiConsumer($client)->fetchBatch([1 => 'data/wow/mount/1', 2 => 'data/wow/mount/2']);
+
+    expect($duringBatch?->reason)->toBe(ImportWaitReason::Batch)
+        ->and($duringBatch->count)->toBe(2)
+        ->and($store->find('job-1')?->wait)->toBeNull();
+});
+
+test('a recoil after a 429 is published with the delay it waits', function (): void {
+    $store = new ImportProgressStore;
+    $store->save(ImportRun::start('job-1', [ImportStage::Mounts], now()->getTimestamp()));
+
+    resolve(ImportWaitReporter::class)->follow('job-1');
+
+    $onRetry = null;
+    Sleep::whenFakingSleep(function () use ($store, &$onRetry): void {
+        $onRetry ??= $store->find('job-1')?->wait;
+    });
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->andReturnUsing(function (): \GuzzleHttp\Promise\PromiseInterface {
+            static $calls = 0;
+            $calls++;
+
+            return Create::promiseFor(new Response($calls === 1 ? 429 : 200, [], '{"ok":true}'));
+        });
+
+    makeApiConsumer($client)->fetchBatch([1 => 'data/wow/mount/1']);
+
+    expect($onRetry?->reason)->toBe(ImportWaitReason::RateLimitBackoff)
+        ->and($onRetry->seconds)->toBe(10);
+});
+
+test('an import nobody follows publishes no wait at all', function (): void {
+    $store = new ImportProgressStore;
+    $store->save(ImportRun::start('job-1', [ImportStage::Mounts], now()->getTimestamp()));
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    $client->shouldReceive('getAsync')
+        ->andReturn(Create::promiseFor(new Response(200, [], '{"ok":true}')));
+
+    makeApiConsumer($client)->fetchBatch([1 => 'data/wow/mount/1']);
+
+    expect($store->find('job-1')?->wait)->toBeNull();
 });

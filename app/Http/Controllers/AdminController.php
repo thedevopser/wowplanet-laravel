@@ -45,7 +45,7 @@ class AdminController extends Controller
     {
         $request->validate([
             'command' => ['required', 'string', 'in:app:download-db2,app:wow-data-import,app:wow-data-refresh,app:wow-quest-faction-tag'],
-            'type' => ['nullable', 'string', 'in:all,achievements,quests,mounts,pets,professions,decor,appearances'],
+            'type' => ['nullable', 'string', 'in:all,reference,achievements,quests,mounts,pets,professions,decor,appearances'],
         ]);
 
         /** @var string $command */

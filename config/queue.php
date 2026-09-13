@@ -40,7 +40,7 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            // Doit rester > au timeout du job le plus long (RunImportJob / ImportAppearancesJob = 1800).
+            // Doit rester > au timeout du job le plus long (RunImportJob = 1800).
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 2000),
             'after_commit' => false,
         ],
@@ -69,9 +69,9 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'queue'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            // Must stay above the timeout of the longest job (RunImportJob and
-            // ImportAppearancesJob are at 1800). Laravel's default of 90 would hand
-            // a running import back to the worker every 90 seconds.
+            // Must stay above the timeout of the longest job (RunImportJob is at
+            // 1800). Laravel's default of 90 would hand a running import back to
+            // the worker every 90 seconds.
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 2000),
             'block_for' => null,
             'after_commit' => false,

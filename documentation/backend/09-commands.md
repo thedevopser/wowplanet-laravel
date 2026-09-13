@@ -42,21 +42,20 @@ Télécharge les fichiers CSV DB2 depuis [wago.tools](https://wago.tools) et les
 
 ## `app:wow-data-import`
 
-Importe les données WoW depuis les fichiers locaux (DB2 CSV + SimpleArmory JSON + API Blizzard). Utilise `upsert` — ne supprime pas les données existantes.
+Enchaîne les huit étapes d'un import complet, du socle de référence à la garde-robe, et rend un rapport par étape : lignes créées, mises à jour et supprimées, appels API consommés, durée. Écrit par `upsert` — une ligne absente du catalogue servi par l'API est supprimée par le balayage de rebut de chaque importer, jamais par une troncature.
 
-**Signature** : `app:wow-data-import {--type=all}`
+**Signature** : `app:wow-data-import {--type=all} {--force} {--full} {--limit=}` — **Classe** : `WowDataImportCommand`
 
-**Option** `--type` : `all` (défaut), `achievements`, `quests`, `mounts`, `pets`, `professions`, `decor`
+| Option | Rôle |
+|---|---|
+| `--type` | `all` (défaut) ou une étape seule : `reference`, `achievements`, `quests`, `professions`, `mounts`, `pets`, `decor`, `appearances` |
+| `--force` | Réimporte même si le build WoW n'a pas changé depuis le dernier import |
+| `--full` | Garde-robe : rafraîchit toutes les icônes au lieu des seules manquantes |
+| `--limit` | Borne le nombre de fenêtres balayées par passe, pour un smoke-test sans consommer le quota |
 
-**Ordre des opérations** (pour `--type=all`)
-1. Hauts-faits (SimpleArmory + DB2 `achievement.csv`)
-2. Quêtes (API Blizzard + DB2 area/quest maps + tagage des miroirs)
-3. Montures (SimpleArmory + DB2 `mount.csv`)
-4. Mascottes (SimpleArmory + DB2 `battle_pet_species.csv`)
-5. Professions (DB2 `skill_line_ability.csv` + recettes miroirs)
-6. Décorations (SimpleArmory + DB2 `housetdecor.csv`)
+**Ordre des opérations** et détail du pipeline : voir [Orchestration de l'import](11-import.md). Les étapes déjà à jour pour le build courant sont ignorées, une étape qui échoue n'interrompt pas les suivantes, et la commande sort en échec si l'une d'elles a échoué.
 
-> Limite mémoire : 512 Mo (`ini_set('memory_limit', '512M')`)
+Le panneau d'administration lance exactement la même chaîne via `RunImportJob`, qui rend la main entre deux étapes au lieu de dormir.
 
 ---
 
@@ -76,7 +75,7 @@ Identifie les paires de quêtes miroirs (même nom + même zone, factions diffé
 
 **Signature** : `app:wow-quest-faction-tag`
 
-Cette commande est appelée automatiquement à la fin de `app:wow-data-import --type=quests`.
+Cette commande est appelée automatiquement à la fin de l'étape des quêtes de `app:wow-data-import`.
 
 ---
 

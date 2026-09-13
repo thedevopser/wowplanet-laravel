@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard;
 
-use Illuminate\Redis\Connections\Connection;
+use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Support\Facades\Redis;
 
 /**
@@ -19,6 +19,13 @@ final class HourlyBudgetGuard
 
     private const KEY_PREFIX = 'blizzard_budget:';
 
+    /**
+     * Total monotone, jamais expiré : les appels d'une étape d'import se mesurent par
+     * différence entre son début et sa fin, ce que la fenêtre glissante ne permet pas
+     * dès qu'une minute en sort pendant l'étape.
+     */
+    private const TOTAL_KEY = self::KEY_PREFIX.'total';
+
     private const WINDOW_S = 3600;
 
     /** Une minute de battement au-delà de la fenêtre, pour ne pas perdre le bucket en cours de lecture. */
@@ -29,15 +36,33 @@ final class HourlyBudgetGuard
     /**
      * L'expiration n'est posée qu'à la création de la clé — reconnaissable au total
      * rendu, égal à ce qu'on vient d'ajouter — pour tenir un seul aller-retour par appel.
+     * Le pipeline préserve cet acquis en portant les deux incréments dans le même.
      */
     public function consume(int $count): void
     {
         $key = self::KEY_PREFIX.$this->currentMinute();
         $connection = $this->connection();
 
-        if ((int) $connection->incrby($key, $count) === $count) {
+        /** @var array<int, int|string> $counts */
+        $counts = $connection->pipeline(static function (\Redis $redis) use ($key, $count): void {
+            $redis->incrBy($key, $count);
+            $redis->incrBy(self::TOTAL_KEY, $count);
+        });
+
+        if ((int) ($counts[0] ?? 0) === $count) {
             $connection->expire($key, self::TTL_S);
         }
+    }
+
+    /**
+     * Appels consommés depuis la mise en service du compteur, toutes fenêtres confondues.
+     */
+    public function totalConsumed(): int
+    {
+        /** @var string|null $total */
+        $total = $this->connection()->get(self::TOTAL_KEY);
+
+        return (int) $total;
     }
 
     /**
@@ -88,9 +113,17 @@ final class HourlyBudgetGuard
         return $buckets;
     }
 
-    private function connection(): Connection
+    /**
+     * Le compteur suppose phpredis, seul client installé sur le projet : c'est lui qui
+     * porte le pipeline, donc l'aller-retour unique par appel.
+     */
+    private function connection(): PhpRedisConnection
     {
-        return Redis::connection('budget');
+        $connection = Redis::connection('budget');
+
+        throw_unless($connection instanceof PhpRedisConnection, \RuntimeException::class, 'The Blizzard budget counter needs the phpredis client.');
+
+        return $connection;
     }
 
     private function currentMinute(): int

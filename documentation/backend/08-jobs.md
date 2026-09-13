@@ -6,26 +6,30 @@ Les jobs s'exécutent sur la queue `imports` via le worker dédié (`php artisan
 
 ## `RunImportJob`
 
-Exécute une commande Artisan de façon asynchrone et stocke la sortie dans le cache.
+Moteur d'un import complet : **une passe d'étape par invocation**, puis re-dispatch. Rendre la main entre deux étapes évite qu'un import de plusieurs minutes ne confisque le worker, et traduit une pause de plafond horaire en délai de file plutôt qu'en `sleep`.
+
+Les commandes qui ne sont pas l'import complet — `app:download-db2`, `app:wow-data-refresh`, `app:wow-quest-faction-tag` — gardent leur chemin d'origine : un appel Artisan dont la sortie est publiée telle quelle.
 
 **Propriétés**
 
 | Propriété | Type | Description |
 |---|---|---|
-| `$jobId` | `readonly string` | UUID identifiant ce job |
+| `$jobId` | `readonly string` | UUID identifiant ce job, et clé de suivi |
 | `$command` | `readonly string` | Nom de la commande Artisan (ex. : `app:wow-data-import`) |
-| `$parameters` | `readonly array<string, mixed>` | Paramètres passés à la commande |
-| `$timeout` | `int` | `1200` secondes (20 min) |
+| `$parameters` | `readonly array<string, mixed>` | Options de la commande (`--type`, `--force`, `--full`, `--limit`) |
+| `$timeout` | `int` | `1800` secondes (30 min) |
 
-**Cycle de vie**
+**Cycle de vie d'un import complet**
 
-1. À la création : clé `admin_import:{jobId}` → `{status: 'running'}`
-2. En cas de succès : clé → `{status: 'completed', output: string}`
-3. En cas d'erreur : clé → `{status: 'failed', output: message}`
+1. Première invocation : `ImportPipeline::begin()` publie une étape par entité demandée, les étapes déjà à jour pour ce build étant marquées ignorées.
+2. Chaque invocation : `ImportPipeline::advance()` exécute une passe de la première étape non aboutie, puis republie l'import.
+3. Tant qu'il reste une étape : re-dispatch, retardé du temps d'attente si le plafond horaire est atteint.
 
-Toutes les entrées de cache expirent après **3600 s** (1 h).
+`retryUntil()` est fixé à 24 h : le chaînage peut s'étaler sur plusieurs heures si le quota Blizzard impose des pauses.
 
-**Consulter l'état** : `AdminService::getImportJobStatus(string $jobId)`
+**Reprise** — un worker redémarré reprend à l'étape en cours. Le suivi vit dans le cache et n'est qu'un affichage ; l'autorité durable est `ImportBuildGate`, qui retient en base chaque étape aboutie pour ce build.
+
+**Consulter l'état** : `AdminService::getImportJobStatus(string $jobId)`, servi par `GET /api/admin/import/{jobId}`.
 
 ---
 
@@ -56,23 +60,3 @@ Récupère les données de tous les personnages d'un compte et calcule la progre
 **Consulter l'état** : `CrossCharacterService::getJobStatus(string $jobId)`
 
 ---
-
-## `ImportAppearancesJob`
-
-Import de la garde-robe, reprenable et auto-relâchant. Le job traite une passe bornée en temps (`AppearanceImporter::importChunk()`) puis se re-dispatch pour la suite, au lieu de bloquer le worker pendant les pauses de budget horaire.
-
-**Propriétés**
-
-| Propriété | Type | Description |
-|---|---|---|
-| `$jobId` | `readonly string` | UUID identifiant ce job |
-| `$full` | `readonly bool` | Rafraîchit les icônes de toutes les lignes au lieu des seules lignes sans icône |
-| `$offset` | `readonly int` | Fenêtre d'identifiants où reprendre le balayage |
-| `$timeout` | `int` | `1800` secondes (30 min) |
-
-**Cycle de vie**
-
-1. Tant qu'il reste des fenêtres : clé `admin_import:{jobId}` → `{status: 'running'}`, puis re-dispatch à l'offset rendu, retardé du temps d'attente du budget horaire.
-2. Une fois tout balayé : clé → `{status: 'completed'}`.
-
-`retryUntil()` est fixé à 24 h : le chaînage de re-dispatch peut s'étaler sur plusieurs passes si le quota Blizzard impose des pauses.

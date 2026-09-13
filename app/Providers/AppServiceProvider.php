@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Application\Import\ImportWaitReporter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -14,7 +15,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // Le rapporteur d'attente porte le job suivi : sept importers et le client API
+        // doivent voir le même, sans quoi chacun publierait dans le vide.
+        $this->app->singleton(ImportWaitReporter::class);
     }
 
     public function boot(): void

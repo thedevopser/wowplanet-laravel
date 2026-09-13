@@ -4,180 +4,76 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Infrastructure\Blizzard\BlizzardApiClient;
-use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Blizzard\ImportBuildGate;
-use App\Infrastructure\Mappings\FrozenAreaExpansionMap;
-use App\Infrastructure\Reference\FactionReference;
-use App\Infrastructure\Reference\ReferenceMaps;
-use App\Models\WowAchievement;
-use App\Models\WowAppearance;
-use App\Models\WowDecor;
-use App\Models\WowMount;
-use App\Models\WowPet;
-use App\Models\WowProfession;
-use App\Models\WowQuest;
-use App\Models\WowRecipe;
+use App\Application\Import\ImportPipeline;
+use App\Application\Import\ImportRun;
+use App\Application\Import\ImportStage;
+use App\Application\Import\ImportStepStatus;
+use App\Application\Import\ImportWaitReason;
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
+use Illuminate\Support\Str;
 
+/**
+ * Lance un import complet et le déroule jusqu'au bout, étape par étape.
+ *
+ * Même chaîne et même suivi que l'import lancé depuis le panneau d'administration :
+ * seule la façon d'attendre diffère, la commande dormant là où le job relâche le worker.
+ */
 class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all} {--force : Reimport even when the WoW build has not changed} {--full : Re-fetch every appearance icon instead of only the missing ones} {--limit= : Cap the number of id windows swept per pass (smoke-test)}';
 
-    protected $description = 'Import WoW data from the Blizzard API, the reference tables and the curated collection files';
+    protected $description = 'Import WoW data from the Blizzard API and the reference tables';
 
-    /** @var list<string> */
-    private const ENTITIES = ['achievements', 'quests', 'mounts', 'pets', 'professions', 'decor', 'appearances'];
-
-    /** @var list<string> */
-    private array $pending = [];
-
-    private ?string $currentBuild = null;
-
-    private ImportBuildGate $importBuildGate;
-
-    public function handle(
-        BlizzardBatchImporter $blizzardBatchImporter,
-        ReferenceMaps $referenceMaps,
-        FactionReference $factionReference,
-        BlizzardApiClient $blizzardApiClient,
-        ImportBuildGate $importBuildGate,
-    ): void {
-        $this->importBuildGate = $importBuildGate;
-
+    public function handle(ImportPipeline $importPipeline): int
+    {
         /** @var string $type */
         $type = $this->option('type');
 
-        $this->currentBuild = $blizzardApiClient->currentBuild();
-        $this->pending = $this->entitiesToImport($type);
+        $stages = ImportStage::requested($type);
 
-        if ($this->pending === []) {
-            $this->info(sprintf(
-                'Build %s already imported for every requested entity. Nothing to do — pass --force to reimport anyway.',
-                $this->currentBuild ?? 'unknown',
-            ));
+        if ($stages === []) {
+            $this->error(sprintf('Unknown import type "%s".', $type));
 
-            return;
+            return self::FAILURE;
         }
 
-        $this->info(sprintf('Starting WoW Data Import (type: %s, build: %s)', $type, $this->currentBuild ?? 'unknown'));
+        $importRun = $importPipeline->begin((string) Str::uuid(), $stages, (bool) $this->option('force'));
+
+        while (! $importPipeline->isDone($importRun)) {
+            $importRun = $importPipeline->advance($importRun, (bool) $this->option('full'), $this->limit());
+            $this->pauseIfNeeded($importRun);
+        }
+
         $this->newLine();
 
-        if ($this->isPending('achievements')) {
-            $this->info('Importing Achievements from SimpleArmory + Blizzard API...');
-            $blizzardBatchImporter->importAchievements();
-            $this->markImported('achievements');
-            $this->newLine();
+        foreach (explode(PHP_EOL, $importRun->summary(now()->getTimestamp())) as $line) {
+            $this->line($line);
         }
 
-        if ($this->isPending('quests')) {
-            $this->info('Loading frozen area→expansion map and reference maps...');
-            $areaExpansionMap = FrozenAreaExpansionMap::load();
-            $questExpansionMap = $referenceMaps->questExpansions();
-            $questFactionMap = $referenceMaps->questFactions();
-            $zoneFactionMap = $referenceMaps->zoneFactions();
-            $this->info(sprintf(
-                'Importing Quests from API (areas: %d, quest CT overrides: %d, faction quests: %d, faction zones: %d)...',
-                count($areaExpansionMap),
-                count($questExpansionMap),
-                count($questFactionMap),
-                count($zoneFactionMap),
-            ));
-            $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
-            $blizzardBatchImporter->tagMirrorQuestFactions($factionReference->factions());
-            $this->markImported('quests');
-            $this->newLine();
-        }
-
-        if ($this->isPending('mounts')) {
-            $this->info('Importing Mounts from SimpleArmory + Blizzard API...');
-            $blizzardBatchImporter->importMounts();
-            $this->markImported('mounts');
-            $this->newLine();
-        }
-
-        if ($this->isPending('pets')) {
-            $this->info('Importing Pets from SimpleArmory + Blizzard API...');
-            $blizzardBatchImporter->importPets();
-            $this->markImported('pets');
-            $this->newLine();
-        }
-
-        if ($this->isPending('professions')) {
-            $recipeFactionMap = $referenceMaps->recipeFactions();
-            $this->info(sprintf('Importing Professions from Blizzard API (factions: %d)...', count($recipeFactionMap)));
-            $blizzardBatchImporter->importProfessions($recipeFactionMap);
-            $blizzardBatchImporter->tagMirrorRecipeFactions();
-            $this->markImported('professions');
-            $this->newLine();
-        }
-
-        if ($this->isPending('decor')) {
-            $this->info('Importing Decor from SimpleArmory + Blizzard API...');
-            $blizzardBatchImporter->importDecor();
-            $this->markImported('decor');
-            $this->newLine();
-        }
-
-        if ($this->isPending('appearances')) {
-            $jobId = (string) \Illuminate\Support\Str::uuid();
-            $this->info('Dispatching resumable appearance import (queue: imports)...');
-            dispatch(new \App\Jobs\ImportAppearancesJob($jobId, (bool) $this->option('full')));
-            $this->markImported('appearances');
-            $this->newLine();
-        }
-
-        $this->info('Import Complete!');
-        $this->displayStats();
+        return $importRun->status() === ImportStepStatus::Failed ? self::FAILURE : self::SUCCESS;
     }
 
-    private function isPending(string $entity): bool
+    private function limit(): ?int
     {
-        return in_array($entity, $this->pending, true);
+        /** @var string|null $limit */
+        $limit = $this->option('limit');
+
+        return $limit === null ? null : max(1, (int) $limit);
     }
 
     /**
-     * @return list<string>
+     * Le plafond horaire est la seule attente que la commande subit : les autres sont
+     * déjà passées quand la passe rend la main.
      */
-    private function entitiesToImport(string $type): array
+    private function pauseIfNeeded(ImportRun $importRun): void
     {
-        $requested = array_values(array_filter(
-            self::ENTITIES,
-            static fn (string $entity): bool => $type === 'all' || $type === $entity,
-        ));
-
-        if ($this->option('force')) {
-            return $requested;
+        if ($importRun->wait?->reason !== ImportWaitReason::HourlyBudget) {
+            return;
         }
 
-        return array_values(array_filter(
-            $requested,
-            fn (string $entity): bool => ! $this->importBuildGate->isUpToDate($entity, $this->currentBuild),
-        ));
-    }
+        $this->warn(sprintf('  %s', $importRun->wait->describe()));
 
-    private function markImported(string $entity): void
-    {
-        if ($this->currentBuild !== null) {
-            $this->importBuildGate->remember($entity, $this->currentBuild);
-        }
-    }
-
-    private function displayStats(): void
-    {
-        $this->newLine();
-        $this->table(
-            ['Type', 'Total', 'Active', 'With Icon'],
-            [
-                ['Quests', WowQuest::query()->count(), WowQuest::query()->where('is_active', true)->count(), '—'],
-                ['Achievements', WowAchievement::query()->count(), WowAchievement::query()->where('is_active', true)->count(), WowAchievement::query()->whereNotNull('icon_url')->count()],
-                ['Mounts', WowMount::query()->count(), WowMount::query()->where('is_active', true)->count(), WowMount::query()->whereNotNull('icon_url')->count()],
-                ['Pets', WowPet::query()->count(), WowPet::query()->where('is_active', true)->count(), WowPet::query()->whereNotNull('icon_url')->count()],
-                ['Professions', WowProfession::query()->count(), WowProfession::query()->where('is_active', true)->count(), '—'],
-                ['Recipes', WowRecipe::query()->count(), WowRecipe::query()->where('is_active', true)->count(), '—'],
-                ['Decor', WowDecor::query()->count(), WowDecor::query()->where('is_active', true)->count(), WowDecor::query()->whereNotNull('icon_url')->count()],
-                ['Appearances', WowAppearance::query()->count(), WowAppearance::query()->where('is_active', true)->count(), WowAppearance::query()->whereNotNull('icon_url')->count()],
-            ]
-        );
+        Sleep::sleep($importRun->wait->seconds);
     }
 }

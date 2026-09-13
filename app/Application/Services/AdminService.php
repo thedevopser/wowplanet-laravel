@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Application\Services;
 
+use App\Application\Import\ImportProgressStore;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class AdminService
@@ -16,6 +16,8 @@ class AdminService
         'app:wow-data-refresh',
         'app:wow-quest-faction-tag',
     ];
+
+    public function __construct(private readonly ImportProgressStore $importProgressStore) {}
 
     /**
      * @param  array<string, mixed>  $parameters
@@ -87,13 +89,10 @@ class AdminService
     }
 
     /**
-     * @return array{status: string, output: string|null}
+     * @return array<string, mixed>
      */
     public function getImportJobStatus(string $jobId): array
     {
-        /** @var array{status: string, output: string|null} $result */
-        $result = Cache::get('admin_import:'.$jobId, ['status' => 'not_found', 'output' => null]);
-
-        return $result;
+        return $this->importProgressStore->payload($jobId);
     }
 }

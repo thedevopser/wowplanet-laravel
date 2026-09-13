@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Application\DTOs\AppearanceImportProgress;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Blizzard\ImportBuildGate;
 use App\Infrastructure\Reference\FactionReference;
 use App\Infrastructure\Reference\ReferenceMaps;
-use App\Jobs\ImportAppearancesJob;
 use App\Models\WowImportState;
-use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
-    Bus::fake();
+    Sleep::fake();
 
     $this->importerMock = $this->mock(BlizzardBatchImporter::class);
     $this->referenceMapsMock = $this->mock(ReferenceMaps::class);
@@ -28,7 +28,18 @@ beforeEach(function (): void {
     $this->factionReferenceMock->shouldReceive('factions')->andReturn([])->byDefault();
 });
 
+/**
+ * Le socle se synchronise depuis wago, hors de portée d'un test de commande : le tenir
+ * pour déjà chargé sur ce build laisse la chaîne dérouler les sept entités.
+ */
+function referenceAlreadyLoaded(): void
+{
+    (new ImportBuildGate)->remember('reference', '12.1.0_68914');
+}
+
 test('command imports all types by default', function (): void {
+    referenceAlreadyLoaded();
+
     $this->importerMock->shouldReceive('importAchievements')->once();
     $this->importerMock->shouldReceive('importQuests')->once();
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
@@ -37,10 +48,11 @@ test('command imports all types by default', function (): void {
     $this->importerMock->shouldReceive('importProfessions')->once();
     $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
     $this->importerMock->shouldReceive('importDecor')->once();
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->once()
+        ->andReturn(new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0));
 
     $this->artisan('app:wow-data-import')->assertSuccessful();
-
-    Bus::assertDispatched(ImportAppearancesJob::class);
 });
 
 test('command imports only quests when --type=quests', function (): void {
@@ -75,31 +87,92 @@ test('command imports only professions when --type=professions', function (): vo
     $this->artisan('app:wow-data-import', ['--type' => 'professions'])->assertSuccessful();
 });
 
-test('command dispatches a full appearance import job', function (): void {
-    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--full' => true])->assertSuccessful();
-
-    Bus::assertDispatched(fn (\App\Jobs\ImportAppearancesJob $importAppearancesJob): bool => $importAppearancesJob->full && $importAppearancesJob->offset === 0);
+test('an unknown type is refused rather than silently importing nothing', function (): void {
+    $this->artisan('app:wow-data-import', ['--type' => 'dragons'])->assertFailed();
 });
 
-test('command dispatches an incremental appearance import job by default', function (): void {
+// ─── garde-robe ─────────────────────────────────────────────
+
+test('the wardrobe sweep runs inline until its last window', function (): void {
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->twice()
+        ->andReturn(
+            new AppearanceImportProgress(done: false, offset: 143, total: 286, secondsUntilBudget: 0),
+            new AppearanceImportProgress(done: true, offset: 286, total: 286, secondsUntilBudget: 0),
+        );
+
     $this->artisan('app:wow-data-import', ['--type' => 'appearances'])->assertSuccessful();
-
-    Bus::assertDispatched(fn (\App\Jobs\ImportAppearancesJob $importAppearancesJob): bool => $importAppearancesJob->full === false);
 });
 
-test('command displays stats table after import', function (): void {
-    $this->importerMock->shouldReceive('importAchievements', 'importQuests', 'tagMirrorQuestFactions', 'importMounts', 'importPets', 'importProfessions', 'tagMirrorRecipeFactions', 'importDecor');
+test('a full refresh is passed down to the wardrobe sweep', function (): void {
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->once()
+        ->withArgs(fn (bool $full): bool => $full)
+        ->andReturn(new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0));
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--full' => true])->assertSuccessful();
+});
+
+test('the window cap is passed down to the wardrobe sweep', function (): void {
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->once()
+        ->withArgs(fn (bool $full, int $offset, int $timeBox, ?int $limit): bool => $limit === 3)
+        ->andReturn(new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0));
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances', '--limit' => 3])->assertSuccessful();
+});
+
+test('the command waits out the hourly ceiling and says so', function (): void {
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->twice()
+        ->andReturn(
+            new AppearanceImportProgress(done: false, offset: 0, total: 286, secondsUntilBudget: 240),
+            new AppearanceImportProgress(done: true, offset: 286, total: 286, secondsUntilBudget: 0),
+        );
+
+    $this->artisan('app:wow-data-import', ['--type' => 'appearances'])
+        ->expectsOutputToContain('plafond horaire')
+        ->assertSuccessful();
+
+    Sleep::assertSlept(fn (\DateInterval $dateInterval): bool => $dateInterval->s === 240);
+});
+
+// ─── rapport de fin ─────────────────────────────────────────
+
+test('the command reports what each stage did', function (): void {
+    $this->importerMock->shouldReceive('importMounts')->once();
+
+    $this->artisan('app:wow-data-import', ['--type' => 'mounts'])
+        ->expectsOutputToContain('Montures')
+        ->expectsOutputToContain('Import terminé')
+        ->assertSuccessful();
+});
+
+test('a stage that fails is reported and fails the command without stopping the rest', function (): void {
+    referenceAlreadyLoaded();
+
+    $this->importerMock->shouldReceive('importAchievements')->once()->andThrow(new RuntimeException('achievement tree unavailable'));
+    $this->importerMock->shouldReceive('importQuests')->once();
+    $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
+    $this->importerMock->shouldReceive('importMounts')->once();
+    $this->importerMock->shouldReceive('importPets')->once();
+    $this->importerMock->shouldReceive('importProfessions')->once();
+    $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
+    $this->importerMock->shouldReceive('importDecor')->once();
+    $this->importerMock->shouldReceive('importAppearanceChunk')
+        ->once()
+        ->andReturn(new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0));
 
     $this->artisan('app:wow-data-import')
-        ->assertSuccessful()
-        ->expectsOutputToContain('Import Complete!');
+        ->expectsOutputToContain('achievement tree unavailable')
+        ->assertFailed();
 });
 
 // ─── détection de build ─────────────────────────────────────
 
 test('it imports nothing when every requested entity already sits on the current build', function (): void {
     $gate = new ImportBuildGate;
-    foreach (['achievements', 'quests', 'mounts', 'pets', 'professions', 'decor', 'appearances'] as $entity) {
+    foreach (['reference', 'achievements', 'quests', 'mounts', 'pets', 'professions', 'decor', 'appearances'] as $entity) {
         $gate->remember($entity, '12.1.0_68914');
     }
 
@@ -108,15 +181,12 @@ test('it imports nothing when every requested entity already sits on the current
     $this->importerMock->shouldNotReceive('importMounts');
 
     $this->artisan('app:wow-data-import')
-        ->expectsOutputToContain('12.1.0_68914')
+        ->expectsOutputToContain('déjà à jour')
         ->assertSuccessful();
-
-    Bus::assertNotDispatched(ImportAppearancesJob::class);
 });
 
 test('it reimports an unchanged build when --force is passed', function (): void {
-    $gate = new ImportBuildGate;
-    $gate->remember('quests', '12.1.0_68914');
+    (new ImportBuildGate)->remember('quests', '12.1.0_68914');
 
     $this->importerMock->shouldReceive('importQuests')->once();
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();

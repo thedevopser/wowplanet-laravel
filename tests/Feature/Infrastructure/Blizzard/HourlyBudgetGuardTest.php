@@ -121,8 +121,39 @@ test('a minute bucket carries an expiry so nothing has to purge it', function ()
 
     $expectedKey = 'blizzard_budget:'.intdiv(now()->getTimestamp(), 60);
 
-    expect($connection->keys('*'))->toHaveCount(1)
+    expect($connection->keys('*'))->toHaveCount(2)
         ->and($connection->ttl($expectedKey))->toBeGreaterThan(3600)->toBeLessThanOrEqual(3660);
+});
+
+test('the running total survives the minutes leaving the sliding window', function (): void {
+    $guard = new HourlyBudgetGuard;
+
+    $guard->consume(10);
+
+    Date::setTestNow('2026-07-19 12:00:00');
+
+    $guard->consume(5);
+
+    expect($guard->usedInWindow())->toBe(5)
+        ->and($guard->totalConsumed())->toBe(15);
+});
+
+test('the running total starts at zero and counts batches as a whole', function (): void {
+    $guard = new HourlyBudgetGuard;
+
+    expect($guard->totalConsumed())->toBe(0);
+
+    $guard->consume(500);
+
+    expect($guard->totalConsumed())->toBe(500);
+});
+
+test('the running total never expires, so a step can be measured across an hour', function (): void {
+    $guard = new HourlyBudgetGuard;
+
+    $guard->consume(1);
+
+    expect(Redis::connection('budget')->ttl('blizzard_budget:total'))->toBe(-1);
 });
 
 test('two concurrent processes never overwrite each others count', function (): void {

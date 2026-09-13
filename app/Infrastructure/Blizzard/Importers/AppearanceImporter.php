@@ -63,7 +63,8 @@ final readonly class AppearanceImporter
 
     /**
      * Import synchrone bloquant (CLI direct / tests). En prod le mode fluide passe par
-     * ImportAppearancesJob, qui appelle importChunk() et se re-dispatch au lieu de bloquer.
+     * RunImportJob, qui appelle importChunk() par ImportPipeline et se re-dispatch au
+     * lieu de bloquer le worker.
      *
      * @param  int|null  $limit  Borne le nombre de fenêtres balayées par passe (smoke-test sans consommer le quota API)
      */

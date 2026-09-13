@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard;
 
+use App\Application\DTOs\AppearanceImportProgress;
 use App\Infrastructure\Blizzard\Importers\AchievementImporter;
 use App\Infrastructure\Blizzard\Importers\AppearanceImporter;
 use App\Infrastructure\Blizzard\Importers\DecorImporter;
@@ -62,6 +63,14 @@ class BlizzardBatchImporter
     public function importAppearances(bool $full = false, ?int $limit = null): void
     {
         $this->appearanceImporter->import($full, $limit);
+    }
+
+    /**
+     * Une passe bornée du balayage de la garde-robe, reprenable à l'offset qu'elle rend.
+     */
+    public function importAppearanceChunk(bool $full, int $offset, int $timeBoxSeconds, ?int $limit = null): AppearanceImportProgress
+    {
+        return $this->appearanceImporter->importChunk($full, $offset, $timeBoxSeconds, $limit);
     }
 
     /**

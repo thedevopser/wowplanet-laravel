@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Concerns;
 
+use App\Application\Import\ImportWait;
+use App\Application\Import\ImportWaitReporter;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\EachPromise;
@@ -52,7 +54,7 @@ trait ImportsFromBlizzardApi
             if ($attempt <= self::MAX_RETRIES && $this->isRetryableError($message)) {
                 $delay = self::RATE_LIMIT_WAIT_S * $attempt;
                 $this->info(sprintf('Retryable error, waiting %ds (attempt %d/%d)...', $delay, $attempt, self::MAX_RETRIES));
-                Sleep::sleep($delay);
+                $this->pause(ImportWait::rateLimitBackoff($delay), $delay);
 
                 return $this->fetchWithRetry($endpoint, $attempt + 1);
             }
@@ -98,13 +100,13 @@ trait ImportsFromBlizzardApi
             if ($attempt > 0) {
                 $delay = self::RATE_LIMIT_WAIT_S * (2 ** ($attempt - 1));
                 $this->info(sprintf('  Retrying %d failed requests (attempt %d/%d, waiting %ds, concurrency stepped down to %d)...', count($pending), $attempt, $maxAttempts, $delay, $currentConcurrency));
-                Sleep::sleep($delay);
+                $this->pause(ImportWait::rateLimitBackoff($delay), $delay);
             }
 
             $failed = [];
 
             /** @var array<string|int, array{state: string, value?: \Psr\Http\Message\ResponseInterface, reason?: \Throwable}> $settled */
-            $settled = $this->settlePool($pending, $namespace, $currentConcurrency);
+            $settled = $this->inFlight(count($pending), fn (): array => $this->settlePool($pending, $namespace, $currentConcurrency));
 
             foreach ($settled as $key => $result) {
                 if ($result['state'] === 'fulfilled' && isset($result['value'])) {
@@ -323,6 +325,48 @@ trait ImportsFromBlizzardApi
         $this->info(sprintf('  %d %s deleted (no longer in catalog).', count($staleIds), $label));
 
         return count($staleIds);
+    }
+
+    /**
+     * Publie l'attente au suivi, puis dort. Hors import suivi, le rapporteur ne fait rien.
+     */
+    private function pause(ImportWait $importWait, int $seconds): void
+    {
+        $this->waitReporter()->waiting($importWait);
+
+        Sleep::sleep($seconds);
+
+        $this->waitReporter()->working();
+    }
+
+    /**
+     * Publie la taille du lot en vol le temps qu'il se dénoue. Sans cela, un balayage
+     * de plusieurs centaines de requêtes est indistinguable d'un import bloqué.
+     *
+     * @template TResult
+     *
+     * @param  callable(): TResult  $settle
+     * @return TResult
+     */
+    private function inFlight(int $requests, callable $settle): mixed
+    {
+        $this->waitReporter()->waiting(ImportWait::batch($requests));
+
+        try {
+            return $settle();
+        } finally {
+            $this->waitReporter()->working();
+        }
+    }
+
+    /**
+     * Le rapporteur est résolu à l'usage plutôt qu'injecté : le trait est utilisé par
+     * sept importers immuables dont aucun n'a à connaître le job en cours, et il tient
+     * déjà ses effets de bord — journal, configuration — par les mêmes façades.
+     */
+    private function waitReporter(): ImportWaitReporter
+    {
+        return resolve(ImportWaitReporter::class);
     }
 
     protected function info(string $message): void

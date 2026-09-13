@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Jobs\ComputeCrossCharacterJob;
-use App\Jobs\ImportAppearancesJob;
 use App\Jobs\RunImportJob;
 
 /**
@@ -14,7 +13,6 @@ use App\Jobs\RunImportJob;
 test('every queue connection waits longer than the slowest job before retrying', function (string $connection): void {
     $longestTimeout = max(
         (new RunImportJob('job', 'app:wow-data-import'))->timeout,
-        (new ImportAppearancesJob('job', false))->timeout,
         (new ComputeCrossCharacterJob('job', 'bnet', [], 'token'))->timeout,
     );
 
