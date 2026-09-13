@@ -7,19 +7,26 @@ namespace App\Infrastructure\Blizzard\Importers;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Infrastructure\Taxonomy\CollectionTaxonomyReader;
+use App\Infrastructure\Taxonomy\TaxonomyEntry;
 use App\Models\WowMount;
 
 /**
- * Catalogue des montures = index de l'API officielle ∩ liste curée SimpleArmory.
+ * Catalogue des montures : l'API tranche l'existence, la taxonomie curée tranche le rangement.
  *
  * L'API fait autorité sur l'existence et le nom : elle n'expose que ce qui est live
  * sur retail, là où SimpleArmory (construit sur les DB2 dataminés du client) référence
- * déjà le contenu des patchs à venir. SimpleArmory fait autorité sur la présentation —
- * extension, source fine, icône — que l'API n'expose pas.
+ * déjà le contenu des patchs à venir. Une monture absente de l'API n'est donc pas encore
+ * obtenable et reste hors catalogue.
  *
- * Une monture absente de l'API n'est pas encore obtenable ; une monture absente de
- * SimpleArmory est une entrée non curée (doublon, variante PNJ, nom vide). Les deux
- * sont exclues du catalogue.
+ * La catégorie et la source viennent de `wow_collection_taxonomy`, plus du fichier curé.
+ * Une monture que la taxonomie ne range pas entre quand même, sans rangement, et figure au
+ * rapport d'entrées à arbitrer : l'invisibilité silencieuse était le défaut à corriger.
+ *
+ * Le fichier curé ne sert plus qu'à l'icône et à l'identifiant de sort, que l'API n'expose
+ * pas encore ici. Il reste donc une source requise, et son absence interrompt l'import
+ * plutôt que d'effacer les icônes de tout le catalogue.
  */
 final readonly class MountImporter
 {
@@ -27,6 +34,7 @@ final readonly class MountImporter
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
+        private CollectionTaxonomyReader $collectionTaxonomyReader,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
@@ -43,7 +51,7 @@ final readonly class MountImporter
             return;
         }
 
-        $rows = $this->buildRows($saMounts, $frenchNames);
+        $rows = $this->buildRows($saMounts, $frenchNames, $this->collectionTaxonomyReader->for(CollectionEntity::Mount));
 
         $this->saveRows($rows);
     }
@@ -110,23 +118,26 @@ final readonly class MountImporter
     /**
      * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saMounts
      * @param  array<int, string>  $frenchNames
+     * @param  array<int, TaxonomyEntry>  $taxonomy
      * @return list<array{id: int, name_fr: string, source: string|null, category: string|null, source_spell_id: int|null, icon_url: string|null, is_active: bool}>
      */
-    private function buildRows(array $saMounts, array $frenchNames): array
+    private function buildRows(array $saMounts, array $frenchNames, array $taxonomy): array
     {
         $rows = [];
-        $notCurated = 0;
+        $awaitingArbitration = 0;
         $withIcons = 0;
 
         foreach ($frenchNames as $id => $nameFr) {
-            $mount = $saMounts[$id] ?? null;
-            if ($mount === null) {
-                $notCurated++;
-
-                continue;
+            $entry = $taxonomy[$id] ?? null;
+            if (! $entry instanceof TaxonomyEntry) {
+                $awaitingArbitration++;
             }
 
-            $iconUrl = $mount['icon'] !== null ? SimpleArmoryParser::buildIconUrl($mount['icon']) : null;
+            $mount = $saMounts[$id] ?? null;
+
+            $iconUrl = $mount !== null && $mount['icon'] !== null
+                ? SimpleArmoryParser::buildIconUrl($mount['icon'])
+                : null;
             if ($iconUrl !== null) {
                 $withIcons++;
             }
@@ -134,9 +145,9 @@ final readonly class MountImporter
             $rows[] = [
                 'id' => $id,
                 'name_fr' => $nameFr,
-                'source' => $mount['source'] !== '' ? $mount['source'] : null,
-                'category' => $mount['category'] !== '' ? $mount['category'] : null,
-                'source_spell_id' => $mount['spellid'] > 0 ? $mount['spellid'] : null,
+                'source' => $entry?->source,
+                'category' => $entry?->category,
+                'source_spell_id' => $mount !== null && $mount['spellid'] > 0 ? $mount['spellid'] : null,
                 'icon_url' => $iconUrl,
                 'is_active' => true,
             ];
@@ -145,7 +156,7 @@ final readonly class MountImporter
         $notLive = count(array_diff_key($saMounts, $frenchNames));
 
         $this->info(sprintf('  %d mounts in catalog, %d with icon URL.', count($rows), $withIcons));
-        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
+        $this->info(sprintf('  %d skipped (not in live API index), %d awaiting arbitration (absent from the taxonomy).', $notLive, $awaitingArbitration));
 
         return $rows;
     }

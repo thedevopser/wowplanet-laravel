@@ -135,11 +135,13 @@ Chaque importeur lit les données sources, les transforme et les sauvegarde via 
 | Classe | Source principale | Modèle cible |
 |---|---|---|
 | `AchievementImporter` | `achievements.json` (SimpleArmory) + `achievement.csv` (DB2) | `WowAchievement` |
-| `MountImporter` | `mounts.json` + `mount.csv` | `WowMount` |
-| `PetImporter` | `pets.json` + `battle_pet_species.csv` | `WowPet` |
-| `DecorImporter` | `decors.json` + `house_decor.csv` | `WowDecor` |
+| `MountImporter` | `mount/index` (API) + taxonomie curée + `mounts.json` pour l'icône | `WowMount` |
+| `PetImporter` | `pet/index` (API) + taxonomie curée + `pets.json` pour l'icône | `WowPet` |
+| `DecorImporter` | `decor/index` (API) + taxonomie curée + `decors.json` pour l'icône | `WowDecor` |
 | `QuestImporter` | API Blizzard (liste par zone) + DB2 area/quest maps | `WowQuest` |
 | `ProfessionImporter` | `skill_line_ability.csv` + API Blizzard | `WowProfession`, `WowRecipe` |
+
+Pour les trois collections, le partage d'autorité est explicite : **l'API tranche l'existence**, la **taxonomie curée tranche le rangement**. Une entrée que l'API ignore n'entre pas au catalogue ; une entrée que la taxonomie ne range pas entre sans catégorie ni source, et figure au rapport d'entrées à arbitrer. Voir [Taxonomie des collections](#taxonomie-des-collections-appinfrastructuretaxonomy).
 
 ---
 
@@ -261,9 +263,61 @@ Parse les fichiers JSON de [SimpleArmory](https://simplearmory.com) (mounts, pet
 | Méthode | Description |
 |---|---|
 | `parseAchievements()` | Parse `achievements.json`, retourne `array<int, array{category, subcategory, expansion_id, icon, points, faction}>`. |
-| `parseCollection(string $filename)` | Parse `mounts.json`, `pets.json` ou `decors.json`. |
+| `parseCollection(string $filename)` | Parse `mounts.json`, `pets.json` ou `decors.json`. Un identifiant listé sous plusieurs catégories garde sa **dernière** occurrence. |
 | `buildIconUrl(string $iconName)` | Construit l'URL d'icône Wowhead. |
 | `resolveExpansionId(string $categoryName)` | Résout l'extension depuis le nom de catégorie SimpleArmory. |
+
+Les fichiers de collection ne servent plus qu'à **amorcer la taxonomie** et à fournir icône et identifiants secondaires. Le rangement affiché, lui, vit en base.
+
+---
+
+## Taxonomie des collections (`app/Infrastructure/Taxonomy/`)
+
+Le rangement des montures, mascottes et décorations — catégorie de niveau 1, source de niveau 2 — est de la curation éditoriale que ni l'API Blizzard ni les DB2 ne portent. L'API n'expose qu'un vocabulaire de onze valeurs de `source.type`, là où la curation compte 170 sources pour les seules montures. Cette taxonomie est donc **notre donnée** : amorcée une fois depuis SimpleArmory, puis enrichie sans jamais être réécrite.
+
+Elle vit dans la table `wow_collection_taxonomy`, hors de la famille `wow_ref_*` pour qu'aucun traitement balayant les tables de référence DB2 ne puisse vider la curation.
+
+### `CollectionEntity`
+
+Énumération des trois collections curées. La valeur de chaque cas (`mount`, `pet`, `decor`) est le discriminant stocké en base : la changer invaliderait la taxonomie existante.
+
+| Méthode | Description |
+|---|---|
+| `fromOption(string $name): self` | Résout l'entité d'une option de commande, insensible à la casse. Lève `InvalidArgumentException` en listant les entités connues. |
+| `simpleArmoryFile(): string` | Nom du fichier curé dont cette collection s'amorce. |
+
+### `TaxonomyEntry`
+
+Objet de valeur immuable portant le rangement d'une entrée : `?string $category` et `?string $source`, en anglais brut, traduits à l'affichage par les onglets de collection. Les deux peuvent être nuls — c'est une entrée rangée nulle part **en connaissance de cause**, à ne pas confondre avec l'absence d'entrée, qui est à arbitrer.
+
+### `CollectionTaxonomyLoader`
+
+Amorçage et enrichissement depuis les fichiers curés.
+
+**Méthode** : `load(CollectionEntity $collectionEntity): array{read: int, inserted: int, skipped: int}`
+
+Le chargement est strictement additif : `insertOrIgnore` laisse en place toute ligne connue, si bien que la première exécution amorce et que les suivantes n'ajoutent que les entrées d'un nouveau patch. C'est ce qui fait survivre un arbitrage manuel. Le dédoublonnage est délégué à `SimpleArmoryParser`, qui garde la dernière occurrence d'un identifiant : c'est ce qu'a fait chaque import jusqu'ici, donc ce qui a produit le rangement en place.
+
+### `CollectionTaxonomyReader`
+
+**Méthode** : `for(CollectionEntity $collectionEntity): array<int, TaxonomyEntry>`
+
+Charge la taxonomie d'une collection d'un seul coup, indexée par identifiant Blizzard. Quelques milliers de lignes de deux libellés coûtent moins qu'une requête par entrée pendant l'import.
+
+### `ApiSourceTypeVocabulary`
+
+Conversion du vocabulaire de source de l'API vers celui de la taxonomie, comme **valeur d'attente** pour une entrée non encore rangée — jamais comme remplacement d'une source curée.
+
+| Méthode | Description |
+|---|---|
+| `toPendingSource(?string $sourceType): ?string` | Convertit l'un des onze types de l'API ; rend `null` pour un type inconnu plutôt que d'inventer un libellé. |
+| `pendingSources(): list<string>` | Les onze libellés produits. |
+
+Les onze libellés existent déjà dans les dictionnaires de traduction des trois onglets de collection, ce qu'un test vérifie. N'en ajouter un douzième qu'en l'ajoutant aussi côté front, sans quoi il s'afficherait en anglais.
+
+### `TaxonomySourceUnavailableException`
+
+Levée quand le fichier curé est absent, illisible ou vide. Un amorçage qui ne trouve rien et se tait laisserait croire la taxonomie à jour alors qu'elle est restée vide.
 
 ---
 

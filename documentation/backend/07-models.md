@@ -205,3 +205,24 @@ Inventaire du magasin de fichiers de référence : un fichier DB2 téléchargé,
 Les lignes s'accumulent d'un build à l'autre : c'est cet inventaire que la purge du magasin consommera. `row_count` sert de garde-fou à la synchronisation suivante, qui refuse une source dont la volumétrie s'effondre sous la moitié du dernier chargement plutôt que d'écraser le socle.
 
 Le nom échappe volontairement au préfixe `wow_ref_`, pour qu'aucun traitement balayant la famille des tables de référence ne vide l'inventaire avec elles.
+
+---
+
+## `WowCollectionTaxonomy`
+
+Table `wow_collection_taxonomy`. Rangement curé d'une entrée de collection : sa catégorie de niveau 1 et sa source de niveau 2.
+
+| Colonne | Rôle |
+|---|---|
+| `entity` | Collection concernée : `mount`, `pet` ou `decor`. |
+| `entry_id` | Identifiant Blizzard — id de monture, species id de mascotte, id de décoration. |
+| `category` | Catégorie de niveau 1, libellé anglais brut, nullable. |
+| `source` | Source de niveau 2, libellé anglais brut, nullable. |
+
+Clé primaire composite `(entity, entry_id)` : deux collections peuvent curer le même identifiant sans se gêner, et la table n'a pas de séquence — les identifiants viennent de Blizzard. **Toutes les écritures passent par `insertOrIgnore` au niveau du constructeur de requête** ; un `save()` sur une instance chargée ne saurait pas la retrouver.
+
+C'est notre donnée, pas celle de l'API, qui n'expose qu'un vocabulaire de onze valeurs là où la curation en compte 170 pour les seules montures. Amorcée une fois depuis SimpleArmory, elle n'est ensuite qu'enrichie : un rafraîchissement ajoute les entrées inconnues et ne touche jamais à une ligne existante, pour qu'un ajustement manuel y survive.
+
+Une ligne dont la catégorie est nulle est une entrée rangée nulle part **en connaissance de cause** ; l'absence de ligne est une entrée à arbitrer, que `app:collection-taxonomy-report` liste. Ne pas confondre les deux.
+
+Le nom échappe au préfixe `wow_ref_` pour la même raison que `wow_reference_downloads` : aucun balayage des tables de référence DB2 ne doit pouvoir vider la curation.

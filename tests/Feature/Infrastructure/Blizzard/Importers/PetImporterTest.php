@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\PetImporter;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Models\WowCollectionTaxonomy;
 use App\Models\WowPet;
 use Illuminate\Support\Sleep;
 
@@ -30,13 +32,26 @@ function mockPetIndex(\Mockery\MockInterface $mock, array $pets): void
         ]);
 }
 
-test('it imports pets from SA JSON with French names from the API', function (): void {
+/**
+ * Range une mascotte dans la taxonomie curée.
+ */
+function curatePet(int $entryId, ?string $category, ?string $source): void
+{
+    WowCollectionTaxonomy::factory()->create([
+        'entity' => CollectionEntity::Pet,
+        'entry_id' => $entryId,
+        'category' => $category,
+        'source' => $source,
+    ]);
+}
+
+test('it imports pets with French names from the API and the ranking from the taxonomy', function (): void {
     writePetsJson([
         [
-            'name' => 'Classic',
+            'name' => 'Ignorée, le rangement ne vient plus du fichier',
             'subcats' => [
                 [
-                    'name' => 'Drop',
+                    'name' => 'Ignorée aussi',
                     'items' => [
                         ['ID' => 300, 'name' => 'TestPet', 'icon' => 'pet_test', 'spellid' => 9876, 'creatureId' => 111, 'itemId' => null, 'faction' => null, 'quality' => 3],
                         ['ID' => 301, 'name' => 'OtherPet', 'icon' => 'pet_other', 'spellid' => 9877, 'creatureId' => 222, 'itemId' => null, 'faction' => null, 'quality' => 2],
@@ -45,6 +60,8 @@ test('it imports pets from SA JSON with French names from the API', function ():
             ],
         ],
     ]);
+    curatePet(300, 'Classic', 'Drop');
+    curatePet(301, 'Legion', 'Quest');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -63,9 +80,10 @@ test('it imports pets from SA JSON with French names from the API', function ():
     expect(WowPet::query()->find(300)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/pet_test.jpg');
     expect(WowPet::query()->find(300)->is_active)->toBeTrue();
     expect(WowPet::query()->find(301)->name_fr)->toBe('Petit chat');
+    expect(WowPet::query()->find(301)->source)->toBe('Quest');
 });
 
-test('it skips pets absent from either source and deletes those dropped from the catalog', function (): void {
+test('it keeps a pet the taxonomy does not rank, skips what the API index ignores, and deletes what dropped out', function (): void {
     WowPet::query()->create(['id' => 900, 'name_fr' => '[EN] Pet #900', 'is_active' => true]);
 
     writePetsJson([
@@ -83,10 +101,12 @@ test('it skips pets absent from either source and deletes those dropped from the
             ],
         ],
     ]);
+    curatePet(400, 'Classic', 'Drop');
+    curatePet(5130, 'Midnight', 'Drop');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
-    // 777 est dans l'index API mais pas curée par SimpleArmory : écartée aussi.
+    // 777 est dans l'index API mais la taxonomie ne la range pas : elle entre à arbitrer.
     mockPetIndex($client, [
         ['id' => 400, 'name' => 'Mascotte live'],
         ['id' => 777, 'name' => 'Mascotte non curée'],
@@ -94,10 +114,12 @@ test('it skips pets absent from either source and deletes those dropped from the
 
     resolve(PetImporter::class)->import();
 
-    expect(WowPet::query()->count())->toBe(1);
+    expect(WowPet::query()->count())->toBe(2);
     expect(WowPet::query()->find(400)->name_fr)->toBe('Mascotte live');
+    expect(WowPet::query()->find(777)->name_fr)->toBe('Mascotte non curée');
+    expect(WowPet::query()->find(777)->category)->toBeNull();
+    expect(WowPet::query()->find(777)->creature_id)->toBeNull();
     expect(WowPet::query()->find(5130))->toBeNull();
-    expect(WowPet::query()->find(777))->toBeNull();
     expect(WowPet::query()->find(900))->toBeNull();
 });
 

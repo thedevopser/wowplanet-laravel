@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\DecorImporter;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Models\WowCollectionTaxonomy;
 use App\Models\WowDecor;
 use Illuminate\Support\Sleep;
 
@@ -30,7 +32,20 @@ function mockDecorIndex(\Mockery\MockInterface $mock, array $decors): void
         ]);
 }
 
-test('it imports decors from SA JSON with French names from the API', function (): void {
+/**
+ * Range une décoration dans la taxonomie curée.
+ */
+function curateDecor(int $entryId, ?string $category, ?string $source): void
+{
+    WowCollectionTaxonomy::factory()->create([
+        'entity' => CollectionEntity::Decor,
+        'entry_id' => $entryId,
+        'category' => $category,
+        'source' => $source,
+    ]);
+}
+
+test('it imports decors with French names from the API and the ranking from the taxonomy', function (): void {
     writeDecorsJson([
         [
             'name' => 'The War Within',
@@ -45,6 +60,9 @@ test('it imports decors from SA JSON with French names from the API', function (
             ],
         ],
     ]);
+
+    curateDecor(400, 'The War Within', 'Quest');
+    curateDecor(401, 'General', 'Vendor');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -90,6 +108,9 @@ test('it marks not obtainable decors as inactive', function (): void {
         ],
     ]);
 
+    curateDecor(500, 'Undiscovered', 'Undiscovered Sources');
+    curateDecor(501, 'The War Within', 'Quest');
+
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
     mockDecorIndex($client, [
@@ -105,7 +126,7 @@ test('it marks not obtainable decors as inactive', function (): void {
     expect(WowDecor::query()->find(501)->is_active)->toBeTrue();
 });
 
-test('it skips decors absent from either source and deletes those dropped from the catalog', function (): void {
+test('it keeps a decor the taxonomy does not rank, skips what the API index ignores, and deletes what dropped out', function (): void {
     WowDecor::query()->create(['id' => 900, 'name_fr' => '[EN] Decor #900', 'is_active' => true]);
 
     writeDecorsJson([
@@ -124,6 +145,9 @@ test('it skips decors absent from either source and deletes those dropped from t
         ],
     ]);
 
+    curateDecor(600, 'The War Within', 'Quest');
+    curateDecor(1426, 'Undiscovered', 'Undiscovered Sources');
+
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
     mockDecorIndex($client, [
@@ -133,10 +157,14 @@ test('it skips decors absent from either source and deletes those dropped from t
 
     resolve(DecorImporter::class)->import();
 
-    expect(WowDecor::query()->count())->toBe(1);
+    expect(WowDecor::query()->count())->toBe(2);
     expect(WowDecor::query()->find(600)->name_fr)->toBe('Décor live');
+    expect(WowDecor::query()->find(777)->name_fr)->toBe('Décor non curé');
+    expect(WowDecor::query()->find(777)->category)->toBeNull();
+    expect(WowDecor::query()->find(777)->item_id)->toBeNull();
+    // Sans entrée curée, rien n'atteste qu'un décor est inobtenable : il entre actif.
+    expect(WowDecor::query()->find(777)->is_active)->toBeTrue();
     expect(WowDecor::query()->find(1426))->toBeNull();
-    expect(WowDecor::query()->find(777))->toBeNull();
     expect(WowDecor::query()->find(900))->toBeNull();
 });
 
@@ -154,6 +182,8 @@ test('it keeps a live but unobtainable decor inactive rather than dropping it', 
             ],
         ],
     ]);
+
+    curateDecor(1227, 'Midnight', 'Pre-Launch Event');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -195,7 +225,7 @@ test('it aborts without deleting anything when the decor index API call fails', 
         ->and(WowDecor::query()->find(700)->name_fr)->toBe('Décor existant');
 });
 
-test('it returns early when SA JSON is empty', function (): void {
+test('it returns early when SA JSON is empty, the icons having no other source yet', function (): void {
     writeDecorsJson([]);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */

@@ -7,13 +7,17 @@ namespace App\Infrastructure\Blizzard\Importers;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Infrastructure\Taxonomy\CollectionTaxonomyReader;
+use App\Infrastructure\Taxonomy\TaxonomyEntry;
 use App\Models\WowPet;
 
 /**
- * Catalogue des mascottes = index de l'API officielle ∩ liste curée SimpleArmory.
+ * Catalogue des mascottes : l'API tranche l'existence, la taxonomie curée tranche le rangement.
  *
- * Voir MountImporter pour le détail du partage d'autorité entre les deux sources :
- * l'API tranche l'existence et le nom, SimpleArmory la présentation.
+ * Voir MountImporter pour le détail du partage d'autorité : l'API tranche l'existence et le nom,
+ * `wow_collection_taxonomy` la catégorie et la source, et le fichier curé ne garde que l'icône
+ * et l'identifiant de créature.
  */
 final readonly class PetImporter
 {
@@ -21,6 +25,7 @@ final readonly class PetImporter
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
+        private CollectionTaxonomyReader $collectionTaxonomyReader,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
@@ -37,7 +42,7 @@ final readonly class PetImporter
             return;
         }
 
-        $rows = $this->buildRows($saPets, $frenchNames);
+        $rows = $this->buildRows($saPets, $frenchNames, $this->collectionTaxonomyReader->for(CollectionEntity::Pet));
 
         $this->saveRows($rows);
     }
@@ -104,23 +109,26 @@ final readonly class PetImporter
     /**
      * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null}>  $saPets
      * @param  array<int, string>  $frenchNames
+     * @param  array<int, TaxonomyEntry>  $taxonomy
      * @return list<array{id: int, name_fr: string, category: string|null, source: string|null, creature_id: int|null, icon_url: string|null, is_active: bool}>
      */
-    private function buildRows(array $saPets, array $frenchNames): array
+    private function buildRows(array $saPets, array $frenchNames, array $taxonomy): array
     {
         $rows = [];
-        $notCurated = 0;
+        $awaitingArbitration = 0;
         $withIcons = 0;
 
         foreach ($frenchNames as $id => $nameFr) {
-            $pet = $saPets[$id] ?? null;
-            if ($pet === null) {
-                $notCurated++;
-
-                continue;
+            $entry = $taxonomy[$id] ?? null;
+            if (! $entry instanceof TaxonomyEntry) {
+                $awaitingArbitration++;
             }
 
-            $iconUrl = $pet['icon'] !== null ? SimpleArmoryParser::buildIconUrl($pet['icon']) : null;
+            $pet = $saPets[$id] ?? null;
+
+            $iconUrl = $pet !== null && $pet['icon'] !== null
+                ? SimpleArmoryParser::buildIconUrl($pet['icon'])
+                : null;
             if ($iconUrl !== null) {
                 $withIcons++;
             }
@@ -128,9 +136,9 @@ final readonly class PetImporter
             $rows[] = [
                 'id' => $id,
                 'name_fr' => $nameFr,
-                'category' => $pet['category'] !== '' ? $pet['category'] : null,
-                'source' => $pet['source'] !== '' ? $pet['source'] : null,
-                'creature_id' => $pet['creatureId'] > 0 ? $pet['creatureId'] : null,
+                'category' => $entry?->category,
+                'source' => $entry?->source,
+                'creature_id' => $pet !== null && $pet['creatureId'] > 0 ? $pet['creatureId'] : null,
                 'icon_url' => $iconUrl,
                 'is_active' => true,
             ];
@@ -139,7 +147,7 @@ final readonly class PetImporter
         $notLive = count(array_diff_key($saPets, $frenchNames));
 
         $this->info(sprintf('  %d pets in catalog, %d with icon URL.', count($rows), $withIcons));
-        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
+        $this->info(sprintf('  %d skipped (not in live API index), %d awaiting arbitration (absent from the taxonomy).', $notLive, $awaitingArbitration));
 
         return $rows;
     }

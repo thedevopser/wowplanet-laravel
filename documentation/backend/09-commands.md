@@ -129,6 +129,34 @@ Elle remplace `app:download-db2` pour la partie DB2. Le détail des classes est 
 
 ---
 
+## `app:collection-taxonomy-sync`
+
+Charge la taxonomie curée des montures, mascottes et décorations dans `wow_collection_taxonomy`.
+
+**Signature** : `app:collection-taxonomy-sync {--entity=}` — **Classe** : `CollectionTaxonomySyncCommand`
+
+La même commande sert à l'amorçage et au rafraîchissement : le chargement étant additif, la première exécution amorce une taxonomie vide et les suivantes n'ajoutent que les entrées d'un nouveau patch. **Aucune valeur déjà en base n'est réécrite**, de sorte qu'un arbitrage manuel survit à autant de rafraîchissements qu'on voudra.
+
+Les trois collections sont chargées dans une seule transaction : un fichier curé manquant laisse la taxonomie exactement dans l'état où elle était, plutôt qu'à moitié amorcée. La sortie rend, par collection, le nombre d'entrées curées lues, le total en base et le nombre d'ajouts.
+
+`--entity` restreint la synchronisation à une collection (`mount`, `pet` ou `decor`).
+
+Elle n'est pas dans le chemin d'un import : elle sert à reconstruire la taxonomie de zéro et à intégrer les entrées d'un nouveau patch.
+
+---
+
+## `app:collection-taxonomy-report`
+
+Liste les entrées de catalogue que la taxonomie ne range pas encore.
+
+**Signature** : `app:collection-taxonomy-report {--entity=} {--limit=20}` — **Classe** : `CollectionTaxonomyReportCommand`
+
+Le rapport n'est pas stocké : l'absence de ligne de taxonomie pour une ligne de catalogue *est* le rapport, et une jointure gauche le reconstitue à tout moment. Une entrée rangée nulle part en connaissance de cause porte une ligne de taxonomie aux deux libellés nuls : elle est curée, donc hors de ce rapport.
+
+La sortie rend, par collection, le nombre d'entrées à arbitrer sur le total du catalogue, puis les premières par identifiant. `--limit` règle ce détail, `--entity` restreint à une collection.
+
+---
+
 ## `docs:coverage`
 
 Mesure la part du code nommée dans les pages de `documentation/`, et échoue quand elle recule.

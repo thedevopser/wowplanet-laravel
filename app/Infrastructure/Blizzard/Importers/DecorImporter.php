@@ -7,17 +7,21 @@ namespace App\Infrastructure\Blizzard\Importers;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Infrastructure\Taxonomy\CollectionTaxonomyReader;
+use App\Infrastructure\Taxonomy\TaxonomyEntry;
 use App\Models\WowDecor;
 
 /**
- * Catalogue des décors = index de l'API officielle ∩ liste curée SimpleArmory.
+ * Catalogue des décors : l'API tranche l'existence, la taxonomie curée tranche le rangement.
  *
- * Voir MountImporter pour le détail du partage d'autorité entre les deux sources.
+ * Voir MountImporter pour le détail du partage d'autorité.
  *
  * Les décors marqués notObtainable par SimpleArmory restent importés mais inactifs :
  * 119 d'entre eux figurent dans l'index API live — l'API atteste qu'ils existent, jamais
  * qu'ils sont encore obtenables (événement de pré-lancement clos, promotion retirée).
  * Sans ce flag ils compteraient au dénominateur et rendraient le 100 % inatteignable.
+ * Un décor que le fichier curé ne connaît pas entre donc actif : rien n'atteste le contraire.
  */
 final readonly class DecorImporter
 {
@@ -25,6 +29,7 @@ final readonly class DecorImporter
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
+        private CollectionTaxonomyReader $collectionTaxonomyReader,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
@@ -41,7 +46,7 @@ final readonly class DecorImporter
             return;
         }
 
-        $rows = $this->buildRows($saDecors, $frenchNames);
+        $rows = $this->buildRows($saDecors, $frenchNames, $this->collectionTaxonomyReader->for(CollectionEntity::Decor));
 
         $this->saveRows($rows);
     }
@@ -107,35 +112,38 @@ final readonly class DecorImporter
     /**
      * @param  array<int, array{category: string, source: string, icon: string|null, faction: string|null, spellid: int, creatureId: int, itemId: int|null, notObtainable: bool}>  $saDecors
      * @param  array<int, string>  $frenchNames
+     * @param  array<int, TaxonomyEntry>  $taxonomy
      * @return list<array{id: int, name_fr: string, category: string|null, source: string|null, item_id: int|null, icon_url: string|null, is_active: bool}>
      */
-    private function buildRows(array $saDecors, array $frenchNames): array
+    private function buildRows(array $saDecors, array $frenchNames, array $taxonomy): array
     {
         $rows = [];
-        $notCurated = 0;
+        $awaitingArbitration = 0;
         $inactive = 0;
 
         foreach ($frenchNames as $id => $nameFr) {
-            $decor = $saDecors[$id] ?? null;
-            if ($decor === null) {
-                $notCurated++;
-
-                continue;
+            $entry = $taxonomy[$id] ?? null;
+            if (! $entry instanceof TaxonomyEntry) {
+                $awaitingArbitration++;
             }
 
-            $isActive = ! $decor['notObtainable'];
+            $decor = $saDecors[$id] ?? null;
+
+            $isActive = $decor === null || ! $decor['notObtainable'];
             if (! $isActive) {
                 $inactive++;
             }
 
-            $iconUrl = $decor['icon'] !== null ? SimpleArmoryParser::buildIconUrl($decor['icon']) : null;
+            $iconUrl = $decor !== null && $decor['icon'] !== null
+                ? SimpleArmoryParser::buildIconUrl($decor['icon'])
+                : null;
 
             $rows[] = [
                 'id' => $id,
                 'name_fr' => $nameFr,
-                'category' => $decor['category'] !== '' ? $decor['category'] : null,
-                'source' => $decor['source'] !== '' ? $decor['source'] : null,
-                'item_id' => $decor['itemId'],
+                'category' => $entry?->category,
+                'source' => $entry?->source,
+                'item_id' => $decor['itemId'] ?? null,
                 'icon_url' => $iconUrl,
                 'is_active' => $isActive,
             ];
@@ -144,7 +152,7 @@ final readonly class DecorImporter
         $notLive = count(array_diff_key($saDecors, $frenchNames));
 
         $this->info(sprintf('  %d decors in catalog, %d not obtainable.', count($rows), $inactive));
-        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
+        $this->info(sprintf('  %d skipped (not in live API index), %d awaiting arbitration (absent from the taxonomy).', $notLive, $awaitingArbitration));
 
         return $rows;
     }

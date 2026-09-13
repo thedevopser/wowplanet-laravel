@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Importers\MountImporter;
+use App\Infrastructure\Taxonomy\CollectionEntity;
+use App\Models\WowCollectionTaxonomy;
 use App\Models\WowMount;
 use Illuminate\Support\Sleep;
 
@@ -30,13 +32,26 @@ function mockMountIndex(\Mockery\MockInterface $mock, array $mounts): void
         ]);
 }
 
-test('it imports mounts from SA JSON with French names from the API', function (): void {
+/**
+ * Range une monture dans la taxonomie curée.
+ */
+function curateMount(int $entryId, ?string $category, ?string $source): void
+{
+    WowCollectionTaxonomy::factory()->create([
+        'entity' => CollectionEntity::Mount,
+        'entry_id' => $entryId,
+        'category' => $category,
+        'source' => $source,
+    ]);
+}
+
+test('it imports mounts with French names from the API and the ranking from the taxonomy', function (): void {
     writeMountsJson([
         [
-            'name' => 'Classic',
+            'name' => 'Ignorée, le rangement ne vient plus du fichier',
             'subcats' => [
                 [
-                    'name' => 'Reputation',
+                    'name' => 'Ignorée aussi',
                     'items' => [
                         ['ID' => 100, 'name' => 'TestMount1', 'icon' => 'ability_mount_test', 'spellid' => 1234, 'creatureId' => 5678, 'itemId' => null, 'faction' => 'Alliance', 'quality' => 4],
                         ['ID' => 101, 'name' => 'TestMount2', 'icon' => 'ability_mount_horse', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 3],
@@ -45,6 +60,8 @@ test('it imports mounts from SA JSON with French names from the API', function (
             ],
         ],
     ]);
+    curateMount(100, 'Classic', 'Reputation');
+    curateMount(101, 'Legion', 'Class Hall');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -62,10 +79,10 @@ test('it imports mounts from SA JSON with French names from the API', function (
     expect(WowMount::query()->find(100)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/ability_mount_test.jpg');
     expect(WowMount::query()->find(100)->source_spell_id)->toBe(1234);
     expect(WowMount::query()->find(100)->is_active)->toBeTrue();
-    expect(WowMount::query()->find(101)->name_fr)->toBe('Destrier squelette');
+    expect(WowMount::query()->find(101)->category)->toBe('Legion');
 });
 
-test('it skips API mounts absent from the curated SA JSON', function (): void {
+test('it keeps a mount the taxonomy does not rank, rather than dropping it in silence', function (): void {
     writeMountsJson([
         [
             'name' => 'Classic',
@@ -79,10 +96,10 @@ test('it skips API mounts absent from the curated SA JSON', function (): void {
             ],
         ],
     ]);
+    curateMount(100, 'Classic', 'Reputation');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
-    // 999 n'est pas dans SimpleArmory : entrée non curée (doublon, variante PNJ), écartée.
     mockMountIndex($client, [
         ['id' => 100, 'name' => 'Monture Test'],
         ['id' => 999, 'name' => 'Monture API seule'],
@@ -90,12 +107,61 @@ test('it skips API mounts absent from the curated SA JSON', function (): void {
 
     resolve(MountImporter::class)->import();
 
-    expect(WowMount::query()->count())->toBe(1);
-    expect(WowMount::query()->find(100)->category)->toBe('Classic');
-    expect(WowMount::query()->find(999))->toBeNull();
+    expect(WowMount::query()->count())->toBe(2);
+    expect(WowMount::query()->find(999)->name_fr)->toBe('Monture API seule');
+    expect(WowMount::query()->find(999)->category)->toBeNull();
+    expect(WowMount::query()->find(999)->source)->toBeNull();
+    expect(WowMount::query()->find(999)->is_active)->toBeTrue();
 });
 
-test('it skips SA mounts absent from the live API index', function (): void {
+test('it reports how many mounts are waiting to be arbitrated', function (): void {
+    writeMountsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [['name' => 'Drop', 'items' => [
+                ['ID' => 100, 'name' => 'M', 'icon' => 'i', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 4],
+            ]]],
+        ],
+    ]);
+    curateMount(100, 'Classic', 'Drop');
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, [
+        ['id' => 100, 'name' => 'Rangée'],
+        ['id' => 998, 'name' => 'À arbitrer'],
+        ['id' => 999, 'name' => 'À arbitrer aussi'],
+    ]);
+
+    ob_start();
+    resolve(MountImporter::class)->import();
+    $output = (string) ob_get_clean();
+
+    expect($output)->toContain('2 awaiting arbitration');
+});
+
+test('it ranks nowhere a mount the taxonomy curates as ranked nowhere', function (): void {
+    writeMountsJson([
+        [
+            'name' => 'Classic',
+            'subcats' => [['name' => 'Drop', 'items' => [
+                ['ID' => 100, 'name' => 'M', 'icon' => 'i', 'spellid' => 0, 'creatureId' => 0, 'itemId' => null, 'faction' => null, 'quality' => 4],
+            ]]],
+        ],
+    ]);
+    curateMount(100, null, null);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+    mockMountIndex($client, [['id' => 100, 'name' => 'Monture Test']]);
+
+    resolve(MountImporter::class)->import();
+
+    expect(WowMount::query()->find(100)->category)->toBeNull()
+        ->and(WowMount::query()->find(100)->source)->toBeNull();
+});
+
+test('it skips mounts the live API index does not know', function (): void {
     writeMountsJson([
         [
             'name' => 'Midnight',
@@ -111,6 +177,8 @@ test('it skips SA mounts absent from the live API index', function (): void {
             ],
         ],
     ]);
+    curateMount(100, 'Midnight', 'Achievement');
+    curateMount(3021, 'Midnight', 'Achievement');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -138,6 +206,7 @@ test('it deletes mounts that dropped out of the catalog', function (): void {
             ],
         ],
     ]);
+    curateMount(100, 'Classic', 'Reputation');
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
@@ -149,7 +218,7 @@ test('it deletes mounts that dropped out of the catalog', function (): void {
     expect(WowMount::query()->count())->toBe(1);
 });
 
-test('it returns early when SA JSON is empty', function (): void {
+test('it returns early when SA JSON is empty, the icons having no other source yet', function (): void {
     writeMountsJson([]);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */

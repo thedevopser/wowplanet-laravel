@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
+use App\Infrastructure\Taxonomy\CollectionEntity;
 use App\Models\WowAchievement;
+use App\Models\WowCollectionTaxonomy;
 use App\Models\WowDecor;
 use App\Models\WowMount;
 use App\Models\WowPet;
@@ -324,6 +326,7 @@ test('importMounts creates mounts from SimpleArmory data', function (): void {
             ],
         ],
     ]);
+    bbiCurate(CollectionEntity::Mount, [1 => ['Classic', 'Reputation'], 2 => ['Classic', 'Reputation']]);
     bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'mount/index', 'mounts', [
         1 => 'Loup noir',
         2 => 'Destrier squelette',
@@ -359,6 +362,7 @@ test('importPets creates pets from SimpleArmory data with API French names', fun
         ],
     ]);
 
+    bbiCurate(CollectionEntity::Pet, [1 => ['Classic', 'Drop'], 2 => ['Classic', 'Drop']]);
     bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'pet/index', 'pets', [
         1 => 'Dragonnet',
         2 => 'Petit chat',
@@ -393,6 +397,7 @@ test('importDecor creates decor items from SimpleArmory data', function (): void
             ],
         ],
     ]);
+    bbiCurate(CollectionEntity::Decor, [1 => ['The War Within', 'Quest'], 2 => ['The War Within', 'Quest']]);
     bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
         1 => 'Foyer orné',
         2 => 'Tapis elfique',
@@ -433,6 +438,7 @@ test('importDecor marks notObtainable items as inactive', function (): void {
             ],
         ],
     ]);
+    bbiCurate(CollectionEntity::Decor, [1 => ['The War Within', 'Quest'], 10 => ['Undiscovered', 'Undiscovered Sources']]);
     bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'decor/index', 'decor_items', [
         1 => 'Foyer orné',
         10 => 'Décor caché',
@@ -585,6 +591,23 @@ function bbiWriteCollectionJson(string $filename, array $categories): void
 {
     $json = json_encode($categories, JSON_THROW_ON_ERROR);
     file_put_contents(storage_path('app/blizzard/'.$filename), $json);
+}
+
+/**
+ * Range des entrées dans la taxonomie curée, d'où les importers tirent leur rangement.
+ *
+ * @param  array<int, array{0: string|null, 1: string|null}>  $rankings  identifiant => [catégorie, source]
+ */
+function bbiCurate(CollectionEntity $collectionEntity, array $rankings): void
+{
+    foreach ($rankings as $entryId => $ranking) {
+        WowCollectionTaxonomy::factory()->create([
+            'entity' => $collectionEntity,
+            'entry_id' => $entryId,
+            'category' => $ranking[0],
+            'source' => $ranking[1],
+        ]);
+    }
 }
 
 /**
