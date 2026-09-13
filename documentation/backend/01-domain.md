@@ -88,17 +88,14 @@ Value Object immuable représentant une extension WoW. Lance `InvalidArgumentExc
 
 ## Services (`app/Domain/Services/`)
 
-### `ExpansionClassifier`
+### `ScoreCalculator`
 
-Détermine à quelle extension appartient une zone, une quête ou un haut-fait en consultant les mappings statiques.
+Seule implémentation de la formule de score : moyenne pondérée renormalisée sur les seules dimensions applicables.
 
-**Dépendance injectée** : `ExpansionMapping`
+Une dimension sans données sort du calcul au lieu de valoir 0 — un personnage qui ne fait pas de JcJ n'est pas pénalisé, son score se lit sur ce qu'il joue. Les poids et la version de la formule vivent dans `ScoreWeights`. Le score est calculé côté serveur et arrive au front déjà fait.
 
-**Méthodes**
+---
 
-| Méthode | Paramètres | Retour | Description |
-|---|---|---|---|
-| `classifyZone` | `int $zoneId` | `ExpansionId` | Extension de la zone. Retourne Classic si inconnue. |
-| `classifyQuest` | `int $questId, ?int $zoneId` | `ExpansionId` | Extension de la quête. Fallback sur la zone si pas de mapping direct. |
-| `classifyAchievement` | `int $achievementId` | `ExpansionId` | Extension du haut-fait. Retourne Classic si inconnu. |
-| `classifyAchievementCategory` | `int $categoryId` | `ExpansionId` | Extension d'une catégorie de haut-fait. |
+### `PvpBracketClassifier`
+
+Classe une cote JcJ dans son palier, du niveau le plus bas au Gladiateur.

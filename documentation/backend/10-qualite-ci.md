@@ -58,7 +58,7 @@ Le hook pre-commit applique exactement le même ordre, à une différence près 
 
 | Mesure | Seuil |
 | --- | --- |
-| Classes documentées nulle part | 45 au plus, et ce plafond ne remonte jamais |
+| Classes documentées nulle part | 40 au plus, et ce plafond ne remonte jamais |
 | PHP, lignes | 80 % |
 | JS, lignes | 80 % |
 | JS, instructions | 80 % |

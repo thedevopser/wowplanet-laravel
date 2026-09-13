@@ -7,7 +7,9 @@ namespace App\Console\Commands;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Blizzard\ImportBuildGate;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Mappings\FrozenAreaExpansionMap;
+use App\Infrastructure\Reference\FactionReference;
+use App\Infrastructure\Reference\ReferenceMaps;
 use App\Models\WowAchievement;
 use App\Models\WowAppearance;
 use App\Models\WowDecor;
@@ -22,7 +24,7 @@ class WowDataImportCommand extends Command
 {
     protected $signature = 'app:wow-data-import {--type=all} {--force : Reimport even when the WoW build has not changed} {--full : Re-fetch every appearance instead of only the missing ones} {--limit= : Cap the number of appearance details fetched (smoke-test)}';
 
-    protected $description = 'Import WoW data from SimpleArmory JSON + DB2 CSVs (and Blizzard API for quest mirrors)';
+    protected $description = 'Import WoW data from the Blizzard API, the reference tables and the curated collection files';
 
     /** @var list<string> */
     private const ENTITIES = ['achievements', 'quests', 'mounts', 'pets', 'professions', 'decor', 'appearances'];
@@ -36,12 +38,11 @@ class WowDataImportCommand extends Command
 
     public function handle(
         BlizzardBatchImporter $blizzardBatchImporter,
-        LuaAddonParser $luaAddonParser,
+        ReferenceMaps $referenceMaps,
+        FactionReference $factionReference,
         BlizzardApiClient $blizzardApiClient,
         ImportBuildGate $importBuildGate,
     ): void {
-        ini_set('memory_limit', '1024M');
-
         $this->importBuildGate = $importBuildGate;
 
         /** @var string $type */
@@ -70,11 +71,11 @@ class WowDataImportCommand extends Command
         }
 
         if ($this->isPending('quests')) {
-            $this->info('Loading frozen area→expansion map...');
-            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
-            $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
-            $questFactionMap = $luaAddonParser->getQuestFactionMap();
-            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
+            $this->info('Loading frozen area→expansion map and reference maps...');
+            $areaExpansionMap = FrozenAreaExpansionMap::load();
+            $questExpansionMap = $referenceMaps->questExpansions();
+            $questFactionMap = $referenceMaps->questFactions();
+            $zoneFactionMap = $referenceMaps->zoneFactions();
             $this->info(sprintf(
                 'Importing Quests from API (areas: %d, quest CT overrides: %d, faction quests: %d, faction zones: %d)...',
                 count($areaExpansionMap),
@@ -83,8 +84,7 @@ class WowDataImportCommand extends Command
                 count($zoneFactionMap),
             ));
             $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
-            $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
-            $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
+            $blizzardBatchImporter->tagMirrorQuestFactions($factionReference->factions());
             $this->markImported('quests');
             $this->newLine();
         }
@@ -104,7 +104,7 @@ class WowDataImportCommand extends Command
         }
 
         if ($this->isPending('professions')) {
-            $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
+            $recipeFactionMap = $referenceMaps->recipeFactions();
             $this->info(sprintf('Importing Professions from Blizzard API (factions: %d)...', count($recipeFactionMap)));
             $blizzardBatchImporter->importProfessions($recipeFactionMap);
             $blizzardBatchImporter->tagMirrorRecipeFactions();

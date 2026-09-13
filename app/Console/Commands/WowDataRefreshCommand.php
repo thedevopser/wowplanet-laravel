@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Mappings\FrozenAreaExpansionMap;
+use App\Infrastructure\Reference\FactionReference;
+use App\Infrastructure\Reference\ReferenceMaps;
 use App\Models\WowAchievement;
 use App\Models\WowAppearance;
 use App\Models\WowDecor;
@@ -22,10 +24,11 @@ class WowDataRefreshCommand extends Command
 
     protected $description = 'Truncate and re-import WoW data from Blizzard API';
 
-    public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
-    {
-        ini_set('memory_limit', '512M');
-
+    public function handle(
+        BlizzardBatchImporter $blizzardBatchImporter,
+        ReferenceMaps $referenceMaps,
+        FactionReference $factionReference,
+    ): void {
         /** @var string $type */
         $type = $this->option('type');
 
@@ -46,11 +49,11 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'quests') {
-            $this->info('Building area→expansion map from DB2 data...');
-            $areaExpansionMap = $luaAddonParser->buildAreaExpansionMap();
-            $questExpansionMap = $luaAddonParser->getQuestExpansionMap();
-            $questFactionMap = $luaAddonParser->getQuestFactionMap();
-            $zoneFactionMap = $luaAddonParser->getZoneFactionMap();
+            $this->info('Loading the area→expansion map and the reference maps...');
+            $areaExpansionMap = FrozenAreaExpansionMap::load();
+            $questExpansionMap = $referenceMaps->questExpansions();
+            $questFactionMap = $referenceMaps->questFactions();
+            $zoneFactionMap = $referenceMaps->zoneFactions();
             $this->info('Truncating wow_quests...');
             WowQuest::query()->truncate();
             $this->info(sprintf(
@@ -61,8 +64,7 @@ class WowDataRefreshCommand extends Command
                 count($zoneFactionMap),
             ));
             $blizzardBatchImporter->importQuests($areaExpansionMap, $questExpansionMap, $questFactionMap, $zoneFactionMap);
-            $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
-            $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);
+            $blizzardBatchImporter->tagMirrorQuestFactions($factionReference->factions());
             $this->newLine();
         }
 
@@ -81,7 +83,7 @@ class WowDataRefreshCommand extends Command
         }
 
         if ($type === 'all' || $type === 'professions') {
-            $recipeFactionMap = $luaAddonParser->getRecipeFactionMap();
+            $recipeFactionMap = $referenceMaps->recipeFactions();
             $this->info('Truncating wow_professions and wow_recipes...');
             WowRecipe::query()->truncate();
             WowProfession::query()->truncate();

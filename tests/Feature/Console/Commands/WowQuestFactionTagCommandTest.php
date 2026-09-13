@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Reference\FactionReference;
 
 test('command builds reputation map and tags mirror quests', function (): void {
-    $parserMock = $this->mock(LuaAddonParser::class);
-    $parserMock->shouldReceive('getReputationFactionMap')
+    $factionReferenceMock = $this->mock(FactionReference::class);
+    $factionReferenceMock->shouldReceive('factions')
         ->once()
         ->andReturn([1000 => 'Alliance', 1001 => 'Horde']);
 

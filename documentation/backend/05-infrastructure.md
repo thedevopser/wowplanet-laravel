@@ -145,112 +145,11 @@ Pour les trois collections, le partage d'autorité est explicite : **l'API tranc
 
 ---
 
-### `Blizzard/Support/Db2CsvLoader`
-
-Utilitaire de lecture de fichiers CSV DB2. Les CSV sont stockés dans `storage/app/blizzard/`.
-
-**Méthodes statiques**
-
-| Méthode | Paramètres | Retour |
-|---|---|---|
-| `loadMap` | `string $filename, int $keyCol, int $valueCol` | `array<int, int>` — carte indexée par position de colonne |
-| `loadMapByHeaders` | `string $filename, string $keyHeader, string $valueHeader` | `array<int, int>` — carte indexée par nom d'en-tête (int→int) |
-| `loadStringMapByHeaders` | `string $filename, string $keyHeader, string $valueHeader` | `array<int, string>` — carte indexée par nom d'en-tête (int→string) |
-
----
-
 ## Parsers (`app/Infrastructure/Parsers/`)
 
-### `LuaAddonParser`
+Le parsing de fichiers à l'exécution a disparu : l'extension et la faction viennent du socle,
+le rangement des collections de la taxonomie. Il ne reste ici que la lecture des fichiers curés.
 
-Façade des parsers de données DB2. Orchestre `Db2AreaExpansionMapper` et `AddonDataParser`.
-
-**Méthodes**
-
-| Méthode | Retour | Description |
-|---|---|---|
-| `buildAreaExpansionMap()` | `array<int, int>` | Construit la carte `zone_id → expansion_id` depuis les CSV DB2. |
-| `getQuestExpansionMap()` | `array<int, int>` | Overrides d'extension pour des quêtes spécifiques. |
-| `getQuestFactionMap()` | `array<int, string>` | Faction par quête (depuis bitmask de race). |
-| `getZoneFactionMap()` | `array<int, string>` | Faction par zone. |
-| `getReputationFactionMap()` | `array<int, string>` | Faction par réputation (pour détection des quêtes miroirs). |
-| `getSpellNameMap()` | `array<int, string>` | Noms français des sorts (pour mascottes et recettes). |
-| `getRecipeFactionMap()` | `array<int, string>` | Faction par recette. |
-| `normalizeApostrophes(string)` | `string` | Normalise les apostrophes typographiques. (statique) |
-
----
-
-### `AddonDataParser`
-
-Parse les fichiers CSV DB2 pour en extraire des cartes d'expansion et de faction, notamment en décodant les bitmasks de race Alliance/Horde.
-
-**Constantes**
-
-| Constante | Description |
-|---|---|
-| `ALLIANCE_BITMASK` | Bitmask indiquant une race Alliance |
-| `HORDE_BITMASK` | Bitmask indiquant une race Horde |
-| `ALLIANCE_RACE_IDS` | IDs des races Alliance |
-| `HORDE_RACE_IDS` | IDs des races Horde |
-| `STORMWIND_FACTION_ID` | ID de la faction Hurlevent (référence Alliance) |
-
-**Méthodes publiques**
-
-| Méthode | Retour | Description |
-|---|---|---|
-| `parseQuestCsvFull()` | `array{quests, expansionMap, factionMap}` | Parse le CSV des quêtes complet. |
-| `getQuestExpansionMap()` | `array<int, int>` | Carte `quest_id → expansion_id`. |
-| `getQuestFactionMap()` | `array<int, string>` | Carte `quest_id → faction`. |
-| `getQuestList()` | `list<array{id, name_fr}>` | Liste des quêtes avec noms français. |
-| `getRecipeFactionMap()` | `array<int, string>` | Carte `recipe_id → faction`. |
-| `getZoneFactionMap()` | `array<int, string>` | Carte `zone_id → faction`. |
-| `getReputationFactionMap()` | `array<int, string>` | Carte `faction_id → Alliance\|Horde`. |
-| `getZoneExpansionMap()` | `array<string, int>` | Carte `zone_name → expansion_id`. |
-
----
-
-### `Db2AreaExpansionMapper`
-
-Détermine l'extension d'une zone en remontant la hiérarchie des zones (zone → continent → expansion) à travers les CSV `area_table.csv`, `map.csv` et `content_tuning.csv`.
-
-**Méthode principale** : `build(): array<int, int>`
-
-Constante `AREA_EXPANSION_OVERRIDES` : corrections manuelles pour les zones mal classées automatiquement.
-
----
-
-### `Db2FactionExpansionMapper`
-
-Détermine l'extension d'une faction de réputation et calcule le niveau de renom maximum.
-
-**Méthodes**
-
-| Méthode | Retour | Description |
-|---|---|---|
-| `build()` | `array<int, int>` | Carte `faction_id → expansion_id`. |
-| `buildFactionNamesMap()` | `array<int, string>` | Carte `faction_id → name_fr`. |
-| `buildMaxRenownMap()` | `array<int, int>` | Carte `faction_id → max_renown_level`. |
-| `buildAccountWideFactionIds()` | `array<int, true>` | Ensemble des IDs de factions valables sur tout le compte. |
-
----
-
-### `Db2ProfessionMapper`
-
-Construit la structure complète professions + recettes depuis les CSV DB2.
-
-**Méthode principale** : `build(array $spellNameMap): array{professions, recipes}` (statique)
-
-Constante `SECONDARY_PROFESSION_IDS` = `[185, 356, 794]`.
-
----
-
-### `Db2QuestZoneMapper`
-
-Associe chaque quête à une zone à partir des CSV `quest_poi_blob.csv` et `ui_map.csv`.
-
-**Méthode principale** : `build(): array<int, string>` (statique) — retourne `quest_id → zone_name`.
-
----
 
 ### `SimpleArmoryParser`
 
@@ -323,23 +222,13 @@ Levée quand le fichier curé est absent, illisible ou vide. Un amorçage qui ne
 
 ## Mappings (`app/Infrastructure/Mappings/`)
 
-### `ExpansionMapping` (interface)
+### `FrozenAreaExpansionMap`
 
-Contrat pour accéder aux mappings statiques zones/quêtes/hauts-faits par extension.
+Carte `zone → extension` figée dans `database/data/area_expansion_map.json`, versionnée avec le dépôt.
 
-| Méthode | Description |
-|---|---|
-| `getZoneMapping()` | `zone_id → expansion_id` |
-| `getQuestMapping()` | `quest_id → expansion_id` (overrides manuels) |
-| `getAchievementCategoryMapping()` | `category_id → expansion_id` |
-| `getAchievementMapping()` | `achievement_id → expansion_id` (overrides) |
-| `getMasterList(int $expansionId, string $type)` | Liste d'IDs d'une extension pour un type donné |
-| `getQuestsByExpansion(int $expansionId)` | Structure de progression des quêtes par extension |
-| `getAchievementsByExpansion(int $expansionId)` | Structure de progression des hauts-faits par extension |
+**Méthode** : `load(): array<int, int>` (statique)
 
-### `StaticExpansionMapping`
-
-Implémentation concrète de `ExpansionMapping` basée sur des tableaux PHP statiques chargés depuis `storage/app/blizzard/`. Met en cache les structures en mémoire (lazy loading via propriétés nullable).
+Elle survit au socle de référence, et ce n'est pas un oubli : `AreaTable` ne porte pas l'extension d'une zone. Cette carte a été générée une fois en croisant `AreaTable`, `Map` et `ContentTuning`, corrections manuelles comprises, et ce croisement n'est pas reproductible depuis les seules colonnes du socle. Elle ne lit rien dans `storage/app/blizzard/`.
 
 ---
 
@@ -399,6 +288,64 @@ Magasin des CSV téléchargés, sur le disque `reference` (`storage/app/wow-refe
 ### `WagoClient`
 
 Frontière wago.tools. `liveBuild()` lit la version LIVE sur `/api/builds`, `fetch()` télécharge une table sur `/db2/{table}/csv`. Le produit est épinglé sur `wow` dans les deux cas : sans lui, wago sert son dernier build tous produits confondus, souvent un PTR dont la localisation française est incomplète.
+
+### `RaceMask`
+
+Lecture de la faction dans un masque de race DB2.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `combine(?int $low, ?int $high)` | `?int` | Recompose le masque complet à partir de ses deux moitiés. |
+| `faction(?int $low, ?int $high)` | `?string` | `Alliance`, `Horde`, ou `null` quand le masque ne tranche pas. |
+
+Blizzard a scindé ces masques en deux moitiés de 32 bits le jour où les identifiants de race ont dépassé la largeur d'origine : `FiltRaceMasks_0` / `_1`, `RaceMasks_0` / `_1`, `ReputationRaceMasks0_0` / `_1`. La première porte les bits de poids faible, la seconde ceux de poids fort, et leur recomposition rend exactement les masques complets d'avant la scission.
+
+**Une moitié lue seule ne veut rien dire** : c'est un entier quelconque, souvent négatif, dont l'analyse par bits produit une faction plausible et fausse. Les deux moitiés sont donc toujours exigées ensemble.
+
+---
+
+### `ReferenceMaps`
+
+Les correspondances que l'import tire du socle.
+
+| Méthode | Retour | Source |
+|---|---|---|
+| `questExpansions()` | `array<int, int>` | `wow_ref_quest_v2_cli_task` joint à `wow_ref_content_tuning` |
+| `questFactions()` | `array<int, string>` | `wow_ref_quest_v2_cli_task`, masque de race |
+| `recipeFactions()` | `array<int, string>` | `wow_ref_skill_line_ability`, masque de race |
+| `zoneFactions()` | `array<int, string>` | `wow_ref_area_table`, `FactionGroupMask` : 2 pour l'Alliance, 4 pour la Horde |
+
+Les cartes sont construites une fois en début de passe et gardées en mémoire : quelques dizaines de milliers d'entiers ne pèsent rien, là où un aller-retour SQL par quête coûterait la passe entière. Une quête sans titre est ignorée partout, comme le faisait la lecture du CSV : elle n'entre au catalogue sous aucune forme.
+
+Les recettes sont indexées par `SkillLineAbility.ID`, qui est bien l'identifiant de recette que l'API retourne.
+
+---
+
+### `FactionReference`
+
+Tout ce que le socle sait des réputations, servi à l'import comme à l'exécution.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `expansions()` | `array<int, int>` | Extension d'une réputation, par remontée de la hiérarchie des factions parentes. |
+| `names()` | `array<int, string>` | Nom localisé d'une réputation. |
+| `maxRenownLevels()` | `array<int, int>` | Renom maximal, via `RenownCurrencyID` et `MaxQty`. |
+| `accountWideIds()` | `array<int, true>` | Réputations valables sur tout le compte : renom, amitié, ou extension ≥ Dragonflight. |
+| `factions()` | `array<int, string>` | Camp des réputations exclusives à une faction. |
+
+Une réputation est exclusive quand elle porte un plafond pour un camp et pas pour l'autre. Son camp se lit alors par recoupement avec le masque de race de Hurlevent, pris comme référence Alliance : Blizzard ne nomme les camps nulle part.
+
+Les réputations que l'endpoint `/reputations` ne retourne jamais sont exclues — parangon, saisons de gouffres et de traque, entrées `DEPRECATED`, `[DNT]` et `JOUEUR` — sans quoi elles compteraient au dénominateur et rendraient le 100 % inatteignable.
+
+Les lectures sont mémorisées pour la durée de l'instance : l'agrégateur de progression des réputations interroge cinq de ces cartes à chaque profil de personnage.
+
+---
+
+### `ReferenceValue`
+
+Rétrécissement des valeurs qui sortent du socle : `int()`, `nullableInt()` et `string()`. Le constructeur de requêtes rend des objets aux propriétés non typées, et ce `mixed` est converti dès la ligne qui le reçoit plutôt que de traverser le code.
+
+---
 
 ### Exceptions
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Reference\FactionReference;
 use App\Models\WowQuest;
 use Illuminate\Console\Command;
 
@@ -15,10 +15,10 @@ class WowQuestFactionTagCommand extends Command
 
     protected $description = 'Tag mirror quest pairs (same name+zone, no faction) by checking Blizzard API reputation rewards';
 
-    public function handle(BlizzardBatchImporter $blizzardBatchImporter, LuaAddonParser $luaAddonParser): void
+    public function handle(BlizzardBatchImporter $blizzardBatchImporter, FactionReference $factionReference): void
     {
-        $this->info('Building reputation→faction map from Faction.csv...');
-        $reputationFactionMap = $luaAddonParser->getReputationFactionMap();
+        $this->info('Reading the reputation→faction map from the reference tables...');
+        $reputationFactionMap = $factionReference->factions();
         $this->info(sprintf('  %d reputation factions mapped (Alliance/Horde).', count($reputationFactionMap)));
 
         $blizzardBatchImporter->tagMirrorQuestFactions($reputationFactionMap);

@@ -3,8 +3,7 @@
 declare(strict_types=1);
 
 use App\Application\Services\Progress\ReputationProgressAggregator;
-use App\Infrastructure\Parsers\AddonDataParser;
-use App\Infrastructure\Parsers\Db2FactionExpansionMapper;
+use App\Infrastructure\Reference\FactionReference;
 
 function makeAggregator(
     array $buildMap = [],
@@ -13,16 +12,14 @@ function makeAggregator(
     array $factionMap = [],
     array $accountWideFactionIds = [],
 ): ReputationProgressAggregator {
-    $mapperMock = Mockery::mock(Db2FactionExpansionMapper::class);
-    $mapperMock->shouldReceive('build')->andReturn($buildMap);
-    $mapperMock->shouldReceive('buildMaxRenownMap')->andReturn($maxRenownMap);
-    $mapperMock->shouldReceive('buildFactionNamesMap')->andReturn($namesMap);
-    $mapperMock->shouldReceive('buildAccountWideFactionIds')->andReturn($accountWideFactionIds);
+    $mock = Mockery::mock(FactionReference::class);
+    $mock->shouldReceive('expansions')->andReturn($buildMap);
+    $mock->shouldReceive('maxRenownLevels')->andReturn($maxRenownMap);
+    $mock->shouldReceive('names')->andReturn($namesMap);
+    $mock->shouldReceive('accountWideIds')->andReturn($accountWideFactionIds);
+    $mock->shouldReceive('factions')->andReturn($factionMap);
 
-    $addonMock = Mockery::mock(AddonDataParser::class);
-    $addonMock->shouldReceive('getReputationFactionMap')->andReturn($factionMap);
-
-    return new ReputationProgressAggregator($mapperMock, $addonMock);
+    return new ReputationProgressAggregator($mock);
 }
 
 test('aggregate groups reputations by expansion', function (): void {

@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Application\Services\Progress;
 
-use App\Infrastructure\Parsers\AddonDataParser;
-use App\Infrastructure\Parsers\Db2FactionExpansionMapper;
+use App\Infrastructure\Reference\FactionReference;
 
 class ReputationProgressAggregator
 {
     public function __construct(
-        private readonly Db2FactionExpansionMapper $db2FactionExpansionMapper,
-        private readonly AddonDataParser $addonDataParser,
+        private readonly FactionReference $factionReference,
     ) {}
 
     /**
@@ -20,11 +18,11 @@ class ReputationProgressAggregator
      */
     public function aggregate(array $reputationsResponse, string $characterFaction = ''): array
     {
-        $factionExpansionMap = $this->db2FactionExpansionMapper->build();
-        $maxRenownMap = $this->db2FactionExpansionMapper->buildMaxRenownMap();
-        $factionNamesMap = $this->db2FactionExpansionMapper->buildFactionNamesMap();
-        $accountWideFactionIds = $this->db2FactionExpansionMapper->buildAccountWideFactionIds();
-        $reputationFactionMap = $this->addonDataParser->getReputationFactionMap();
+        $factionExpansionMap = $this->factionReference->expansions();
+        $maxRenownMap = $this->factionReference->maxRenownLevels();
+        $factionNamesMap = $this->factionReference->names();
+        $accountWideFactionIds = $this->factionReference->accountWideIds();
+        $reputationFactionMap = $this->factionReference->factions();
 
         /** @var list<array<string, mixed>> $reputations */
         $reputations = $reputationsResponse['reputations'] ?? [];

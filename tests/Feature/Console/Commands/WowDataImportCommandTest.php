@@ -5,7 +5,8 @@ declare(strict_types=1);
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
 use App\Infrastructure\Blizzard\ImportBuildGate;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Reference\FactionReference;
+use App\Infrastructure\Reference\ReferenceMaps;
 use App\Jobs\ImportAppearancesJob;
 use App\Models\WowImportState;
 use Illuminate\Support\Facades\Bus;
@@ -14,19 +15,17 @@ beforeEach(function (): void {
     Bus::fake();
 
     $this->importerMock = $this->mock(BlizzardBatchImporter::class);
-    $this->parserMock = $this->mock(LuaAddonParser::class);
+    $this->referenceMapsMock = $this->mock(ReferenceMaps::class);
+    $this->factionReferenceMock = $this->mock(FactionReference::class);
     $this->apiClientMock = $this->mock(BlizzardApiClient::class);
 
     $this->apiClientMock->shouldReceive('currentBuild')->andReturn('12.1.0_68914')->byDefault();
 
-    // Default: parser returns empty arrays
-    $this->parserMock->shouldReceive('buildAreaExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getQuestExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getQuestFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getZoneFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getReputationFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getSpellNameMap')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('questExpansions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('questFactions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('zoneFactions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('recipeFactions')->andReturn([])->byDefault();
+    $this->factionReferenceMock->shouldReceive('factions')->andReturn([])->byDefault();
 });
 
 test('command imports all types by default', function (): void {

@@ -3,18 +3,19 @@
 declare(strict_types=1);
 
 use App\Infrastructure\Blizzard\BlizzardBatchImporter;
-use App\Infrastructure\Parsers\LuaAddonParser;
+use App\Infrastructure\Reference\FactionReference;
+use App\Infrastructure\Reference\ReferenceMaps;
 
 beforeEach(function (): void {
     $this->importerMock = $this->mock(BlizzardBatchImporter::class);
-    $this->parserMock = $this->mock(LuaAddonParser::class);
+    $this->referenceMapsMock = $this->mock(ReferenceMaps::class);
+    $this->factionReferenceMock = $this->mock(FactionReference::class);
 
-    $this->parserMock->shouldReceive('buildAreaExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getQuestExpansionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getQuestFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getZoneFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getReputationFactionMap')->andReturn([])->byDefault();
-    $this->parserMock->shouldReceive('getSpellNameMap')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('questExpansions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('questFactions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('zoneFactions')->andReturn([])->byDefault();
+    $this->referenceMapsMock->shouldReceive('recipeFactions')->andReturn([])->byDefault();
+    $this->factionReferenceMock->shouldReceive('factions')->andReturn([])->byDefault();
 });
 
 test('command aborts when user declines confirmation', function (): void {
@@ -27,8 +28,6 @@ test('command aborts when user declines confirmation', function (): void {
 });
 
 test('command truncates and reimports all with --force', function (): void {
-    $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
-
     $this->importerMock->shouldReceive('importAchievements')->once();
     $this->importerMock->shouldReceive('importQuests')->once();
     $this->importerMock->shouldReceive('tagMirrorQuestFactions')->once();
@@ -45,8 +44,6 @@ test('command truncates and reimports all with --force', function (): void {
 });
 
 test('command refreshes only professions with --type=professions --force', function (): void {
-    $this->parserMock->shouldReceive('getRecipeFactionMap')->andReturn([])->byDefault();
-
     $this->importerMock->shouldReceive('importProfessions')->once();
     $this->importerMock->shouldReceive('tagMirrorRecipeFactions')->once();
     $this->importerMock->shouldNotReceive('importQuests');

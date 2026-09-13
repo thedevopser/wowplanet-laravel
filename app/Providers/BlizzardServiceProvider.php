@@ -4,30 +4,17 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Domain\Services\ExpansionClassifier;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\HourlyBudgetGuard;
 use App\Infrastructure\Blizzard\RateLimitingMiddleware;
-use App\Infrastructure\Mappings\ExpansionMapping;
-use App\Infrastructure\Mappings\StaticExpansionMapping;
 use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
-use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
 class BlizzardServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(ExpansionMapping::class, StaticExpansionMapping::class);
-
-        $this->app->singleton(
-            ExpansionClassifier::class,
-            fn (Application $application): ExpansionClassifier => new ExpansionClassifier(
-                $application->make(ExpansionMapping::class),
-            ),
-        );
-
         $this->app->singleton(
             function (): \App\Infrastructure\Blizzard\BlizzardApiClient {
                 $handlerStack = HandlerStack::create();

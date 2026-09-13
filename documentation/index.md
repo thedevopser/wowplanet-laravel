@@ -48,7 +48,7 @@ Requête HTTP
 Import de données (admin)
   └─> AdminController → RunImportJob (queue: imports)
         └─> WowDataImportCommand
-              ├─> LuaAddonParser (parsers DB2/Lua)
+              ├─> ReferenceMaps + FactionReference (socle wow_ref_*)
               └─> BlizzardBatchImporter
                     └─> Importers spécialisés (Achievement/Quest/Mount/Pet/Decor/Profession)
 ```
