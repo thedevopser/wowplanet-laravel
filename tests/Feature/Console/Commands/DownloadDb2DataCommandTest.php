@@ -21,7 +21,7 @@ test('it downloads the remaining faction-mapping DB2 CSV files pinned to the liv
     $this->artisan('app:download-db2')
         ->assertExitCode(0);
 
-    Http::assertSentCount(9); // 5 DB2 tables (mappings factions/extension) + 4 SimpleArmory JSONs
+    Http::assertSentCount(8); // 5 DB2 tables (mappings factions/extension) + 3 SimpleArmory JSONs de collections
 
     // Chaque table DB2 doit être épinglée sur le produit live (jamais le PTR par défaut de wago)
     Http::assertSent(fn ($request): bool => ! str_contains((string) $request->url(), 'wago.tools')

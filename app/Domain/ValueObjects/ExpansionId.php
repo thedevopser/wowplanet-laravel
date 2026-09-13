@@ -32,9 +32,18 @@ readonly class ExpansionId
 
     public const MIDNIGHT = 11;
 
+    /**
+     * Le seau de ce qui n'est daté par rien.
+     *
+     * Hors de la suite des extensions à dessein : une entrée non datée n'est pas du contenu
+     * d'origine, et la verser dans Classic la déguiserait en contenu du jeu de base. La
+     * valeur est prise loin devant pour que la prochaine extension reste 12.
+     */
+    public const UNCLASSIFIED = 99;
+
     public function __construct(public int $value)
     {
-        if ($this->value < self::CLASSIC || $this->value > self::MIDNIGHT) {
+        if (! array_key_exists($this->value, self::SLUG_MAP)) {
             throw new InvalidArgumentException('Invalid Expansion ID: '.$this->value);
         }
     }
@@ -52,6 +61,7 @@ readonly class ExpansionId
         self::DRAGONFLIGHT => 'dragonflight',
         self::THE_WAR_WITHIN => 'the-war-within',
         self::MIDNIGHT => 'midnight',
+        self::UNCLASSIFIED => 'non-classe',
     ];
 
     public function toString(): string
@@ -69,6 +79,7 @@ readonly class ExpansionId
             self::DRAGONFLIGHT => 'Dragonflight',
             self::THE_WAR_WITHIN => 'The War Within',
             self::MIDNIGHT => 'Midnight',
+            self::UNCLASSIFIED => 'Non classé',
         };
     }
 
@@ -87,6 +98,7 @@ readonly class ExpansionId
             self::DRAGONFLIGHT => 'la 9e extension',
             self::THE_WAR_WITHIN => 'la 10e extension',
             self::MIDNIGHT => 'la 11e extension',
+            self::UNCLASSIFIED => 'aucune extension',
         };
     }
 

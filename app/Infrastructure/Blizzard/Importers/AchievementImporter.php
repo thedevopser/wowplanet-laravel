@@ -4,162 +4,267 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Blizzard\Importers;
 
+use App\Domain\ValueObjects\ExpansionId;
+use App\Infrastructure\Blizzard\AchievementCategorySweep;
+use App\Infrastructure\Blizzard\AchievementPlacement;
+use App\Infrastructure\Blizzard\AchievementTaxonomy;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
-use App\Infrastructure\Parsers\SimpleArmoryParser;
+use App\Infrastructure\Blizzard\MediaSearchSweep;
+use App\Infrastructure\Blizzard\MediaSearchTag;
+use App\Infrastructure\Blizzard\Responses\AchievementDocument;
+use App\Infrastructure\Blizzard\Responses\ResponsePayload;
+use App\Infrastructure\Blizzard\SearchIdWindow;
 use App\Models\WowAchievement;
 
 /**
- * Catalogue des hauts faits = index de l'API officielle ∩ liste curée SimpleArmory.
+ * Catalogue des hauts faits, entièrement tiré de l'API officielle.
  *
- * Voir MountImporter pour le détail du partage d'autorité entre les deux sources :
- * l'API tranche l'existence et le nom, SimpleArmory l'extension, la catégorie et les points.
+ * Trois sources, chacune pour ce qu'elle seule porte : la hiérarchie des catégories tranche
+ * l'existence, le nom, la catégorie et l'extension ; le détail d'un haut fait donne ses
+ * points et sa faction ; le balayage des media donne son icône.
+ *
+ * La hiérarchie est obligatoire, le reste ne l'est pas. Une catégorie manquante ferait
+ * disparaître du lot des hauts faits que le balayage des lignes périmées supprimerait
+ * ensuite : l'import s'interrompt. Un détail ou un media manquant, en revanche, laisse la
+ * ligne existante avec les points, la faction et l'icône qu'elle avait.
  */
 final readonly class AchievementImporter
 {
     use ImportsFromBlizzardApi;
 
-    private const FALLBACK_EXPANSION_ID = 0;
+    private const DETAIL_ENDPOINT = 'data/wow/achievement/';
+
+    /** Les détails sont petits, mais huit mille corps décodés gardés ensemble ne le sont pas. */
+    private const DETAIL_BATCH = 1000;
+
+    private const MEDIA_WINDOW_BATCH = 10;
+
+    private const SAVE_CHUNK = 500;
+
+    /** Au-delà, le rapport devient illisible : le compte total dit le reste. */
+    private const REPORTED_CATEGORIES = 15;
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
+        private AchievementCategorySweep $achievementCategorySweep,
+        private MediaSearchSweep $mediaSearchSweep,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
 
     public function import(): void
     {
-        $saAchievements = $this->loadSimpleArmoryData();
-        if ($saAchievements === []) {
+        $achievementTaxonomy = $this->achievementCategorySweep->fetchTaxonomy();
+        if (! $achievementTaxonomy instanceof AchievementTaxonomy) {
             return;
         }
 
-        $frenchNames = $this->loadFrenchNames();
-        if ($frenchNames === []) {
+        $placements = $achievementTaxonomy->placements();
+        if ($placements === []) {
+            $this->info('  ERROR: the category hierarchy holds no achievement, aborting import (catalog left untouched).');
+
             return;
         }
 
-        $rows = $this->buildRows($saAchievements, $frenchNames);
+        $rows = $this->buildRows(
+            $placements,
+            $this->fetchDetails($placements),
+            $this->fetchIcons($placements),
+            $this->existingRows(),
+        );
 
-        $this->saveRows($rows);
+        $this->saveRows($rows, array_map(static fn (AchievementPlacement $achievementPlacement): int => $achievementPlacement->id, $placements));
+        $this->report($achievementTaxonomy);
     }
 
     /**
-     * @return array<int, array{category: string, subcategory: string, expansion_id: int|null, icon: string, points: int, faction: string|null}>
-     */
-    private function loadSimpleArmoryData(): array
-    {
-        $this->info('Parsing SimpleArmory achievements.json...');
-
-        $achievements = SimpleArmoryParser::parseAchievements();
-        if ($achievements === []) {
-            $this->info('ERROR: Could not parse achievements.json.');
-
-            return [];
-        }
-
-        $this->info(sprintf('  Found %d achievements in SimpleArmory.', count($achievements)));
-
-        return $achievements;
-    }
-
-    /**
-     * Noms français depuis l'index Achievement de l'API officielle.
+     * Points et faction, les deux seuls champs que la hiérarchie ne porte pas.
      *
-     * @return array<int, string>
+     * @param  list<AchievementPlacement>  $placements
+     * @return array<int, AchievementDocument>
      */
-    private function loadFrenchNames(): array
+    private function fetchDetails(array $placements): array
     {
-        $this->info('Fetching achievement index from Blizzard API...');
+        $this->info(sprintf('Fetching the detail of %d achievements...', count($placements)));
 
-        $index = $this->fetchWithRetry('data/wow/achievement/index');
-        if ($index === null) {
-            $this->info('  ERROR: achievement index unavailable, aborting import (catalog left untouched).');
+        $documents = [];
+        $missing = 0;
 
-            return [];
-        }
+        foreach (array_chunk($placements, self::DETAIL_BATCH) as $chunk) {
+            $endpoints = [];
+            foreach ($chunk as $placement) {
+                $endpoints[$placement->id] = self::DETAIL_ENDPOINT.$placement->id;
+            }
 
-        $names = [];
+            foreach ($this->fetchBatchAsync($endpoints) as $id => $decoded) {
+                if ($decoded === null) {
+                    $missing++;
 
-        /** @var list<array{id?: int, name?: string}> $achievements */
-        $achievements = $index['achievements'] ?? [];
-        foreach ($achievements as $achievement) {
-            $id = (int) ($achievement['id'] ?? 0);
-            $name = trim($achievement['name'] ?? '');
-            if ($id > 0 && $name !== '') {
-                $names[$id] = $name;
+                    continue;
+                }
+
+                $documents[(int) $id] = AchievementDocument::fromPayload(
+                    ResponsePayload::forEndpoint(self::DETAIL_ENDPOINT.$id, $decoded),
+                );
             }
         }
 
-        if ($names === []) {
-            $this->info('  ERROR: achievement index holds no usable name, aborting import (catalog left untouched).');
-
-            return [];
+        if ($missing > 0) {
+            $this->info(sprintf('  %d details unavailable: those rows keep the points and faction they had.', $missing));
         }
 
-        $this->info(sprintf('  Found %d live achievements in the API index.', count($names)));
-
-        return $names;
+        return $documents;
     }
 
     /**
-     * @param  array<int, array{category: string, subcategory: string, expansion_id: int|null, icon: string, points: int, faction: string|null}>  $saAchievements
-     * @param  array<int, string>  $frenchNames
-     * @return list<array{id: int, name_fr: string, expansion_id: int, category_name: string, icon_url: string|null, points: int, faction: string|null, is_active: bool}>
+     * Icônes par fenêtres d'identifiants : un media de haut fait porte l'identifiant du
+     * haut fait, ce qui évite un appel unitaire par ligne.
+     *
+     * @param  list<AchievementPlacement>  $placements
+     * @return array<int, string>
      */
-    private function buildRows(array $saAchievements, array $frenchNames): array
+    private function fetchIcons(array $placements): array
+    {
+        $windows = [];
+        foreach ($placements as $placement) {
+            $windows[SearchIdWindow::holding($placement->id)] = true;
+        }
+
+        $windows = array_keys($windows);
+        sort($windows);
+
+        $this->info(sprintf('Sweeping %d media windows for achievement icons...', count($windows)));
+
+        $icons = [];
+        foreach (array_chunk($windows, self::MEDIA_WINDOW_BATCH) as $chunk) {
+            foreach ($this->mediaSearchSweep->sweep($chunk, MediaSearchTag::Achievement) as $id => $mediaSearchDocument) {
+                if ($mediaSearchDocument->iconUrl !== null) {
+                    $icons[$id] = $mediaSearchDocument->iconUrl;
+                }
+            }
+        }
+
+        return $icons;
+    }
+
+    /**
+     * @return array<int, array{name_fr: string, expansion_id: int, category_name: string, icon_url: string|null, points: int, faction: string|null, is_active: bool}>
+     */
+    private function existingRows(): array
     {
         $rows = [];
-        $notCurated = 0;
 
-        foreach ($frenchNames as $id => $nameFr) {
-            $achievement = $saAchievements[$id] ?? null;
-            if ($achievement === null) {
-                $notCurated++;
+        foreach (WowAchievement::query()->get(['id', 'name_fr', 'expansion_id', 'category_name', 'icon_url', 'points', 'faction', 'is_active']) as $achievement) {
+            $rows[$achievement->id] = [
+                'name_fr' => $achievement->name_fr,
+                'expansion_id' => $achievement->expansion_id,
+                'category_name' => $achievement->category_name,
+                'icon_url' => $achievement->icon_url,
+                'points' => $achievement->points,
+                'faction' => $achievement->faction,
+                'is_active' => $achievement->is_active,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Une ligne identique à celle déjà en base n'est pas réécrite : sans cela, chaque
+     * passe toucherait les huit mille lignes et le mode incrémental ne voudrait plus rien
+     * dire.
+     *
+     * @param  list<AchievementPlacement>  $placements
+     * @param  array<int, AchievementDocument>  $details
+     * @param  array<int, string>  $icons
+     * @param  array<int, array{name_fr: string, expansion_id: int, category_name: string, icon_url: string|null, points: int, faction: string|null, is_active: bool}>  $existing
+     * @return list<array{id: int, name_fr: string, expansion_id: int, category_name: string, icon_url: string|null, points: int, faction: string|null, is_active: bool}>
+     */
+    private function buildRows(array $placements, array $details, array $icons, array $existing): array
+    {
+        $rows = [];
+        $unchanged = 0;
+
+        foreach ($placements as $placement) {
+            $previous = $existing[$placement->id] ?? null;
+            $achievementDocument = $details[$placement->id] ?? null;
+
+            $row = [
+                'name_fr' => $placement->name,
+                'expansion_id' => $placement->expansionId,
+                'category_name' => $placement->categoryName,
+                'icon_url' => $icons[$placement->id] ?? $previous['icon_url'] ?? null,
+                'points' => $achievementDocument instanceof AchievementDocument ? $achievementDocument->points : ($previous['points'] ?? 0),
+                'faction' => $achievementDocument instanceof AchievementDocument ? $achievementDocument->faction : ($previous['faction'] ?? null),
+                'is_active' => true,
+            ];
+
+            if ($row === $previous) {
+                $unchanged++;
 
                 continue;
             }
 
-            $rows[] = [
-                'id' => $id,
-                'name_fr' => $nameFr,
-                'expansion_id' => $achievement['expansion_id'] ?? self::FALLBACK_EXPANSION_ID,
-                'category_name' => $achievement['category'],
-                'icon_url' => SimpleArmoryParser::buildIconUrl($achievement['icon']),
-                'points' => $achievement['points'],
-                'faction' => $achievement['faction'],
-                'is_active' => true,
-            ];
+            $rows[] = ['id' => $placement->id] + $row;
         }
 
-        $notLive = count(array_diff_key($saAchievements, $frenchNames));
-
-        $this->info(sprintf('  %d achievements in catalog.', count($rows)));
-        $this->info(sprintf('  %d skipped (not in live API index), %d skipped (not curated by SimpleArmory).', $notLive, $notCurated));
+        if ($unchanged > 0) {
+            $this->info(sprintf('  %d rows already up to date.', $unchanged));
+        }
 
         return $rows;
     }
 
     /**
      * @param  list<array{id: int, name_fr: string, expansion_id: int, category_name: string, icon_url: string|null, points: int, faction: string|null, is_active: bool}>  $rows
+     * @param  list<int>  $catalogIds
      */
-    private function saveRows(array $rows): void
+    private function saveRows(array $rows, array $catalogIds): void
     {
         $this->info(sprintf('Saving %d achievements...', count($rows)));
 
-        $count = 0;
-        foreach (array_chunk($rows, 500) as $chunk) {
+        foreach (array_chunk($rows, self::SAVE_CHUNK) as $chunk) {
             WowAchievement::query()->upsert(
                 $chunk,
                 uniqueBy: ['id'],
                 update: ['name_fr', 'expansion_id', 'category_name', 'icon_url', 'points', 'faction', 'is_active'],
             );
-            $count += count($chunk);
-            $this->info(sprintf('  Saved %d...', $count));
         }
 
-        $this->deleteRowsOutsideCatalog(WowAchievement::class, array_column($rows, 'id'), 'achievements');
+        $this->deleteRowsOutsideCatalog(WowAchievement::class, $catalogIds, 'achievements');
+    }
 
-        $this->info(sprintf('Achievement import complete: %d items.', $count));
+    /**
+     * Ce qui n'a pu être daté se lit dans le rapport, jamais dans un silence.
+     */
+    private function report(AchievementTaxonomy $achievementTaxonomy): void
+    {
+        $total = count($achievementTaxonomy->placements());
+        $unclassified = count(array_filter(
+            $achievementTaxonomy->placements(),
+            static fn (AchievementPlacement $achievementPlacement): bool => $achievementPlacement->expansionId === ExpansionId::UNCLASSIFIED,
+        ));
+
+        $this->info(sprintf(
+            'Achievement import complete: %d in catalog, %d dated by their category, %d unclassified.',
+            $total,
+            $total - $unclassified,
+            $unclassified,
+        ));
+
+        $unrankedCategories = $achievementTaxonomy->unrankedCategories();
+        if ($unrankedCategories !== []) {
+            arsort($unrankedCategories);
+            $this->info(sprintf('  %d categories nothing dates, largest first:', count($unrankedCategories)));
+
+            foreach (array_slice($unrankedCategories, 0, self::REPORTED_CATEGORIES, true) as $label => $count) {
+                $this->info(sprintf('    %s (%d)', $label, $count));
+            }
+        }
+
+        foreach ($achievementTaxonomy->staleDatingSignals() as $signal) {
+            $this->info(sprintf('  WARNING: a place-named category is going stale, dating by category no longer holds — %s', $signal));
+        }
     }
 }

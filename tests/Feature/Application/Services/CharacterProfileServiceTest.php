@@ -207,6 +207,12 @@ test('get profile aggregates unlocked transmog appearances by slot', function ()
 });
 
 test('aggregate progress groups by expansion and zone', function (): void {
+    \App\Models\WowAchievement::factory()->create([
+        'id' => 1685,
+        'expansion_id' => \App\Domain\ValueObjects\ExpansionId::UNCLASSIFIED,
+        'category_name' => 'Évènements mondiaux',
+        'is_active' => true,
+    ]);
     WowQuest::factory()->create([
         'id' => 1,
         'name_fr' => 'Quête Classic',
@@ -274,6 +280,11 @@ test('aggregate progress groups by expansion and zone', function (): void {
     $twwData = $characterProfileDTO->collections[10];
     expect($twwData['quests']['total'])->toBe(1)
         ->and($twwData['quests']['completed'])->toBe(0);
+
+    /** @var array{achievements: array{total: int}} $unclassifiedData */
+    $unclassifiedData = $characterProfileDTO->collections[\App\Domain\ValueObjects\ExpansionId::UNCLASSIFIED];
+    expect($unclassifiedData['achievements']['total'])->toBe(1)
+        ->and(array_keys($characterProfileDTO->collections))->toBe([...range(0, 11), \App\Domain\ValueObjects\ExpansionId::UNCLASSIFIED]);
 });
 
 test('aggregate progress filters quests by character faction', function (): void {

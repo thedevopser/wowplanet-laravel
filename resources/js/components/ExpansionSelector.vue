@@ -1,7 +1,7 @@
 <template>
     <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
         <button
-            v-for="exp in expansions"
+            v-for="exp in visibleExpansions"
             :key="exp.id"
             @click="$emit('update:activeExpansion', exp.id)"
             :class="[
@@ -24,6 +24,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+
 const props = defineProps({
     expansions: { type: Array, required: true },
     activeExpansion: { type: Number, required: true },
@@ -52,6 +54,12 @@ const colorMap = {
         badge: 'bg-purple-700/50 border-white/20',
     },
 };
+
+// Une entrée « onlyWhenFilled » est un seau, pas une extension : elle ne s'affiche que
+// là où elle porte quelque chose, pour ne pas semer des onglets vides dans les autres.
+const visibleExpansions = computed(() => props.expansions.filter(
+    exp => !exp.onlyWhenFilled || (props.collections[exp.id]?.[props.collectionType]?.total ?? 0) > 0
+));
 
 const activeClasses = colorMap[props.activeColor].active;
 const activeBadgeClasses = colorMap[props.activeColor].badge;

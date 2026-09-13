@@ -73,6 +73,11 @@ Value Object immuable représentant une extension WoW. Lance `InvalidArgumentExc
 | `DRAGONFLIGHT` | `9` | Dragonflight |
 | `THE_WAR_WITHIN` | `10` | The War Within |
 | `MIDNIGHT` | `11` | Midnight |
+| `UNCLASSIFIED` | `99` | Non classé — ce que rien ne date |
+
+`UNCLASSIFIED` est hors de la suite des extensions à dessein. Une entrée que sa source ne rattache à aucune extension — un haut fait de la Voile d'hiver, de la Pêche, d'un champ de bataille — n'est pas du contenu d'origine, et la verser dans `CLASSIC` la déguiserait en contenu du jeu de base. La valeur est prise loin devant pour que la prochaine extension reste `12`.
+
+Tout ce qui parcourt les extensions passe par `allSlugs()` et non par une borne `0..11` en dur, sans quoi ce seau disparaîtrait des agrégats.
 
 **Méthodes**
 

@@ -128,9 +128,25 @@ ExpansionTierMatcher::match(string $name): ?int
 
 ---
 
+### `SearchIdWindow`
+
+La grille de fenêtres d'identifiants, partagée par tous les balayages de recherche. Une fenêtre est un index `w` désignant l'intervalle `[w × 1000, w × 1000 + 999]` ; mille identifiants tenant toujours sous la page maximale de l'API, une fenêtre ne pagine jamais. La grille est fixe, ce qui permet de désigner une fenêtre par un entier et donc de reprendre un balayage interrompu — et de réutiliser le même offset d'une passe à la suivante.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `countFor(int $highestId)` | `int` | Nombre de fenêtres couvrant les identifiants jusqu'à celui-ci. |
+| `holding(int $id)` | `int` | Index de la fenêtre dont l'intervalle contient cet identifiant. |
+| `query(int $window)` | `string` | Paramètres de recherche de la fenêtre, à concaténer à un endpoint. |
+
+Un identifiant ou un index négatif lève `InvalidArgumentException` : c'est un appelant qui s'est trompé, pas une donnée à corriger silencieusement.
+
+Le trait `SweepsIdWindows` porte la boucle commune aux balayages — construire les endpoints, lancer le lot, réduire chaque réponse puis la libérer aussitôt. Une réponse de recherche porte toutes les locales quelle que soit celle demandée, soit jusqu'à 1,2 Mo par fenêtre : garder les corps décodés d'un lot entier multiplierait le pic mémoire par le nombre de fenêtres.
+
+---
+
 ### `ItemSearchSweep`
 
-Balayage du catalogue d'items par fenêtres d'identifiants. Une fenêtre est un index `w` désignant l'intervalle `[w × 1000, w × 1000 + 999]` ; mille identifiants tenant toujours sous la page maximale de l'API, une fenêtre ne pagine jamais. La grille est fixe, ce qui permet de désigner une fenêtre par un entier et donc de reprendre un balayage interrompu.
+Balayage du catalogue d'items sur cette grille. Un document de recherche d'item porte déjà nom, qualité, media et apparences, là où le détail unitaire demandait un appel par apparence.
 
 | Méthode | Retour | Description |
 |---|---|---|
@@ -139,7 +155,46 @@ Balayage du catalogue d'items par fenêtres d'identifiants. Une fenêtre est un 
 | `sweepItems(array $windows, callable $onDocument)` | `void` | Balaie des fenêtres de `data/wow/search/item` et remet chaque document à l'appelant. |
 | `sweepItemMedia(array $windows)` | `array<int, MediaSearchDocument>` | Icônes des items de ces fenêtres, indexées par identifiant de media. |
 
-Une réponse de recherche porte toutes les locales quelle que soit celle demandée, soit environ 1,2 Mo par fenêtre. Chaque document est réduit à sa forme compacte puis libéré immédiatement, et l'appelant choisit combien de fenêtres il traite d'un coup : c'est ce nombre qui fixe le pic mémoire (`services.blizzard.appearance_window_batch`, 5 par défaut).
+L'appelant choisit combien de fenêtres il traite d'un coup : c'est ce nombre qui fixe le pic mémoire (`services.blizzard.appearance_window_batch`, 5 par défaut).
+
+---
+
+### `MediaSearchSweep`
+
+Balayage des media sur la même grille : une fenêtre rend l'icône de tout ce que l'espace du tag contient dans son intervalle, là où le media unitaire demanderait un appel par entrée.
+
+```
+sweep(array $windows, MediaSearchTag $tag): array<int, MediaSearchDocument>
+```
+
+`MediaSearchTag` énumère les espaces filtrables — `Item`, `Achievement`. Chacun est son propre espace d'identifiants : un media d'item porte l'identifiant de l'item, un media de haut fait celui du haut fait, et rien ne garantit qu'un identifiant désigne la même chose d'un tag à l'autre.
+
+---
+
+### Hiérarchie des hauts faits
+
+`AchievementCategorySweep` récupère l'arborescence complète : l'index des catégories, puis le détail de chacune — cent soixante-dix appels aujourd'hui.
+
+```
+fetchTaxonomy(): ?AchievementTaxonomy
+```
+
+**C'est tout ou rien.** Une catégorie manquante, c'est un pan entier du catalogue absent du lot, que le balayage des lignes périmées supprimerait ensuite : un échec rend `null` et l'importer abandonne sans toucher au catalogue. Les catégories de guilde vivent dans une autre liste de l'index et ne sont pas demandées.
+
+`AchievementTaxonomy` en déduit le rangement, et c'est une fonction pure de la liste des `AchievementCategoryDocument` :
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `fromCategories(array $categories)` | `self` | Construit la taxonomie (statique). |
+| `placements()` | `list<AchievementPlacement>` | Un `AchievementPlacement` par haut fait : `id`, `name`, `categoryName`, `expansionId`. |
+| `unrankedCategories()` | `array<string, int>` | Catégories dont rien ne date les hauts faits, et combien chacune en porte. |
+| `staleDatingSignals()` | `list<string>` | Signes que la datation par la catégorie se périme. |
+
+**La catégorie racine nomme, la sous-catégorie date.** L'extension est celle du premier ancêtre daté, la racine exclue — aucune racine ne porte de nom d'extension. L'appariement passe par `ExpansionTierMatcher`, sans second mécanisme concurrent.
+
+Ces catégories suivent la sortie du contenu et non la géographie : « Reprise des Chants éternels », situé en Quel'Thalas, est rangé sous Midnight et non sous Royaumes de l'Est. **Une extension ne se déduit donc jamais d'un nom de lieu.** Le garde-fou est posé dans la taxonomie elle-même : une sous-catégorie à nom de continent — `Kalimdor`, `Royaumes de l'Est`, `Outreterre`, `Norfendre` — qui reçoit un haut fait d'identifiant supérieur ou égal à 40 000 sort dans `staleDatingSignals()`, et l'import le signale. Ces quatre catégories sont les seaux Classic de l'onglet Quêtes, et n'ont jamais reçu de contenu récent.
+
+Ce que rien ne date tombe dans `ExpansionId::UNCLASSIFIED`, pas dans l'extension 0, et figure au rapport d'import : un rangement qu'on ignore doit se lire, jamais se découvrir par un tri devenu faux. Un haut fait listé sous deux catégories est arbitré par un ordre total — le rangement daté d'abord, puis la plus petite catégorie — pour qu'un import le range toujours au même endroit.
 
 ---
 
@@ -151,8 +206,12 @@ Lecture typée des documents rendus par les endpoints de recherche, construite s
 |---|---|
 | `ItemSearchDocument` | `id`, `nameFr`, `quality` (OverallQualityID numérique), `mediaId`, `categoryFr`, `appearanceIds` |
 | `MediaSearchDocument` | `id`, `iconUrl`, `fileDataId` |
+| `AchievementCategoryDocument` | `id`, `name`, `parentId`, `achievements` (identifiant → nom) |
+| `AchievementDocument` | `id`, `points`, `faction` |
 
 Le nom français tombe sur le nom anglais quand la locale française manque. Un media sans asset `icon` est un cas normal, traité par un repli côté appelant, pas une réponse invalide.
+
+Une catégorie porte ses propres hauts faits **et** des sous-catégories qui portent les leurs : une racine n'est pas un simple conteneur, et « Quêtes » en compte trente-quatre en propre. `AchievementDocument` est réduit aux deux champs que la hiérarchie ne porte pas — les points, et la faction lue dans `requirements.faction.type` : ce sont les seules raisons d'appeler le détail d'un haut fait.
 
 ---
 
@@ -162,7 +221,7 @@ Chaque importeur lit les données sources, les transforme et les sauvegarde via 
 
 | Classe | Source principale | Modèle cible |
 |---|---|---|
-| `AchievementImporter` | `achievements.json` (SimpleArmory) + `achievement.csv` (DB2) | `WowAchievement` |
+| `AchievementImporter` | hiérarchie `achievement-category` + détail de chaque haut fait + balayage des media | `WowAchievement` |
 | `MountImporter` | `mount/index` (API) + taxonomie curée + `mounts.json` pour l'icône | `WowMount` |
 | `PetImporter` | `pet/index` (API) + taxonomie curée + `pets.json` pour l'icône | `WowPet` |
 | `DecorImporter` | `decor/index` (API) + taxonomie curée + `decors.json` pour l'icône | `WowDecor` |

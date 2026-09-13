@@ -24,6 +24,20 @@ test('it creates valid expansion ids', function (int $value, string $expectedNam
     'Midnight' => [11, 'Midnight'],
 ]);
 
+test('it creates the unclassified bucket', function (): void {
+    $expansionId = new ExpansionId(ExpansionId::UNCLASSIFIED);
+
+    expect($expansionId->value)->toBe(99)
+        ->and($expansionId->toString())->toBe('Non classé')
+        ->and($expansionId->toSlug())->toBe('non-classe')
+        ->and($expansionId->toOrdinal())->toBe('aucune extension');
+});
+
+test('the unclassified bucket is reachable by its slug and comes last', function (): void {
+    expect(ExpansionId::fromSlug('non-classe')?->value)->toBe(ExpansionId::UNCLASSIFIED)
+        ->and(array_key_last(ExpansionId::allSlugs()))->toBe(ExpansionId::UNCLASSIFIED);
+});
+
 test('it rejects invalid values', function (int $value): void {
     expect(fn (): \App\Domain\ValueObjects\ExpansionId => new ExpansionId($value))->toThrow(
         InvalidArgumentException::class,

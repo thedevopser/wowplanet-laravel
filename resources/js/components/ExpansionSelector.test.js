@@ -56,6 +56,45 @@ describe('ExpansionSelector', () => {
         expect(buttons[0].classes()).toContain('scale-105');
     });
 
+    it('shows a fill-only bucket where it holds something', () => {
+        const withBucket = [...expansions, { id: 99, name: 'Non classé', onlyWhenFilled: true }];
+        const wrapper = mount(ExpansionSelector, {
+            props: {
+                expansions: withBucket,
+                activeExpansion: 0,
+                collections: { ...collections, 99: { quests: { completed: 0, total: 0 }, achievements: { completed: 12, total: 4566 } } },
+                collectionType: 'achievements',
+            },
+        });
+
+        expect(wrapper.text()).toContain('Non classé');
+        expect(wrapper.text()).toContain('12 / 4566');
+    });
+
+    it('hides a fill-only bucket where it holds nothing', () => {
+        const withBucket = [...expansions, { id: 99, name: 'Non classé', onlyWhenFilled: true }];
+        const wrapper = mount(ExpansionSelector, {
+            props: {
+                expansions: withBucket,
+                activeExpansion: 0,
+                collections: { ...collections, 99: { quests: { completed: 0, total: 0 }, achievements: { completed: 12, total: 4566 } } },
+                collectionType: 'quests',
+            },
+        });
+
+        expect(wrapper.text()).not.toContain('Non classé');
+        expect(wrapper.findAll('button')).toHaveLength(3);
+    });
+
+    it('hides a fill-only bucket the collections do not carry at all', () => {
+        const withBucket = [...expansions, { id: 99, name: 'Non classé', onlyWhenFilled: true }];
+        const wrapper = mount(ExpansionSelector, {
+            props: { expansions: withBucket, activeExpansion: 0, collections, collectionType: 'achievements' },
+        });
+
+        expect(wrapper.text()).not.toContain('Non classé');
+    });
+
     it('displays achievements counters when collectionType is achievements', () => {
         const wrapper = mount(ExpansionSelector, {
             props: { expansions, activeExpansion: 0, collections, collectionType: 'achievements', activeColor: 'amber' },

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Services\Progress;
 
+use App\Domain\ValueObjects\ExpansionId;
 use App\Models\WowAchievement;
 use Illuminate\Support\Collection;
 
@@ -22,7 +23,9 @@ class AchievementProgressAggregator
 
         $results = [];
 
-        for ($expansionIndex = 0; $expansionIndex <= 11; $expansionIndex++) {
+        // Les identifiants viennent du value object : le seau « Non classé » n'est pas
+        // dans la suite des extensions et une borne en dur le ferait disparaître.
+        foreach (array_keys(ExpansionId::allSlugs()) as $expansionIndex) {
             /** @var Collection<int, WowAchievement> $expansionAchievements */
             $expansionAchievements = $allAchievements->get($expansionIndex, new Collection);
             $categoryProgress = $this->buildCategoryProgress($expansionAchievements, $completedAchievementIds);

@@ -24,12 +24,21 @@ describe('useCharacterStore', () => {
             expect(store.loadingCharacters).toBe(false);
         });
 
-        it('contains 12 expansions from Classic to Midnight', () => {
+        it('contains 12 expansions from Classic to Midnight, then the unclassified bucket', () => {
             const store = useCharacterStore();
 
-            expect(store.expansions).toHaveLength(12);
+            expect(store.expansions).toHaveLength(13);
             expect(store.expansions[0]).toEqual({ id: 0, name: 'Classic' });
             expect(store.expansions[11]).toEqual({ id: 11, name: 'Midnight' });
+            expect(store.expansions[12]).toEqual({ id: 99, name: 'Non classé', onlyWhenFilled: true });
+        });
+
+        it('keeps the unclassified bucket out of the latest expansion and of the category order', () => {
+            const store = useCharacterStore();
+
+            expect(store.latestExpansionId).toBe(11);
+            expect(store.expansionNamesDesc).not.toContain('Non classé');
+            expect(store.expansionNamesDesc[0]).toBe('Midnight');
         });
     });
 

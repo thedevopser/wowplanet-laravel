@@ -19,7 +19,6 @@ class DownloadDb2DataCommand extends Command
      * @var array<string, string>
      */
     private const SIMPLEARMORY_FILES = [
-        'https://simplearmory.com/data/achievements.json' => 'achievements.json',
         'https://simplearmory.com/data/mounts.json' => 'mounts.json',
         'https://simplearmory.com/data/pets.json' => 'pets.json',
         'https://simplearmory.com/data/decors.json' => 'decors.json',

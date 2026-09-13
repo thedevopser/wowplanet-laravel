@@ -13,6 +13,7 @@ use App\Application\Services\Progress\QuestProgressAggregator;
 use App\Application\Services\Progress\RaidProgressAggregator;
 use App\Application\Services\Progress\ReputationProgressAggregator;
 use App\Domain\Services\ScoreCalculator;
+use App\Domain\ValueObjects\ExpansionId;
 use App\Domain\ValueObjects\ScoreInput;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\FetchesProfileEndpoints;
@@ -231,7 +232,7 @@ class CharacterProfileService
     {
         $collections = [];
 
-        for ($i = 0; $i <= 11; $i++) {
+        foreach (array_keys(ExpansionId::allSlugs()) as $i) {
             $collections[$i] = [
                 'quests' => $questProgress[$i] ?? ['total' => 0, 'completed' => 0, 'zones' => []],
                 'achievements' => $achievementProgress[$i] ?? ['total' => 0, 'completed' => 0, 'categories' => []],

@@ -120,7 +120,7 @@ test('sweeping item media indexes the icons by media id', function (): void {
 
 test('a negative highest item id is rejected', function (): void {
     ItemSearchSweep::windowCountFor(-1);
-})->throws(InvalidArgumentException::class, 'A highest item id cannot be negative, got -1.');
+})->throws(InvalidArgumentException::class, 'A highest id cannot be negative, got -1.');
 
 test('sweeping no window at all calls nothing', function (): void {
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */

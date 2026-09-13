@@ -161,152 +161,43 @@ test('importQuests defaults unmapped areas to expansion 0', function (): void {
 
 // ─── Achievement Import ─────────────────────────────────────
 
-test('importAchievements creates achievements from SimpleArmory data', function (): void {
-    bbiWriteAchievementsJson([
-        [
-            'name' => 'General',
-            'cats' => [
-                [
-                    'name' => 'Classic',
-                    'subcats' => [
-                        [
-                            'name' => 'Exploration',
-                            'items' => [
-                                ['id' => 10, 'icon' => 'spell_nature_healingtouch', 'points' => 10],
-                                ['id' => 11, 'icon' => 'spell_holy_light', 'points' => 5],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
-        10 => 'Bienvenue !',
-        11 => 'Niveau 10',
-    ]);
+test('importAchievements builds the catalog from the category hierarchy', function (): void {
+    $mock = $this->mock(BlizzardApiClient::class);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
+    $mock->shouldReceive('get')
+        ->with('data/wow/achievement-category/index', \Mockery::any())
+        ->andReturn(['categories' => [['id' => 96, 'name' => 'Quêtes'], ['id' => 15547, 'name' => 'Midnight']]]);
+    bbiMockAsync($mock, 'data/wow/achievement-category/96', ['id' => 96, 'name' => 'Quêtes']);
+    bbiMockAsync($mock, 'data/wow/achievement-category/15547', [
+        'id' => 15547,
+        'name' => 'Midnight',
+        'parent_category' => ['id' => 96, 'name' => 'Quêtes'],
+        'achievements' => [['id' => 41802, 'name' => 'Reprise des Chants éternels']],
+    ]);
+    bbiMockAsync($mock, 'data/wow/achievement/41802', ['id' => 41802, 'points' => 25]);
+    bbiMockAsync($mock, 'data/wow/search/media', ['results' => [['data' => ['id' => 41802, 'assets' => [['key' => 'icon', 'value' => 'https://render.worldofwarcraft.com/eu/icons/56/41802.jpg']]]]]]);
 
-    expect(WowAchievement::query()->count())->toBe(2);
-    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Bienvenue !');
-    expect(WowAchievement::query()->find(10)->category_name)->toBe('General');
-    expect(WowAchievement::query()->find(10)->expansion_id)->toBe(0);
-    expect(WowAchievement::query()->find(10)->points)->toBe(10);
-    expect(WowAchievement::query()->find(10)->icon_url)->toBe('https://wow.zamimg.com/images/wow/icons/medium/spell_nature_healingtouch.jpg');
-    expect(WowAchievement::query()->find(11)->points)->toBe(5);
+    resolve(BlizzardBatchImporter::class)->importAchievements();
+
+    $wowAchievement = WowAchievement::query()->findOrFail(41802);
+    expect($wowAchievement->name_fr)->toBe('Reprise des Chants éternels')
+        ->and($wowAchievement->category_name)->toBe('Quêtes')
+        ->and($wowAchievement->expansion_id)->toBe(11)
+        ->and($wowAchievement->points)->toBe(25)
+        ->and($wowAchievement->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/41802.jpg');
 });
 
-test('importAchievements assigns expansion from category name', function (): void {
-    bbiWriteAchievementsJson([
-        [
-            'name' => 'Quests',
-            'cats' => [
-                [
-                    'name' => 'The War Within',
-                    'subcats' => [
-                        [
-                            'name' => 'Khaz Algar',
-                            'items' => [
-                                ['id' => 20, 'icon' => 'inv_misc_map01', 'points' => 10],
-                            ],
-                        ],
-                    ],
-                ],
-                [
-                    'name' => 'Battle for Azeroth',
-                    'subcats' => [
-                        [
-                            'name' => 'Zandalar',
-                            'items' => [
-                                ['id' => 21, 'icon' => 'inv_misc_map02', 'points' => 10],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
-        20 => 'Quêtes de Khaz Algar',
-        21 => 'Quêtes de Zandalar',
-    ]);
+test('importAchievements leaves the catalog untouched when the hierarchy is unreachable', function (): void {
+    WowAchievement::query()->create(['id' => 10, 'name_fr' => 'Achievement existant', 'expansion_id' => 0, 'category_name' => 'Quêtes', 'points' => 10, 'is_active' => true]);
 
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
+    $mock = $this->mock(BlizzardApiClient::class);
+    $mock->shouldReceive('get')->andThrow(new \Exception('API error: 500 Internal Server Error'));
+    $mock->shouldNotReceive('getAsync');
 
-    expect(WowAchievement::query()->find(20)->expansion_id)->toBe(10); // The War Within
-    expect(WowAchievement::query()->find(21)->expansion_id)->toBe(7); // Battle for Azeroth
-});
+    resolve(BlizzardBatchImporter::class)->importAchievements();
 
-test('importAchievements skips notReleased items', function (): void {
-    bbiWriteAchievementsJson([
-        [
-            'name' => 'General',
-            'cats' => [
-                [
-                    'name' => 'Classic',
-                    'subcats' => [
-                        [
-                            'name' => 'Exploration',
-                            'items' => [
-                                ['id' => 10, 'icon' => 'spell_holy_light', 'points' => 10],
-                                ['id' => 11, 'icon' => 'spell_fire_fireball', 'points' => 5, 'notReleased' => true],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', [
-        10 => 'Achievement actif',
-        11 => 'Achievement futur',
-    ]);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
-
-    expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Achievement actif');
-});
-
-test('importAchievements handles missing JSON file gracefully', function (): void {
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
-
-    expect(WowAchievement::query()->count())->toBe(0);
-});
-
-test('importAchievements leaves the catalog untouched when the API index is empty', function (): void {
-    WowAchievement::query()->create(['id' => 10, 'name_fr' => 'Achievement existant', 'expansion_id' => 0, 'category_name' => 'Classic', 'points' => 10, 'is_active' => true]);
-
-    bbiWriteAchievementsJson([
-        [
-            'name' => 'General',
-            'cats' => [
-                [
-                    'name' => 'Classic',
-                    'subcats' => [
-                        [
-                            'name' => 'Going Down!',
-                            'items' => [
-                                ['id' => 10, 'icon' => 'spell_holy_light', 'points' => 10],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ],
-    ]);
-    bbiMockNameIndex($this->mock(BlizzardApiClient::class), 'achievement/index', 'achievements', []);
-
-    $blizzardBatchImporter = resolve(BlizzardBatchImporter::class);
-    $blizzardBatchImporter->importAchievements();
-
-    expect(WowAchievement::query()->count())->toBe(1);
-    expect(WowAchievement::query()->find(10)->name_fr)->toBe('Achievement existant');
+    expect(WowAchievement::query()->count())->toBe(1)
+        ->and(WowAchievement::query()->findOrFail(10)->name_fr)->toBe('Achievement existant');
 });
 
 // ─── Mount Import ───────────────────────────────────────────
@@ -615,6 +506,18 @@ function bbiCurate(CollectionEntity $collectionEntity, array $rankings): void
  *
  * @param  array<int, string>  $names  [id => nom FR]
  */
+/**
+ * Mocke une réponse asynchrone, celle des lots de l'importer.
+ *
+ * @param  array<string, mixed>  $payload
+ */
+function bbiMockAsync(\Mockery\MockInterface $mock, string $endpoint, array $payload): void
+{
+    $mock->shouldReceive('getAsync')
+        ->withArgs(fn (string $requested): bool => str_starts_with($requested, $endpoint))
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode($payload))));
+}
+
 function bbiMockNameIndex(\Mockery\MockInterface $mock, string $endpoint, string $listKey, array $names): void
 {
     $entries = [];

@@ -32,12 +32,15 @@ export const useCharacterStore = defineStore('character', {
             { id: 9, name: 'Dragonflight' },
             { id: 10, name: 'The War Within' },
             { id: 11, name: 'Midnight' },
+            // Ce que rien ne date. Le drapeau le garde hors des onglets où il n'a aucun
+            // contenu, et hors des deux getters qui parlent des extensions réelles.
+            { id: 99, name: 'Non classé', onlyWhenFilled: true },
         ],
     }),
 
     getters: {
-        latestExpansionId: (state) => state.expansions.at(-1)?.id ?? 10,
-        expansionNamesDesc: (state) => [...state.expansions].reverse().map(e => e.name),
+        latestExpansionId: (state) => state.expansions.filter(e => !e.onlyWhenFilled).at(-1)?.id ?? 10,
+        expansionNamesDesc: (state) => [...state.expansions].filter(e => !e.onlyWhenFilled).reverse().map(e => e.name),
         crossCharQuestIds: (state) => {
             if (!state.crossCharacter) return null;
             if (!state._crossCharQuestSet) {

@@ -5,36 +5,32 @@ declare(strict_types=1);
 namespace App\Infrastructure\Blizzard;
 
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
+use App\Infrastructure\Blizzard\Concerns\SweepsIdWindows;
 use App\Infrastructure\Blizzard\Responses\ItemSearchDocument;
 use App\Infrastructure\Blizzard\Responses\MediaSearchDocument;
 use App\Infrastructure\Blizzard\Responses\ResponsePayload;
-use InvalidArgumentException;
 
 /**
- * Balayage du catalogue d'items par fenêtres d'identifiants.
+ * Balayage du catalogue d'items sur la grille de fenêtres de `SearchIdWindow`.
  *
- * Une fenêtre est un index `w` désignant l'intervalle `[w × 1000, w × 1000 + 999]`. La
- * grille est fixe, et c'est ce qui rend le balayage reprenable : une fenêtre se désigne
- * par un entier, indépendamment de ce qu'elle contient. Mille identifiants tenant
- * toujours sous la page maximale de l'API, une fenêtre ne pagine jamais.
- *
- * Les réponses sont volumineuses — toutes les locales sont servies quelle que soit celle
- * demandée, soit environ 1,2 Mo par fenêtre. Chaque document est réduit à sa forme
- * compacte puis libéré immédiatement ; l'appelant choisit combien de fenêtres il traite
- * d'un coup, ce qui fixe le pic mémoire.
+ * Un document de recherche d'item porte déjà tout ce qu'un import de garde-robe cherche —
+ * nom, qualité, media, apparences —, là où le détail unitaire demandait un appel par
+ * apparence. Les réponses pèsent environ 1,2 Mo par fenêtre : l'appelant choisit combien
+ * de fenêtres il traite d'un coup, ce qui fixe le pic mémoire.
  */
 final readonly class ItemSearchSweep
 {
     use ImportsFromBlizzardApi;
+    use SweepsIdWindows;
 
-    public const WINDOW_SIZE = 1000;
+    public const WINDOW_SIZE = SearchIdWindow::SIZE;
 
     private const ITEM_ENDPOINT = 'data/wow/search/item';
 
-    private const MEDIA_ENDPOINT = 'data/wow/search/media';
-
-    public function __construct(BlizzardApiClient $blizzardApiClient)
-    {
+    public function __construct(
+        BlizzardApiClient $blizzardApiClient,
+        private MediaSearchSweep $mediaSearchSweep,
+    ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
 
@@ -43,11 +39,7 @@ final readonly class ItemSearchSweep
      */
     public static function windowCountFor(int $highestId): int
     {
-        if ($highestId < 0) {
-            throw new InvalidArgumentException(sprintf('A highest item id cannot be negative, got %d.', $highestId));
-        }
-
-        return intdiv($highestId, self::WINDOW_SIZE) + 1;
+        return SearchIdWindow::countFor($highestId);
     }
 
     /**
@@ -76,7 +68,7 @@ final readonly class ItemSearchSweep
      */
     public function sweepItems(array $windows, callable $onDocument): void
     {
-        $this->sweep(self::ITEM_ENDPOINT, $windows, '', function (ResponsePayload $responsePayload) use ($onDocument): void {
+        $this->sweepWindows(self::ITEM_ENDPOINT, $windows, '', function (ResponsePayload $responsePayload) use ($onDocument): void {
             $onDocument(ItemSearchDocument::fromPayload($responsePayload));
         });
     }
@@ -89,58 +81,6 @@ final readonly class ItemSearchSweep
      */
     public function sweepItemMedia(array $windows): array
     {
-        $media = [];
-
-        $this->sweep(self::MEDIA_ENDPOINT, $windows, '&tags=item', function (ResponsePayload $responsePayload) use (&$media): void {
-            $mediaSearchDocument = MediaSearchDocument::fromPayload($responsePayload);
-            $media[$mediaSearchDocument->id] = $mediaSearchDocument;
-        });
-
-        return $media;
-    }
-
-    /**
-     * @param  list<int>  $windows
-     * @param  callable(ResponsePayload): void  $onDocument
-     */
-    private function sweep(string $endpoint, array $windows, string $extraQuery, callable $onDocument): void
-    {
-        if ($windows === []) {
-            return;
-        }
-
-        $endpoints = [];
-        foreach ($windows as $window) {
-            $endpoints[$window] = $this->windowEndpoint($endpoint, $window, $extraQuery);
-        }
-
-        $responses = $this->fetchBatchAsync($endpoints);
-
-        // Chaque réponse est libérée dès qu'elle est réduite : garder les corps décodés
-        // du lot entier multiplierait le pic mémoire par le nombre de fenêtres.
-        foreach (array_keys($responses) as $key) {
-            $decoded = $responses[$key];
-            unset($responses[$key]);
-
-            if ($decoded === null) {
-                continue;
-            }
-
-            foreach (ResponsePayload::forEndpoint($endpoint, $decoded)->objectList('results') as $result) {
-                $onDocument($result->requiredObject('data'));
-            }
-        }
-    }
-
-    private function windowEndpoint(string $endpoint, int $window, string $extraQuery): string
-    {
-        return sprintf(
-            '%s?_pageSize=%d&orderby=id&id=[%d,%d]%s',
-            $endpoint,
-            self::WINDOW_SIZE,
-            $window * self::WINDOW_SIZE,
-            $window * self::WINDOW_SIZE + self::WINDOW_SIZE - 1,
-            $extraQuery,
-        );
+        return $this->mediaSearchSweep->sweep($windows, MediaSearchTag::Item);
     }
 }

@@ -20,6 +20,8 @@ aggregate(array $completedAchievementIds): array<int, array{
 
 Prend la liste des IDs de hauts-faits complétés par le personnage. Retourne un tableau indexé par `expansion_id` contenant le total, le complété, et la liste détaillée par catégorie.
 
+Les clés viennent de `ExpansionId::allSlugs()` : les douze extensions **et** le seau `UNCLASSIFIED`, qui porte les hauts faits que leur catégorie ne date pas. Une borne `0..11` en dur les ferait sortir de l'agrégat, donc du score et de l'onglet.
+
 ---
 
 ## `CollectionProgressAggregator`

@@ -11,72 +11,12 @@ final class SimpleArmoryParser
     private const ICON_BASE_URL = 'https://wow.zamimg.com/images/wow/icons/medium/';
 
     /**
-     * @var array<string, int>
-     */
-    private const CATEGORY_EXPANSION_MAP = [
-        'Classic' => 0,
-        'The Burning Crusade' => 1,
-        'Burning Crusade' => 1,
-        'Wrath of the Lich King' => 2,
-        'Cataclysm' => 3,
-        'Mists of Pandaria' => 4,
-        'Pandaria' => 4,
-        'Warlords of Draenor' => 5,
-        'Draenor' => 5,
-        'Legion' => 6,
-        'Battle for Azeroth' => 7,
-        'Shadowlands' => 8,
-        'Dragonflight' => 9,
-        'The War Within' => 10,
-        'War Within' => 10,
-        'Midnight' => 11,
-    ];
-
-    /**
      * @var array<string, string>
      */
     private const FACTION_MAP = [
         'A' => 'Alliance',
         'H' => 'Horde',
     ];
-
-    /**
-     * Parse SimpleArmory achievements.json (4-level hierarchy: supercats > cats > subcats > items).
-     *
-     * @return array<int, array{category: string, subcategory: string, expansion_id: int|null, icon: string, points: int, faction: string|null}>
-     */
-    public static function parseAchievements(): array
-    {
-        $data = self::loadJsonFile('achievements.json');
-        if ($data === null) {
-            return [];
-        }
-
-        if (! isset($data['supercats']) || ! is_array($data['supercats'])) {
-            Log::warning('SimpleArmory achievements.json: missing or invalid "supercats" key.');
-
-            return [];
-        }
-
-        /** @var list<array<string, mixed>> $supercats */
-        $supercats = $data['supercats'];
-
-        $items = [];
-        $skipped = 0;
-
-        foreach ($supercats as $supercat) {
-            $parsed = self::parseAchievementSupercat($supercat, $skipped);
-            foreach ($parsed as $id => $item) {
-                $items[$id] = $item;
-            }
-        }
-
-        if ($skipped > 0) {
-            Log::info(sprintf('SimpleArmory achievements: skipped %d not-yet-released items.', $skipped));
-        }
-
-        return $items;
-    }
 
     /**
      * Parse a SimpleArmory collection file (mounts.json, pets.json, decors.json).
@@ -130,90 +70,6 @@ final class SimpleArmoryParser
         }
 
         return self::ICON_BASE_URL.strtolower($trimmed).'.jpg';
-    }
-
-    /**
-     * Map a SimpleArmory category name to an expansion ID.
-     */
-    public static function resolveExpansionId(string $categoryName): ?int
-    {
-        return self::CATEGORY_EXPANSION_MAP[$categoryName] ?? null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $supercat
-     * @return array<int, array{category: string, subcategory: string, expansion_id: int|null, icon: string, points: int, faction: string|null}>
-     */
-    private static function parseAchievementSupercat(array $supercat, int &$skipped): array
-    {
-        $supercatName = self::extractString($supercat, 'name');
-        if ($supercatName === '') {
-            return [];
-        }
-
-        $items = [];
-
-        /** @var list<array<string, mixed>> $cats */
-        $cats = $supercat['cats'] ?? [];
-
-        foreach ($cats as $cat) {
-            $catName = self::extractString($cat, 'name');
-            $expansionId = self::CATEGORY_EXPANSION_MAP[$catName] ?? null;
-
-            /** @var list<array<string, mixed>> $subcats */
-            $subcats = $cat['subcats'] ?? [];
-
-            foreach ($subcats as $subcat) {
-                $parsed = self::parseAchievementSubcat($subcat, $supercatName, $expansionId, $skipped);
-                foreach ($parsed as $id => $item) {
-                    $items[$id] = $item;
-                }
-            }
-        }
-
-        return $items;
-    }
-
-    /**
-     * @param  array<string, mixed>  $subcat
-     * @return array<int, array{category: string, subcategory: string, expansion_id: int|null, icon: string, points: int, faction: string|null}>
-     */
-    private static function parseAchievementSubcat(
-        array $subcat,
-        string $supercatName,
-        ?int $expansionId,
-        int &$skipped,
-    ): array {
-        $subcatName = self::extractString($subcat, 'name');
-        $items = [];
-
-        /** @var list<array<string, mixed>> $rawItems */
-        $rawItems = $subcat['items'] ?? [];
-
-        foreach ($rawItems as $rawItem) {
-
-            if (! empty($rawItem['notReleased'])) {
-                $skipped++;
-
-                continue;
-            }
-
-            $id = self::extractInt($rawItem, 'id');
-            if ($id <= 0) {
-                continue;
-            }
-
-            $items[$id] = [
-                'category' => $supercatName,
-                'subcategory' => $subcatName,
-                'expansion_id' => $expansionId,
-                'icon' => self::extractString($rawItem, 'icon'),
-                'points' => max(0, self::extractInt($rawItem, 'points')),
-                'faction' => self::mapFaction($rawItem),
-            ];
-        }
-
-        return $items;
     }
 
     /**
