@@ -20,6 +20,7 @@ beforeEach(function (): void {
  * les autres renvoient une liste vide.
  *
  * @param  array<string, list<int>>  $slots  [slotType => list<appearanceId>]
+ * @param  list<string>  $failing
  */
 function mockSlotIndexes(\Mockery\MockInterface $mock, array $slots, array $failing = []): void
 {
@@ -47,60 +48,81 @@ function mockSlotIndexes(\Mockery\MockInterface $mock, array $slots, array $fail
 }
 
 /**
- * Mocke le détail d'une apparence.
- *
- * @param  list<array{id: int, name: string}>  $items
+ * Borne du balayage : le plus grand identifiant d'item du catalogue.
  */
-function mockAppearanceDetail(\Mockery\MockInterface $mock, int $id, string $slotType, string $itemClass, array $items, int $mediaId): void
+function mockHighestItemId(\Mockery\MockInterface $mock, ?int $highestItemId): void
 {
-    $mock->shouldReceive('getAsync')
-        ->with('data/wow/item-appearance/'.$id, \Mockery::any())
-        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
-            'id' => $id,
-            'slot' => ['type' => $slotType, 'name' => 'x'],
-            'item_class' => ['name' => $itemClass, 'id' => 4],
-            'items' => array_map(fn (array $item): array => ['id' => $item['id'], 'name' => $item['name']], $items),
-            'media' => ['id' => $mediaId],
-        ]))));
+    $expectation = $mock->shouldReceive('get')
+        ->withArgs(fn (string $endpoint): bool => str_contains($endpoint, 'orderby=id:desc'));
+
+    if ($highestItemId === null) {
+        $expectation->andThrow(new \Exception('API error: 500 Internal Server Error'));
+
+        return;
+    }
+
+    $expectation->andReturn(['results' => [['data' => ['id' => $highestItemId]]]]);
 }
 
 /**
- * Mocke toutes les recherches bulk d'items : chaque appel reçoit le set complet
- * (l'importer filtre par ID, les entrées hors plage sont ignorées).
+ * Un document de recherche d'item, réduit à ce que l'importer lit.
  *
- * @param  list<array{id: int, quality: string, name: string}>  $items
+ * @param  list<int>  $appearanceIds
+ * @return array<string, mixed>
  */
-function mockItemSearch(\Mockery\MockInterface $mock, array $items): void
+function itemDocument(int $id, string $name, string $quality, array $appearanceIds, string $category = 'Armure'): array
 {
-    $mock->shouldReceive('getAsync')
-        ->withArgs(fn (string $endpoint): bool => str_starts_with($endpoint, 'data/wow/search/item?'))
-        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
-            'results' => array_map(fn (array $item): array => ['data' => [
-                'id' => $item['id'],
-                'quality' => ['type' => $item['quality']],
-                'name' => ['fr_FR' => $item['name']],
-            ]], $items),
-        ]))));
+    return [
+        'id' => $id,
+        'name' => ['fr_FR' => $name],
+        'quality' => ['type' => $quality],
+        'media' => ['id' => $id],
+        'item_class' => ['id' => 4, 'name' => ['fr_FR' => $category]],
+        'appearances' => array_map(fn (int $appearanceId): array => ['id' => $appearanceId], $appearanceIds),
+    ];
 }
 
 /**
- * Mocke toutes les recherches bulk de media (icônes).
+ * Mocke les fenêtres de recherche d'un endpoint : celles qui ne sont pas décrites
+ * répondent une page vide, comme le ferait une plage d'identifiants sans résultat.
  *
- * @param  list<array{id: int, icon: string, fdid: int}>  $medias
+ * @param  array<int, list<array<string, mixed>>>  $windows  [windowIndex => list<document>]
  */
-function mockMediaSearch(\Mockery\MockInterface $mock, array $medias): void
+function mockSearchWindows(\Mockery\MockInterface $mock, string $endpoint, array $windows): void
 {
+    foreach ($windows as $window => $documents) {
+        $range = sprintf('id=[%d,%d]', $window * 1000, $window * 1000 + 999);
+
+        $mock->shouldReceive('getAsync')
+            ->withArgs(fn (string $requested): bool => str_starts_with($requested, $endpoint.'?') && str_contains($requested, $range))
+            ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
+                'results' => array_map(static fn (array $document): array => ['data' => $document], $documents),
+            ]))));
+    }
+
     $mock->shouldReceive('getAsync')
-        ->withArgs(fn (string $endpoint): bool => str_starts_with($endpoint, 'data/wow/search/media?'))
-        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], (string) json_encode([
-            'results' => array_map(fn (array $media): array => ['data' => [
-                'id' => $media['id'],
-                'assets' => [['key' => 'icon', 'value' => $media['icon'], 'file_data_id' => $media['fdid']]],
-            ]], $medias),
-        ]))));
+        ->withArgs(fn (string $requested): bool => str_starts_with($requested, $endpoint.'?'))
+        ->andReturnUsing(fn (): \GuzzleHttp\Promise\PromiseInterface => Create::promiseFor(new Response(200, [], '{"results":[]}')));
 }
 
-test('it imports collectible appearances from the API slot indexes', function (): void {
+/**
+ * Un media d'item : l'icône que porte l'item représentatif.
+ *
+ * @return array<string, mixed>
+ */
+function mediaDocument(int $id, string $icon, ?int $fileDataId = null): array
+{
+    return [
+        'id' => $id,
+        'assets' => [array_filter([
+            'key' => 'icon',
+            'value' => $icon,
+            'file_data_id' => $fileDataId,
+        ], static fn (mixed $value): bool => $value !== null)],
+    ];
+}
+
+test('it builds the wardrobe from item searches without a single appearance detail call', function (): void {
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
@@ -109,29 +131,25 @@ test('it imports collectible appearances from the API slot indexes', function ()
         'BODY' => [400],
         'WEAPONMAINHAND' => [500],
     ]);
+    mockHighestItemId($client, 700);
 
-    mockAppearanceDetail($client, 321, 'HEAD', 'Armure', [
-        ['id' => 11735, 'name' => 'Couvre-œil du forcené'],
-        ['id' => 19945, 'name' => 'Couvre-œil en écailles de lézard'],
-    ], 11735);
-    mockAppearanceDetail($client, 400, 'BODY', 'Armure', [
-        ['id' => 600, 'name' => 'Chemise élégante'],
-    ], 600);
-    mockAppearanceDetail($client, 500, 'WEAPONMAINHAND', 'Arme', [
-        ['id' => 700, 'name' => 'Lame fidèle'],
-    ], 700);
+    $client->shouldNotReceive('getAsync')
+        ->withArgs(fn (string $endpoint): bool => str_starts_with($endpoint, 'data/wow/item-appearance/'));
 
-    mockItemSearch($client, [
-        ['id' => 11735, 'quality' => 'RARE', 'name' => 'Couvre-œil du forcené'],
-        ['id' => 19945, 'quality' => 'EPIC', 'name' => 'Couvre-œil en écailles de lézard'],
-        ['id' => 600, 'quality' => 'COMMON', 'name' => 'Chemise élégante'],
-        ['id' => 700, 'quality' => 'LEGENDARY', 'name' => 'Lame fidèle'],
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [
+            itemDocument(10, 'Couvre-œil du forcené', 'RARE', [321]),
+            itemDocument(20, 'Couvre-œil en écailles de lézard', 'EPIC', [321]),
+            itemDocument(600, 'Chemise élégante', 'COMMON', [400]),
+            itemDocument(700, 'Lame fidèle', 'LEGENDARY', [500], category: 'Arme'),
+        ],
     ]);
-
-    mockMediaSearch($client, [
-        ['id' => 11735, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/inv_chest_samurai.jpg', 'fdid' => 132759],
-        ['id' => 600, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/inv_shirt_01.jpg', 'fdid' => 100001],
-        ['id' => 700, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/inv_sword_01.jpg', 'fdid' => 100002],
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [
+            mediaDocument(20, 'https://render.worldofwarcraft.com/eu/icons/56/inv_chest_samurai.jpg', 132759),
+            mediaDocument(600, 'https://render.worldofwarcraft.com/eu/icons/56/inv_shirt_01.jpg', 100001),
+            mediaDocument(700, 'https://render.worldofwarcraft.com/eu/icons/56/inv_sword_01.jpg', 100002),
+        ],
     ]);
 
     resolve(AppearanceImporter::class)->import();
@@ -140,22 +158,104 @@ test('it imports collectible appearances from the API slot indexes', function ()
 
     $head = WowAppearance::query()->find(321);
     // item représentatif = meilleure qualité parmi les items liés
-    expect($head->name_fr)->toBe('Couvre-œil en écailles de lézard');
-    expect($head->item_id)->toBe(19945);
-    expect($head->quality)->toBe(4);
-    expect($head->slot)->toBe('HEAD');
-    expect($head->category)->toBe('Armure');
-    expect($head->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/inv_chest_samurai.jpg');
-    expect($head->icon_file_data_id)->toBe(132759);
-    expect($head->is_active)->toBeTrue();
+    expect($head->name_fr)->toBe('Couvre-œil en écailles de lézard')
+        ->and($head->item_id)->toBe(20)
+        ->and($head->quality)->toBe(4)
+        ->and($head->slot)->toBe('HEAD')
+        ->and($head->category)->toBe('Armure')
+        ->and($head->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/inv_chest_samurai.jpg')
+        ->and($head->icon_file_data_id)->toBe(132759)
+        ->and($head->is_active)->toBeTrue();
 
     // vocabulaire de slots du front préservé : BODY → SHIRT, WEAPONMAINHAND → WEAPON
     expect(WowAppearance::query()->find(400)->slot)->toBe('SHIRT');
 
     $weapon = WowAppearance::query()->find(500);
-    expect($weapon->slot)->toBe('WEAPON');
-    expect($weapon->category)->toBe('Arme');
-    expect($weapon->quality)->toBe(5);
+    expect($weapon->slot)->toBe('WEAPON')
+        ->and($weapon->category)->toBe('Arme')
+        ->and($weapon->quality)->toBe(5);
+});
+
+test('only the appearances listed in the slot indexes enter the catalog', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 30);
+
+    // 999 est porté par un item mais absent des index : apparence non collectionnable.
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [
+            itemDocument(10, 'Heaume', 'RARE', [321]),
+            itemDocument(30, 'Heaume interne', 'EPIC', [999]),
+        ],
+    ]);
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)]]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->count())->toBe(1)
+        ->and(WowAppearance::query()->find(999))->toBeNull();
+});
+
+test('the representative item is the best quality, ties broken by the lowest item id', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 1500);
+
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [
+            itemDocument(50, 'Heaume rare', 'RARE', [321]),
+            itemDocument(60, 'Heaume épique', 'EPIC', [321]),
+        ],
+        // La fenêtre suivante porte un second item épique : l'ordre de parcours ne doit
+        // pas décider, sans quoi une reprise ne rendrait pas le même représentant.
+        1 => [itemDocument(1200, 'Heaume épique bis', 'EPIC', [321])],
+    ]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [mediaDocument(60, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)],
+    ]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->find(321)->item_id)->toBe(60)
+        ->and(WowAppearance::query()->find(321)->name_fr)->toBe('Heaume épique');
+});
+
+test('it aborts without deleting anything when a single slot index fails', function (): void {
+    WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    // 17 slots répondent, CLOAK non : un index partiel effacerait tout un slot.
+    mockSlotIndexes($client, ['HEAD' => [321]], failing: ['CLOAK']);
+    $client->shouldNotReceive('getAsync');
+
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->find(999))->not->toBeNull()
+        ->and(WowAppearance::query()->find(321))->toBeNull();
+});
+
+test('it aborts without touching the catalog when the highest item id is unreadable', function (): void {
+    WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, null);
+    $client->shouldNotReceive('getAsync');
+
+    // Balayer une plage devinée manquerait les items les plus récents, donc les
+    // apparences neuves, et la suppression finale prendrait le reste pour du rebut.
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->find(999))->not->toBeNull()
+        ->and(WowAppearance::query()->find(321))->toBeNull();
 });
 
 test('it deletes stale appearances no longer present in the API slot indexes', function (): void {
@@ -167,9 +267,9 @@ test('it deletes stale appearances no longer present in the API slot indexes', f
     $client = $this->mock(BlizzardApiClient::class);
 
     mockSlotIndexes($client, ['HEAD' => [321]]);
-    mockAppearanceDetail($client, 321, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 10);
-    mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Heaume']]);
-    mockMediaSearch($client, [['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 'fdid' => 1]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)]]);
 
     resolve(AppearanceImporter::class)->import();
 
@@ -178,145 +278,202 @@ test('it deletes stale appearances no longer present in the API slot indexes', f
         ->and(WowAppearance::query()->find(321)->is_active)->toBeTrue();
 });
 
-test('it aborts without deleting anything when a single slot index fails', function (): void {
-    WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
-
+test('an appearance whose items carry no name gets no row', function (): void {
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
-    // 17 slots répondent, CLOAK non : un index partiel effacerait tout un slot.
-    mockSlotIndexes($client, ['HEAD' => [321]], failing: ['CLOAK']);
-
-    resolve(AppearanceImporter::class)->import();
-
-    expect(WowAppearance::query()->find(999))->not->toBeNull()
-        ->and(WowAppearance::query()->find(321))->toBeNull();
-});
-
-test('it skips already complete appearances unless a full refresh is requested', function (): void {
-    WowAppearance::factory()->create([
-        'id' => 321,
-        'name_fr' => 'Déjà importée',
-        'slot' => 'HEAD',
-        'item_id' => 10,
-        'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/old.jpg',
-        'is_active' => true,
+    mockSlotIndexes($client, ['HEAD' => [888]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [['id' => 10, 'appearances' => [['id' => 888]]]],
     ]);
-
-    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
-    $client = $this->mock(BlizzardApiClient::class);
-
-    mockSlotIndexes($client, ['HEAD' => [321, 322]]);
-
-    // Seule la nouvelle apparence 322 doit être détaillée
-    $client->shouldNotReceive('getAsync')->with('data/wow/item-appearance/321', \Mockery::any());
-    mockAppearanceDetail($client, 322, 'HEAD', 'Armure', [['id' => 20, 'name' => 'Nouveau heaume']], 20);
-    mockItemSearch($client, [['id' => 20, 'quality' => 'EPIC', 'name' => 'Nouveau heaume']]);
-    mockMediaSearch($client, [['id' => 20, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/b.jpg', 'fdid' => 2]]);
+    mockSearchWindows($client, 'data/wow/search/media', []);
 
     resolve(AppearanceImporter::class)->import();
 
-    expect(WowAppearance::query()->count())->toBe(2)
-        ->and(WowAppearance::query()->find(321)->name_fr)->toBe('Déjà importée')
-        ->and(WowAppearance::query()->find(322)->name_fr)->toBe('Nouveau heaume');
+    // Sans nom, la ligne serait affichée vide et compterait au dénominateur.
+    expect(WowAppearance::query()->find(888))->toBeNull();
 });
 
-test('it refetches every appearance when a full refresh is requested', function (): void {
+test('an appearance whose representative item has no icon keeps a null icon', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [900]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [900])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [['id' => 10, 'assets' => []]]]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    $appearance = WowAppearance::query()->find(900);
+    expect($appearance)->not->toBeNull()
+        ->and($appearance->name_fr)->toBe('Heaume')
+        ->and($appearance->icon_url)->toBeNull()
+        ->and($appearance->icon_file_data_id)->toBeNull();
+});
+
+test('a row already holding the same representative keeps its icon untouched', function (): void {
     WowAppearance::factory()->create([
         'id' => 321,
-        'name_fr' => 'Ancien nom',
+        'name_fr' => 'Heaume',
         'slot' => 'HEAD',
+        'category' => 'Armure',
+        'quality' => 3,
         'item_id' => 10,
         'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/old.jpg',
-        'is_active' => true,
+        'icon_file_data_id' => 7,
     ]);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
     mockSlotIndexes($client, ['HEAD' => [321]]);
-    mockAppearanceDetail($client, 321, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Nom actualisé']], 10);
-    mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Nom actualisé']]);
-    mockMediaSearch($client, [['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 'fdid' => 1]]);
-
-    resolve(AppearanceImporter::class)->import(full: true);
-
-    expect(WowAppearance::query()->find(321)->name_fr)->toBe('Nom actualisé');
-});
-
-test('it falls back to the representative item icon when the appearance media is unresolvable', function (): void {
-    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
-    $client = $this->mock(BlizzardApiClient::class);
-
-    mockSlotIndexes($client, ['HEAD' => [900]]);
-    // media.id 99999 n'existe pas dans l'API media : l'icône doit venir de l'item 10
-    mockAppearanceDetail($client, 900, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 99999);
-    mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Heaume']]);
-    mockMediaSearch($client, [
-        ['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/item10.jpg', 'fdid' => 42],
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/new.jpg', 8)],
     ]);
 
     resolve(AppearanceImporter::class)->import();
 
-    $appearance = WowAppearance::query()->find(900);
-    expect($appearance->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/item10.jpg')
-        ->and($appearance->icon_file_data_id)->toBe(42);
+    expect(WowAppearance::query()->find(321)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/old.jpg');
 });
 
-test('it limits the number of fetched details for smoke-testing', function (): void {
+test('a full refresh refetches the icons of every row', function (): void {
+    WowAppearance::factory()->create([
+        'id' => 321,
+        'name_fr' => 'Heaume',
+        'slot' => 'HEAD',
+        'category' => 'Armure',
+        'quality' => 3,
+        'item_id' => 10,
+        'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/old.jpg',
+        'icon_file_data_id' => 7,
+    ]);
+
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
-    mockSlotIndexes($client, ['HEAD' => [321, 322, 323]]);
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/new.jpg', 8)],
+    ]);
 
-    // Seule la première apparence doit être détaillée
-    mockAppearanceDetail($client, 321, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 10);
-    $client->shouldNotReceive('getAsync')->with('data/wow/item-appearance/322', \Mockery::any());
-    $client->shouldNotReceive('getAsync')->with('data/wow/item-appearance/323', \Mockery::any());
-    mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Heaume']]);
-    mockMediaSearch($client, [['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 'fdid' => 1]]);
+    resolve(AppearanceImporter::class)->import(full: true);
+
+    expect(WowAppearance::query()->find(321)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/new.jpg')
+        ->and(WowAppearance::query()->find(321)->icon_file_data_id)->toBe(8);
+});
+
+test('a better representative item replaces the stale icon of the row', function (): void {
+    WowAppearance::factory()->create([
+        'id' => 321,
+        'name_fr' => 'Heaume rare',
+        'slot' => 'HEAD',
+        'category' => 'Armure',
+        'quality' => 3,
+        'item_id' => 10,
+        'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/old.jpg',
+        'icon_file_data_id' => 7,
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 20);
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [
+            itemDocument(10, 'Heaume rare', 'RARE', [321]),
+            itemDocument(20, 'Heaume épique', 'EPIC', [321]),
+        ],
+    ]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [mediaDocument(20, 'https://render.worldofwarcraft.com/eu/icons/56/epic.jpg', 9)],
+    ]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    $appearance = WowAppearance::query()->find(321);
+    expect($appearance->item_id)->toBe(20)
+        ->and($appearance->name_fr)->toBe('Heaume épique')
+        ->and($appearance->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/epic.jpg')
+        ->and($appearance->icon_file_data_id)->toBe(9);
+});
+
+test('the limit caps the swept windows and leaves the catalog untouched', function (): void {
+    WowAppearance::factory()->create(['id' => 999, 'is_active' => true]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321, 322]]);
+    mockHighestItemId($client, 2500);
+
+    mockSearchWindows($client, 'data/wow/search/item', [
+        0 => [itemDocument(10, 'Heaume', 'RARE', [321])],
+        1 => [itemDocument(1100, 'Heaume lointain', 'EPIC', [322])],
+    ]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)],
+    ]);
 
     resolve(AppearanceImporter::class)->import(limit: 1);
 
-    expect(WowAppearance::query()->count())->toBe(1)
-        ->and(WowAppearance::query()->find(321))->not->toBeNull();
+    expect(WowAppearance::query()->find(321))->not->toBeNull()
+        ->and(WowAppearance::query()->find(322))->toBeNull()
+        ->and(WowAppearance::query()->find(999))->not->toBeNull();
 });
 
 test('importChunk stops without sleeping when the hourly budget is exhausted', function (): void {
     // Budget déjà au-delà du plafond réservé aux imports → importChunk doit rendre la
-    // main (le job se re-dispatchera), sans dormir ni récupérer aucun détail.
+    // main (le job se re-dispatchera), sans dormir ni balayer la moindre fenêtre.
     resolve(\App\Infrastructure\Blizzard\HourlyBudgetGuard::class)->consume(\App\Infrastructure\Blizzard\HourlyBudgetGuard::HOURLY_LIMIT);
 
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
     mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
     $client->shouldNotReceive('getAsync');
 
     $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 0, timeBoxSeconds: 600);
 
-    expect($appearanceImportProgress->done)->toBeFalse();
-    expect($appearanceImportProgress->offset)->toBe(0); // aucun avancement : la tranche sera rejouée
-    expect($appearanceImportProgress->secondsUntilBudget)->toBeGreaterThan(0);
-    expect(WowAppearance::query()->count())->toBe(0);
+    expect($appearanceImportProgress->done)->toBeFalse()
+        ->and($appearanceImportProgress->offset)->toBe(0) // aucun avancement : la fenêtre sera rejouée
+        ->and($appearanceImportProgress->secondsUntilBudget)->toBeGreaterThan(0)
+        ->and(WowAppearance::query()->count())->toBe(0);
     Sleep::assertNeverSlept();
 });
 
-test('importChunk saves a slice and reports completion with the final offset', function (): void {
+test('importChunk resumes at the window where the previous pass stopped', function (): void {
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
-    mockSlotIndexes($client, ['HEAD' => [500]]);
-    mockAppearanceDetail($client, 500, 'HEAD', 'Armure', [['id' => 10, 'name' => 'Heaume']], 10);
-    mockItemSearch($client, [['id' => 10, 'quality' => 'RARE', 'name' => 'Heaume']]);
-    mockMediaSearch($client, [['id' => 10, 'icon' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 'fdid' => 1]]);
+    mockSlotIndexes($client, ['HEAD' => [321, 322]]);
+    mockHighestItemId($client, 1500);
 
-    $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 0, timeBoxSeconds: 600);
+    $client->shouldNotReceive('getAsync')
+        ->withArgs(fn (string $endpoint): bool => str_starts_with($endpoint, 'data/wow/search/item?') && str_contains($endpoint, 'id=[0,999]'));
 
-    expect($appearanceImportProgress->done)->toBeTrue();
-    expect($appearanceImportProgress->offset)->toBe(1);
-    expect($appearanceImportProgress->total)->toBe(1);
-    expect(WowAppearance::query()->find(500)?->item_id)->toBe(10);
+    mockSearchWindows($client, 'data/wow/search/item', [
+        1 => [itemDocument(1100, 'Heaume lointain', 'EPIC', [322])],
+    ]);
+    mockSearchWindows($client, 'data/wow/search/media', [
+        1 => [mediaDocument(1100, 'https://render.worldofwarcraft.com/eu/icons/56/b.jpg', 2)],
+    ]);
+
+    // Deux fenêtres d'items, donc quatre unités de reprise : items puis media.
+    $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 1, timeBoxSeconds: 600);
+
+    expect($appearanceImportProgress->done)->toBeTrue()
+        ->and($appearanceImportProgress->offset)->toBe(4)
+        ->and($appearanceImportProgress->total)->toBe(4)
+        ->and(WowAppearance::query()->find(321))->toBeNull()
+        ->and(WowAppearance::query()->find(322)->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/b.jpg');
 });
 
 test('it returns early when every slot index fails', function (): void {
@@ -332,18 +489,120 @@ test('it returns early when every slot index fails', function (): void {
     expect(WowAppearance::query()->count())->toBe(0);
 });
 
-test('it skips an appearance whose detail has no usable item', function (): void {
+test('a stored representative of better quality survives a sweep that only finds worse', function (): void {
+    WowAppearance::factory()->create([
+        'id' => 321,
+        'name_fr' => 'Heaume épique',
+        'slot' => 'HEAD',
+        'category' => 'Armure',
+        'quality' => 4,
+        'item_id' => 20,
+        'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/epic.jpg',
+        'icon_file_data_id' => 9,
+    ]);
+
     /** @var BlizzardApiClient|\Mockery\MockInterface $client */
     $client = $this->mock(BlizzardApiClient::class);
 
-    mockSlotIndexes($client, ['HEAD' => [888]]);
-    mockAppearanceDetail($client, 888, 'HEAD', 'Armure', [], 0);
-    mockItemSearch($client, []);
-    mockMediaSearch($client, []);
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
+    // L'item 20 n'est plus servi par l'API : le balayage ne voit que le 10, moins bon.
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume rare', 'RARE', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', []);
 
     resolve(AppearanceImporter::class)->import();
 
-    // Sans nom ni icône, la ligne serait affichée vide et compterait au dénominateur.
-    // Elle entrera d'elle-même dès que l'API exposera un item lié.
-    expect(WowAppearance::query()->find(888))->toBeNull();
+    $appearance = WowAppearance::query()->find(321);
+    expect($appearance->item_id)->toBe(20)
+        ->and($appearance->name_fr)->toBe('Heaume épique')
+        ->and($appearance->quality)->toBe(4);
+});
+
+test('a row still without any representative takes the one the sweep finds', function (): void {
+    WowAppearance::factory()->create([
+        'id' => 321,
+        'name_fr' => 'Apparence sans item',
+        'slot' => 'HEAD',
+        'quality' => null,
+        'item_id' => null,
+        'icon_url' => null,
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume commun', 'COMMON', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)]]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    $appearance = WowAppearance::query()->find(321);
+    expect($appearance->item_id)->toBe(10)
+        ->and($appearance->name_fr)->toBe('Heaume commun')
+        ->and($appearance->icon_url)->toBe('https://render.worldofwarcraft.com/eu/icons/56/a.jpg');
+});
+
+test('an item the media search does not know leaves its appearance without icon', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [321])]]);
+    // La fenêtre répond, mais sur d'autres identifiants : environ un tiers des items
+    // n'a pas de media exploitable.
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [mediaDocument(11, 'https://render.worldofwarcraft.com/eu/icons/56/autre.jpg', 2)]]);
+
+    resolve(AppearanceImporter::class)->import();
+
+    expect(WowAppearance::query()->find(321)->icon_url)->toBeNull();
+});
+
+test('a full refresh writes nothing when every icon is already correct', function (): void {
+    WowAppearance::factory()->create([
+        'id' => 321,
+        'name_fr' => 'Heaume',
+        'slot' => 'HEAD',
+        'category' => 'Armure',
+        'quality' => 3,
+        'item_id' => 10,
+        'icon_url' => 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg',
+        'icon_file_data_id' => 1,
+    ]);
+
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 10);
+    mockSearchWindows($client, 'data/wow/search/item', [0 => [itemDocument(10, 'Heaume', 'RARE', [321])]]);
+    mockSearchWindows($client, 'data/wow/search/media', [0 => [mediaDocument(10, 'https://render.worldofwarcraft.com/eu/icons/56/a.jpg', 1)]]);
+
+    \Illuminate\Support\Facades\DB::enableQueryLog();
+    resolve(AppearanceImporter::class)->import(full: true);
+    $writes = array_filter(
+        \Illuminate\Support\Facades\DB::getQueryLog(),
+        static fn (array $query): bool => str_contains((string) $query['query'], 'insert into "wow_appearances"'),
+    );
+    \Illuminate\Support\Facades\DB::disableQueryLog();
+
+    expect($writes)->toBe([]);
+});
+
+test('importChunk hands back its position when the time box runs out', function (): void {
+    /** @var BlizzardApiClient|\Mockery\MockInterface $client */
+    $client = $this->mock(BlizzardApiClient::class);
+
+    mockSlotIndexes($client, ['HEAD' => [321]]);
+    mockHighestItemId($client, 1500);
+    $client->shouldNotReceive('getAsync');
+
+    $appearanceImportProgress = resolve(AppearanceImporter::class)->importChunk(full: false, offset: 0, timeBoxSeconds: 0);
+
+    expect($appearanceImportProgress->done)->toBeFalse()
+        ->and($appearanceImportProgress->offset)->toBe(0)
+        ->and($appearanceImportProgress->total)->toBe(4)
+        ->and($appearanceImportProgress->secondsUntilBudget)->toBe(0);
 });

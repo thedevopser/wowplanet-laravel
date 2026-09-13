@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Cache;
 /**
  * Import d'apparences reprenable et auto-relâchant : traite une passe bornée en temps
  * (importChunk), puis se re-dispatch pour la suite au lieu de bloquer le worker pendant
- * les pauses de budget horaire. La reprise se fait via l'offset porté d'une passe à l'autre.
+ * les pauses de budget horaire. La reprise se fait via l'offset porté d'une passe à
+ * l'autre, qui désigne la fenêtre d'identifiants où le balayage s'est arrêté.
  */
 class ImportAppearancesJob implements ShouldQueue
 {

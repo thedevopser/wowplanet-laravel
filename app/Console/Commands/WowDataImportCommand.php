@@ -22,7 +22,7 @@ use Illuminate\Console\Command;
 
 class WowDataImportCommand extends Command
 {
-    protected $signature = 'app:wow-data-import {--type=all} {--force : Reimport even when the WoW build has not changed} {--full : Re-fetch every appearance instead of only the missing ones} {--limit= : Cap the number of appearance details fetched (smoke-test)}';
+    protected $signature = 'app:wow-data-import {--type=all} {--force : Reimport even when the WoW build has not changed} {--full : Re-fetch every appearance icon instead of only the missing ones} {--limit= : Cap the number of id windows swept per pass (smoke-test)}';
 
     protected $description = 'Import WoW data from the Blizzard API, the reference tables and the curated collection files';
 

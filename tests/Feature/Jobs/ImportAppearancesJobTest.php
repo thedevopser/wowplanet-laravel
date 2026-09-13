@@ -34,6 +34,10 @@ function mockJobSlotIndexes(\Mockery\MockInterface $mock, array $slots): void
             ->with('data/wow/item-appearance/slot/'.$allSlot, \Mockery::any())
             ->andReturn(['appearances' => array_map(fn (int $id): array => ['id' => $id], $ids)]);
     }
+
+    $mock->shouldReceive('get')
+        ->withArgs(fn (string $endpoint): bool => str_contains($endpoint, 'orderby=id:desc'))
+        ->andReturn(['results' => [['data' => ['id' => 2500]]]]);
 }
 
 test('the job re-dispatches itself when the budget is exhausted (work remains)', function (): void {

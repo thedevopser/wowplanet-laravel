@@ -128,6 +128,34 @@ ExpansionTierMatcher::match(string $name): ?int
 
 ---
 
+### `ItemSearchSweep`
+
+Balayage du catalogue d'items par fenêtres d'identifiants. Une fenêtre est un index `w` désignant l'intervalle `[w × 1000, w × 1000 + 999]` ; mille identifiants tenant toujours sous la page maximale de l'API, une fenêtre ne pagine jamais. La grille est fixe, ce qui permet de désigner une fenêtre par un entier et donc de reprendre un balayage interrompu.
+
+| Méthode | Retour | Description |
+|---|---|---|
+| `windowCountFor(int $highestId)` | `int` | Nombre de fenêtres couvrant le catalogue jusqu'à cet identifiant. |
+| `highestItemId()` | `?int` | Borne du balayage, lue sur une recherche triée par identifiant décroissant. |
+| `sweepItems(array $windows, callable $onDocument)` | `void` | Balaie des fenêtres de `data/wow/search/item` et remet chaque document à l'appelant. |
+| `sweepItemMedia(array $windows)` | `array<int, MediaSearchDocument>` | Icônes des items de ces fenêtres, indexées par identifiant de media. |
+
+Une réponse de recherche porte toutes les locales quelle que soit celle demandée, soit environ 1,2 Mo par fenêtre. Chaque document est réduit à sa forme compacte puis libéré immédiatement, et l'appelant choisit combien de fenêtres il traite d'un coup : c'est ce nombre qui fixe le pic mémoire (`services.blizzard.appearance_window_batch`, 5 par défaut).
+
+---
+
+### Documents de recherche (`Blizzard/Responses/`)
+
+Lecture typée des documents rendus par les endpoints de recherche, construite sur `ResponsePayload`. Le `mixed` sorti du décodage JSON s'arrête là.
+
+| Classe | Champs exposés |
+|---|---|
+| `ItemSearchDocument` | `id`, `nameFr`, `quality` (OverallQualityID numérique), `mediaId`, `categoryFr`, `appearanceIds` |
+| `MediaSearchDocument` | `id`, `iconUrl`, `fileDataId` |
+
+Le nom français tombe sur le nom anglais quand la locale française manque. Un media sans asset `icon` est un cas normal, traité par un repli côté appelant, pas une réponse invalide.
+
+---
+
 ### Importeurs spécialisés (`Blizzard/Importers/`)
 
 Chaque importeur lit les données sources, les transforme et les sauvegarde via `upsert`.
@@ -142,6 +170,20 @@ Chaque importeur lit les données sources, les transforme et les sauvegarde via 
 | `ProfessionImporter` | `skill_line_ability.csv` + API Blizzard | `WowProfession`, `WowRecipe` |
 
 Pour les trois collections, le partage d'autorité est explicite : **l'API tranche l'existence**, la **taxonomie curée tranche le rangement**. Une entrée que l'API ignore n'entre pas au catalogue ; une entrée que la taxonomie ne range pas entre sans catégorie ni source, et figure au rapport d'entrées à arbitrer. Voir [Taxonomie des collections](#taxonomie-des-collections-appinfrastructuretaxonomy).
+
+---
+
+### `AppearanceImporter`
+
+La garde-robe se construit par balayage du catalogue d'items, sans aucun appel unitaire par apparence. Un document de recherche d'item porte déjà le nom, la qualité, le media, la classe d'objet et les apparences liées : quelques centaines de fenêtres remplacent les 22 000 requêtes de l'ancien pipeline.
+
+Deux autorités, jamais mélangées. Les 18 index de slots de l'`Item Appearance API` disent ce qui est collectionnable ; le balayage dit ce que chaque apparence contient. Une apparence portée par un item mais absente des index n'entre pas au catalogue. Si un seul de ces index ne répond pas, l'import s'interrompt sans rien supprimer — un index partiel effacerait tout un slot. Même posture si la borne du balayage est illisible : une plage devinée manquerait les identifiants les plus hauts, donc le contenu le plus récent.
+
+**Deux passes sur la même grille de fenêtres**, et c'est l'unité de reprise portée par `AppearanceImportProgress` : les `n` premières fenêtres balaient les items, les `n` suivantes les media. Les lignes en base servent d'accumulateur d'une fenêtre à l'autre, ce qui évite de porter quoi que ce soit d'une passe à la suivante.
+
+L'item représentatif d'une apparence est choisi par un ordre total : **meilleure qualité, puis plus petit identifiant d'item**. Le départage par identifiant n'est pas cosmétique — un critère dépendant de l'ordre de parcours ne rendrait pas le même représentant après une reprise. Un changement de représentant remet l'icône à nul, ce qui suffit à la faire reprendre par la passe media ; hors `--full`, cette passe ne vise que les lignes sans icône.
+
+Une ligne identique à ce qui est déjà en base n'est pas réécrite, sans quoi chaque passe toucherait les 22 000 lignes et le mode incrémental ne voudrait plus rien dire.
 
 ---
 

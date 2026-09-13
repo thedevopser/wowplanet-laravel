@@ -54,3 +54,25 @@ Récupère les données de tous les personnages d'un compte et calcule la progre
 > La limite mémoire est portée à 256 Mo via `ini_set('memory_limit', '256M')` car le calcul cross-personnage peut traiter des dizaines de personnages en parallèle.
 
 **Consulter l'état** : `CrossCharacterService::getJobStatus(string $jobId)`
+
+---
+
+## `ImportAppearancesJob`
+
+Import de la garde-robe, reprenable et auto-relâchant. Le job traite une passe bornée en temps (`AppearanceImporter::importChunk()`) puis se re-dispatch pour la suite, au lieu de bloquer le worker pendant les pauses de budget horaire.
+
+**Propriétés**
+
+| Propriété | Type | Description |
+|---|---|---|
+| `$jobId` | `readonly string` | UUID identifiant ce job |
+| `$full` | `readonly bool` | Rafraîchit les icônes de toutes les lignes au lieu des seules lignes sans icône |
+| `$offset` | `readonly int` | Fenêtre d'identifiants où reprendre le balayage |
+| `$timeout` | `int` | `1800` secondes (30 min) |
+
+**Cycle de vie**
+
+1. Tant qu'il reste des fenêtres : clé `admin_import:{jobId}` → `{status: 'running'}`, puis re-dispatch à l'offset rendu, retardé du temps d'attente du budget horaire.
+2. Une fois tout balayé : clé → `{status: 'completed'}`.
+
+`retryUntil()` est fixé à 24 h : le chaînage de re-dispatch peut s'étaler sur plusieurs passes si le quota Blizzard impose des pauses.

@@ -49,10 +49,12 @@ return [
         'admin_bnet_id' => env('ADMIN_BNET_ID'),
 
         // Réimport : plafond horaire réservé aux imports (< quota réel 36000, laisse la
-        // marge au trafic site), durée max d'une passe de job, taille d'une tranche.
+        // marge au trafic site), durée max d'une passe de job, et nombre de fenêtres de
+        // recherche balayées ensemble — une fenêtre pesant environ 1,2 Mo, c'est elle
+        // qui fixe le pic mémoire de l'import de la garde-robe.
         'import_hourly_ceiling' => (int) env('BLIZZARD_IMPORT_HOURLY_CEILING', 30000),
         'import_chunk_timebox' => (int) env('BLIZZARD_IMPORT_CHUNK_TIMEBOX', 600),
-        'appearance_slice' => (int) env('BLIZZARD_APPEARANCE_SLICE', 2000),
+        'appearance_window_batch' => (int) env('BLIZZARD_APPEARANCE_WINDOW_BATCH', 5),
 
         // Requêtes en vol simultanées côté import. Le plafond réel reste celui de
         // RateLimitingMiddleware, 80 par seconde, marge délibérée sous les 100 de Blizzard.

@@ -8,16 +8,28 @@ use App\Application\DTOs\AppearanceImportProgress;
 use App\Infrastructure\Blizzard\BlizzardApiClient;
 use App\Infrastructure\Blizzard\Concerns\ImportsFromBlizzardApi;
 use App\Infrastructure\Blizzard\HourlyBudgetGuard;
+use App\Infrastructure\Blizzard\ItemSearchSweep;
+use App\Infrastructure\Blizzard\Responses\ItemSearchDocument;
+use App\Infrastructure\Blizzard\Responses\MediaSearchDocument;
 use App\Models\WowAppearance;
 use Illuminate\Support\Sleep;
 
 /**
- * Importe la garde-robe depuis l'API officielle Blizzard (Item Appearance API).
+ * Importe la garde-robe depuis l'API officielle Blizzard.
  *
- * Pipeline : index par slot (18 appels, liste curée des apparences collectionnables)
- * → détail par apparence (items liés, classe, media) → recherches bulk items (qualités)
- * et media (icônes). Incrémental par défaut : seules les apparences absentes de la
- * base sont détaillées.
+ * Deux autorités, jamais mélangées : les 18 index de slots disent ce qui est
+ * collectionnable, le balayage du catalogue d'items dit ce que chaque apparence
+ * contient. Une apparence absente des index n'entre pas, quel que soit le nombre
+ * d'items qui la portent.
+ *
+ * Le balayage remplace l'appel unitaire par apparence — 22 000 requêtes — par quelques
+ * centaines de fenêtres d'identifiants, un document de recherche d'item portant déjà le
+ * nom, la qualité, le media, la classe d'objet et les apparences liées.
+ *
+ * L'unité de reprise est la fenêtre : la passe items occupe les `n` premières, la passe
+ * media les `n` suivantes. Les lignes en base servent d'accumulateur d'une fenêtre à
+ * l'autre, ce qui permet de reprendre un balayage interrompu sans rien porter d'une
+ * passe à la suivante.
  */
 final readonly class AppearanceImporter
 {
@@ -36,34 +48,15 @@ final readonly class AppearanceImporter
         'WEAPONMAINHAND' => 'WEAPON',
     ];
 
-    /** Qualités API → OverallQualityID numérique historique. */
-    private const QUALITY_RANKS = [
-        'POOR' => 0,
-        'COMMON' => 1,
-        'UNCOMMON' => 2,
-        'RARE' => 3,
-        'EPIC' => 4,
-        'LEGENDARY' => 5,
-        'ARTIFACT' => 6,
-        'HEIRLOOM' => 7,
-    ];
+    /** Fenêtres balayées ensemble : c'est la manette du pic mémoire (~1,2 Mo par fenêtre). */
+    private const DEFAULT_WINDOW_BATCH = 5;
 
-    /** Largeur des fenêtres d'IDs pour les recherches bulk (≤ 1 000 IDs ⇒ jamais de pagination). */
-    private const SEARCH_WINDOW = 1000;
-
-    /** Nombre de détails d'apparences récupérés entre deux contrôles de budget horaire. */
-    private const DETAIL_CHUNK = 2000;
-
-    /**
-     * Fenêtres de recherche traitées par lot (réponses volumineuses, parsées puis
-     * libérées). Un document de recherche d'item pèse ~10 Ko décodé (toutes les
-     * locales + preview) : 5 fenêtres × 1 000 documents ≈ 50 Mo de pic mémoire.
-     */
-    private const SEARCH_BATCH = 5;
+    private const WRITE_CHUNK = 500;
 
     public function __construct(
         BlizzardApiClient $blizzardApiClient,
         private HourlyBudgetGuard $hourlyBudgetGuard,
+        private ItemSearchSweep $itemSearchSweep,
     ) {
         $this->blizzardApiClient = $blizzardApiClient;
     }
@@ -72,7 +65,7 @@ final readonly class AppearanceImporter
      * Import synchrone bloquant (CLI direct / tests). En prod le mode fluide passe par
      * ImportAppearancesJob, qui appelle importChunk() et se re-dispatch au lieu de bloquer.
      *
-     * @param  int|null  $limit  Borne le nombre de détails récupérés (smoke-test sans consommer le quota API)
+     * @param  int|null  $limit  Borne le nombre de fenêtres balayées par passe (smoke-test sans consommer le quota API)
      */
     public function import(bool $full = false, ?int $limit = null): void
     {
@@ -89,10 +82,10 @@ final readonly class AppearanceImporter
     }
 
     /**
-     * Traite des tranches d'apparences depuis $offset en sauvegardant chaque tranche.
-     * S'arrête sans avancer l'offset quand le budget import est épuisé (retourne
-     * secondsUntilBudget), ou quand le time-box est atteint. deleteStaleRows()
-     * uniquement une fois tout traité (jamais en mode --limit / smoke-test).
+     * Balaie les fenêtres depuis $offset en sauvegardant chaque lot. S'arrête sans
+     * avancer l'offset quand le budget import est épuisé (retourne secondsUntilBudget),
+     * ou quand le time-box est atteint. La suppression du rebut n'a lieu qu'une fois
+     * tout balayé, et jamais en mode --limit.
      */
     public function importChunk(bool $full, int $offset, int $timeBoxSeconds, ?int $limit = null): AppearanceImportProgress
     {
@@ -106,87 +99,90 @@ final readonly class AppearanceImporter
             return new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0);
         }
 
-        $allIds = array_keys($slotByAppearance);
-        sort($allIds);
-        if ($limit !== null) {
-            $allIds = array_slice($allIds, 0, $limit);
+        $itemWindows = $this->itemWindowCount($limit);
+        if ($itemWindows === null) {
+            return new AppearanceImportProgress(done: true, offset: 0, total: 0, secondsUntilBudget: 0);
         }
 
-        $total = count($allIds);
-
-        /** @var array<int, true> $complete IDs déjà complets en base (mode incrémental). */
-        $complete = $full ? [] : array_fill_keys($this->completeAppearanceIds(), true);
+        $total = $itemWindows * 2;
 
         /** @var int $ceiling */
         $ceiling = config('services.blizzard.import_hourly_ceiling', 30000);
-        /** @var int $sliceSize */
-        $sliceSize = config('services.blizzard.appearance_slice', 2000);
-        $slice = max(1, $sliceSize);
+        /** @var int $configuredBatch */
+        $configuredBatch = config('services.blizzard.appearance_window_batch', self::DEFAULT_WINDOW_BATCH);
+        $batchSize = max(1, $configuredBatch);
 
-        $i = $offset;
-        while ($i < $total) {
+        /** @var array<int, array<int, int>>|null $mediaTargets Lignes à illustrer, par fenêtre (calculé à l'entrée de la passe media). */
+        $mediaTargets = null;
+
+        $position = $offset;
+        while ($position < $total) {
             if (microtime(true) >= $deadline) {
-                return new AppearanceImportProgress(done: false, offset: $i, total: $total, secondsUntilBudget: 0);
+                return new AppearanceImportProgress(done: false, offset: $position, total: $total, secondsUntilBudget: 0);
             }
 
-            $window = array_slice($allIds, $i, $slice);
-            $idsToFetch = $full
-                ? $window
-                : array_values(array_filter($window, static fn (int $id): bool => ! isset($complete[$id])));
+            $isMediaPass = $position >= $itemWindows;
+            $passEnd = $isMediaPass ? $total : $itemWindows;
+            $batch = range($position, min($position + $batchSize, $passEnd) - 1);
 
-            if ($idsToFetch === []) {
-                $i += count($window); // fenêtre déjà complète : on avance sans consommer de budget
-
-                continue;
+            if ($isMediaPass) {
+                $mediaTargets ??= $this->mediaTargets($full);
+                $windows = array_values(array_filter(
+                    array_map(static fn (int $slot): int => $slot - $itemWindows, $batch),
+                    static fn (int $window): bool => isset($mediaTargets[$window]),
+                ));
+            } else {
+                $windows = $batch;
             }
 
-            $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($idsToFetch), $ceiling);
-            if ($wait > 0) {
-                return new AppearanceImportProgress(done: false, offset: $i, total: $total, secondsUntilBudget: $wait);
+            if ($windows !== []) {
+                $wait = $this->hourlyBudgetGuard->secondsUntilAvailable(count($windows), $ceiling);
+                if ($wait > 0) {
+                    return new AppearanceImportProgress(done: false, offset: $position, total: $total, secondsUntilBudget: $wait);
+                }
+
+                $isMediaPass
+                    ? $this->resolveIcons($windows, $mediaTargets ?? [])
+                    : $this->sweepItemWindows($windows, $slotByAppearance);
             }
 
-            $this->processSlice($idsToFetch, $slotByAppearance);
-            $i += count($window);
-            $this->info(sprintf('  Appearance progress: %d/%d.', $i, $total));
+            $position += count($batch);
+            $this->info(sprintf('  Appearance sweep: %d/%d windows.', $position, $total));
         }
 
         if ($limit === null) {
-            $this->deleteStaleRows($slotByAppearance);
+            $this->deleteRowsOutsideCatalog(WowAppearance::class, array_keys($slotByAppearance), 'appearances');
         }
 
         return new AppearanceImportProgress(done: true, offset: $total, total: $total, secondsUntilBudget: 0);
     }
 
     /**
-     * Traite une tranche d'IDs de bout en bout : détails → items/media → sauvegarde.
+     * Nombre de fenêtres couvrant le catalogue d'items, `null` si la borne est introuvable.
      *
-     * @param  list<int>  $ids
-     * @param  array<int, string>  $slotByAppearance
+     * Balayer une plage devinée manquerait les identifiants les plus hauts, donc le
+     * contenu le plus récent, et la suppression finale prendrait les apparences neuves
+     * pour du rebut. On s'arrête plutôt que d'importer à l'aveugle.
      */
-    private function processSlice(array $ids, array $slotByAppearance): void
+    private function itemWindowCount(?int $limit): ?int
     {
-        $details = $this->fetchDetails($ids);
-        if ($details === []) {
-            return;
+        $highestItemId = $this->itemSearchSweep->highestItemId();
+        if ($highestItemId === null) {
+            $this->info('ERROR: Could not read the highest item id, aborting import (catalog left untouched).');
+
+            return null;
         }
 
-        [$itemIds, $mediaIds] = $this->collectReferencedIds($details);
-        $itemData = $this->searchByIdWindows('data/wow/search/item', $itemIds, $this->parseItemResult(...));
+        $windows = ItemSearchSweep::windowCountFor($highestItemId);
 
-        // Les media d'items sont aussi cherchés : ~1/3 des media ids d'apparences
-        // n'existent pas dans l'API, l'icône de l'item représentatif sert de secours.
-        $mediaSearchIds = array_values(array_unique(array_merge($mediaIds, $itemIds)));
-        $mediaData = $this->searchByIdWindows('data/wow/search/media', $mediaSearchIds, $this->parseMediaResult(...), '&tags=item');
-
-        $rows = $this->buildRows($details, $slotByAppearance, $itemData, $mediaData);
-        $this->saveRows($rows);
+        return $limit === null ? $windows : min($windows, max(1, $limit));
     }
 
     /**
      * Index par slot → [appearanceId => slot (vocabulaire base)].
      *
-     * Ces index constituent le catalogue de référence : deleteStaleRows() supprime tout
-     * ce qui n'y figure pas. Un index partiel effacerait donc les slots manquants. On
+     * Ces index constituent le catalogue de référence : la suppression du rebut porte sur
+     * tout ce qui n'y figure pas. Un index partiel effacerait donc les slots manquants. On
      * abandonne dès qu'un seul slot ne répond pas, plutôt que de le sauter.
      *
      * @return array<int, string>
@@ -231,337 +227,249 @@ final readonly class AppearanceImporter
     }
 
     /**
-     * IDs déjà complets en base (détaillés avec succès : item_id + icon_url).
+     * Balaie des fenêtres d'items et sauvegarde les apparences qu'elles portent.
      *
-     * @return list<int>
+     * @param  list<int>  $windows
+     * @param  array<int, string>  $slotByAppearance
      */
-    private function completeAppearanceIds(): array
+    private function sweepItemWindows(array $windows, array $slotByAppearance): void
     {
-        /** @var list<int> $ids */
-        $ids = WowAppearance::query()
-            ->whereNotNull('item_id')
-            ->whereNotNull('icon_url')
-            ->pluck('id')
-            ->all();
+        /** @var array<int, array{item_id: int, quality: int, name: string, category: string|null}> $candidates */
+        $candidates = [];
 
-        return $ids;
-    }
-
-    /**
-     * Détails d'apparences par lots. Le budget est compté globalement via le middleware
-     * et vérifié au niveau tranche (importChunk) ; ici on ne fait que récupérer. Chaque
-     * réponse JSON est immédiatement réduite à une structure compacte (catégorie, media id, items).
-     *
-     * @param  list<int>  $ids
-     * @return array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>
-     */
-    private function fetchDetails(array $ids): array
-    {
-        $details = [];
-
-        foreach (array_chunk($ids, self::DETAIL_CHUNK) as $chunk) {
-            $endpoints = [];
-            foreach ($chunk as $id) {
-                $endpoints[$id] = 'data/wow/item-appearance/'.$id;
+        $this->itemSearchSweep->sweepItems($windows, function (ItemSearchDocument $itemSearchDocument) use (&$candidates, $slotByAppearance): void {
+            if ($itemSearchDocument->nameFr === null) {
+                return;
             }
 
-            $results = $this->fetchBatchAsync($endpoints);
-
-            foreach ($results as $id => $result) {
-                if ($result !== null) {
-                    $details[(int) $id] = $this->extractDetail($result);
-                }
-            }
-        }
-
-        return $details;
-    }
-
-    /**
-     * Réduit une réponse de détail d'apparence aux seuls champs exploités.
-     *
-     * @param  array<string, mixed>  $detail
-     * @return array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}
-     */
-    private function extractDetail(array $detail): array
-    {
-        /** @var array{name?: string} $itemClass */
-        $itemClass = $detail['item_class'] ?? [];
-
-        /** @var array{id?: int} $media */
-        $media = $detail['media'] ?? [];
-
-        $items = [];
-
-        /** @var list<array{id?: int, name?: string}> $rawItems */
-        $rawItems = $detail['items'] ?? [];
-        foreach ($rawItems as $rawItem) {
-            $itemId = (int) ($rawItem['id'] ?? 0);
-            if ($itemId > 0) {
-                $items[] = [$itemId, trim($rawItem['name'] ?? '')];
-            }
-        }
-
-        return [
-            'category' => ($itemClass['name'] ?? '') !== '' ? $itemClass['name'] : null,
-            'media_id' => (int) ($media['id'] ?? 0),
-            'items' => $items,
-        ];
-    }
-
-    /**
-     * @param  array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>  $details
-     * @return array{0: list<int>, 1: list<int>}
-     */
-    private function collectReferencedIds(array $details): array
-    {
-        $itemIds = [];
-        $mediaIds = [];
-
-        foreach ($details as $detail) {
-            foreach ($detail['items'] as $item) {
-                $itemIds[$item[0]] = true;
-            }
-
-            if ($detail['media_id'] > 0) {
-                $mediaIds[$detail['media_id']] = true;
-            }
-        }
-
-        return [array_keys($itemIds), array_keys($mediaIds)];
-    }
-
-    /**
-     * Recherches bulk par fenêtres d'IDs de largeur ≤ SEARCH_WINDOW (1 000 IDs max
-     * par fenêtre ⇒ une seule page par appel, garanti par l'unicité des IDs).
-     *
-     * @template T
-     *
-     * @param  list<int>  $ids
-     * @param  callable(array<string, mixed>): (array{0: int, 1: T}|null)  $parseResult
-     * @return array<int, T>
-     */
-    private function searchByIdWindows(string $endpoint, array $ids, callable $parseResult, string $extraQuery = ''): array
-    {
-        if ($ids === []) {
-            return [];
-        }
-
-        sort($ids);
-
-        $endpoints = [];
-        $windowStart = null;
-        foreach ($ids as $id) {
-            if ($windowStart === null || $id >= $windowStart + self::SEARCH_WINDOW) {
-                $windowStart = $id;
-                $endpoints[] = sprintf(
-                    '%s?_pageSize=%d&orderby=id&id=[%d,%d]%s',
-                    $endpoint,
-                    self::SEARCH_WINDOW,
-                    $windowStart,
-                    $windowStart + self::SEARCH_WINDOW - 1,
-                    $extraQuery,
-                );
-            }
-        }
-
-        // Petits lots parsés immédiatement : chaque fenêtre peut renvoyer jusqu'à
-        // 1 000 documents complets (~plusieurs Ko chacun), accumuler toutes les
-        // réponses brutes ferait exploser la mémoire.
-        $map = [];
-        foreach (array_chunk($endpoints, self::SEARCH_BATCH) as $chunk) {
-            $responses = $this->fetchBatchAsync($chunk);
-
-            foreach ($responses as $response) {
-                if ($response === null) {
+            foreach ($itemSearchDocument->appearanceIds as $appearanceId) {
+                if (! isset($slotByAppearance[$appearanceId])) {
                     continue;
                 }
 
-                /** @var list<array{data?: array<string, mixed>}> $results */
-                $results = $response['results'] ?? [];
-                foreach ($results as $result) {
-                    $parsed = $parseResult($result['data'] ?? []);
-                    if ($parsed !== null) {
-                        $map[$parsed[0]] = $parsed[1];
-                    }
+                $current = $candidates[$appearanceId] ?? null;
+                if ($current !== null && ! $this->beats($itemSearchDocument->quality, $itemSearchDocument->id, $current['quality'], $current['item_id'])) {
+                    continue;
                 }
+
+                $candidates[$appearanceId] = [
+                    'item_id' => $itemSearchDocument->id,
+                    'quality' => $itemSearchDocument->quality,
+                    'name' => $itemSearchDocument->nameFr,
+                    'category' => $itemSearchDocument->categoryFr,
+                ];
             }
-        }
+        });
 
-        return $map;
+        $this->saveCandidates($candidates, $slotByAppearance);
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     * @return array{0: int, 1: array{quality: int, name: string}}|null
+     * Ordre total des candidats : meilleure qualité, puis plus petit identifiant d'item.
+     *
+     * Le départage par identifiant n'est pas cosmétique : le balayage traverse les items
+     * par fenêtres reprenables, un critère dépendant de l'ordre de parcours ne rendrait
+     * pas le même représentant après une reprise.
      */
-    private function parseItemResult(array $data): ?array
+    private function beats(int $quality, int $itemId, int $otherQuality, int $otherItemId): bool
     {
-        $id = is_numeric($data['id'] ?? null) ? (int) $data['id'] : 0;
-        if ($id <= 0) {
-            return null;
-        }
-
-        /** @var array{type?: string} $quality */
-        $quality = $data['quality'] ?? [];
-
-        /** @var array{fr_FR?: string} $name */
-        $name = $data['name'] ?? [];
-
-        return [$id, [
-            'quality' => self::QUALITY_RANKS[$quality['type'] ?? ''] ?? 1,
-            'name' => trim($name['fr_FR'] ?? ''),
-        ]];
+        return $quality > $otherQuality || ($quality === $otherQuality && $itemId < $otherItemId);
     }
 
     /**
-     * @param  array<string, mixed>  $data
-     * @return array{0: int, 1: array{icon_url: string, file_data_id: int|null}}|null
-     */
-    private function parseMediaResult(array $data): ?array
-    {
-        $id = is_numeric($data['id'] ?? null) ? (int) $data['id'] : 0;
-        if ($id <= 0) {
-            return null;
-        }
-
-        /** @var list<array{key?: string, value?: string, file_data_id?: int}> $assets */
-        $assets = $data['assets'] ?? [];
-        foreach ($assets as $asset) {
-            if (($asset['key'] ?? '') === 'icon' && ($asset['value'] ?? '') !== '') {
-                return [$id, [
-                    'icon_url' => $asset['value'],
-                    'file_data_id' => ($asset['file_data_id'] ?? 0) > 0 ? (int) $asset['file_data_id'] : null,
-                ]];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<int, array{category: string|null, media_id: int, items: list<array{0: int, 1: string}>}>  $details
+     * @param  array<int, array{item_id: int, quality: int, name: string, category: string|null}>  $candidates
      * @param  array<int, string>  $slotByAppearance
-     * @param  array<int, array{quality: int, name: string}>  $itemData
-     * @param  array<int, array{icon_url: string, file_data_id: int|null}>  $mediaData
-     * @return list<array{id: int, name_fr: string, slot: string|null, category: string|null, quality: int|null, item_id: int|null, icon_file_data_id: int|null, icon_url: string|null, expansion_id: int|null, source: string|null, is_active: bool}>
      */
-    private function buildRows(array $details, array $slotByAppearance, array $itemData, array $mediaData): array
+    private function saveCandidates(array $candidates, array $slotByAppearance): void
     {
+        if ($candidates === []) {
+            return;
+        }
+
+        $stored = WowAppearance::query()->whereIn('id', array_keys($candidates))->get()->keyBy('id');
+
         $rows = [];
-        $withoutRepresentative = 0;
+        foreach ($candidates as $appearanceId => $candidate) {
+            /** @var WowAppearance|null $existing */
+            $existing = $stored->get($appearanceId);
 
-        foreach ($details as $appearanceId => $detail) {
-            $representative = $this->pickRepresentative($detail['items'], $itemData);
-
-            // Aucun item exploitable : ni nom, ni qualité, ni icône. La ligne serait
-            // affichée vide dans la garde-robe et compterait au dénominateur. On l'écarte ;
-            // elle entrera d'elle-même dès que l'API exposera un item lié, puisque
-            // completeAppearanceIds() la considère de toute façon comme à re-détailler.
-            if ($representative['name'] === null) {
-                $withoutRepresentative++;
-
+            if ($existing instanceof WowAppearance && $this->storedWins($existing, $candidate['quality'], $candidate['item_id'])) {
                 continue;
             }
 
-            $mediaInfo = $mediaData[$detail['media_id']]
-                ?? ($representative['item_id'] !== null ? ($mediaData[$representative['item_id']] ?? null) : null);
+            // Item représentatif inchangé : l'icône déjà résolue reste valable. Sinon elle
+            // est remise à nul, ce qui suffit à la faire reprendre par la passe media.
+            $keepsIcon = $existing instanceof WowAppearance && $existing->item_id === $candidate['item_id'];
 
-            $rows[] = [
+            $row = [
                 'id' => $appearanceId,
-                'name_fr' => $representative['name'],
+                'name_fr' => $candidate['name'],
                 'slot' => $slotByAppearance[$appearanceId] ?? null,
-                'category' => $detail['category'],
-                'quality' => $representative['quality'],
-                'item_id' => $representative['item_id'],
-                'icon_file_data_id' => $mediaInfo['file_data_id'] ?? null,
-                'icon_url' => $mediaInfo['icon_url'] ?? null,
+                'category' => $candidate['category'],
+                'quality' => $candidate['quality'],
+                'item_id' => $candidate['item_id'],
+                'icon_file_data_id' => $keepsIcon ? $existing->icon_file_data_id : null,
+                'icon_url' => $keepsIcon ? $existing->icon_url : null,
                 'expansion_id' => null,
                 'source' => null,
                 'is_active' => true,
             ];
-        }
 
-        $this->info(sprintf('Built %d appearance rows (%d skipped, no usable item).', count($rows), $withoutRepresentative));
-
-        return $rows;
-    }
-
-    /**
-     * Item représentatif = meilleure qualité parmi les items liés à l'apparence.
-     *
-     * @param  list<array{0: int, 1: string}>  $items  [itemId, nom du détail d'apparence]
-     * @param  array<int, array{quality: int, name: string}>  $itemData
-     * @return array{name: string|null, quality: int|null, item_id: int|null}
-     */
-    private function pickRepresentative(array $items, array $itemData): array
-    {
-        $best = null;
-
-        foreach ($items as [$itemId, $detailName]) {
-            $quality = $itemData[$itemId]['quality'] ?? 1;
-            $name = $itemData[$itemId]['name'] ?? '';
-            if ($name === '') {
-                $name = $detailName;
-            }
-
-            if ($name === '') {
+            if ($existing instanceof WowAppearance && $this->isUnchanged($existing, $row)) {
                 continue;
             }
 
-            if ($best === null || $quality > $best['quality']) {
-                $best = ['name' => $name, 'quality' => $quality, 'item_id' => $itemId];
+            $rows[] = $row;
+        }
+
+        $this->upsertRows($rows, ['name_fr', 'slot', 'category', 'quality', 'item_id', 'icon_file_data_id', 'icon_url', 'expansion_id', 'source', 'is_active']);
+    }
+
+    private function storedWins(WowAppearance $wowAppearance, int $quality, int $itemId): bool
+    {
+        if ($wowAppearance->item_id === null) {
+            return false;
+        }
+
+        if ($wowAppearance->item_id === $itemId) {
+            return false;
+        }
+
+        return ! $this->beats($quality, $itemId, $wowAppearance->quality ?? 0, $wowAppearance->item_id);
+    }
+
+    /**
+     * Une ligne identique n'est pas réécrite : sans ça chaque passe toucherait les
+     * 22 000 lignes et le mode incrémental ne voudrait plus rien dire.
+     *
+     * @param  array{id: int, name_fr: string, slot: string|null, category: string|null, quality: int|null, item_id: int|null, icon_file_data_id: int|null, icon_url: string|null, expansion_id: int|null, source: string|null, is_active: bool}  $row
+     */
+    private function isUnchanged(WowAppearance $wowAppearance, array $row): bool
+    {
+        return $wowAppearance->name_fr === $row['name_fr']
+            && $wowAppearance->slot === $row['slot']
+            && $wowAppearance->category === $row['category']
+            && $wowAppearance->quality === $row['quality']
+            && $wowAppearance->item_id === $row['item_id']
+            && $wowAppearance->icon_file_data_id === $row['icon_file_data_id']
+            && $wowAppearance->icon_url === $row['icon_url']
+            && $wowAppearance->expansion_id === $row['expansion_id']
+            && $wowAppearance->source === $row['source']
+            && $wowAppearance->is_active === $row['is_active'];
+    }
+
+    /**
+     * Lignes à illustrer, groupées par fenêtre de l'item représentatif.
+     *
+     * Hors rafraîchissement complet, seules les lignes sans icône sont visées : une
+     * icône est déjà celle de l'item représentatif courant, puisqu'un changement de
+     * représentant l'a remise à nul.
+     *
+     * @return array<int, array<int, int>> [window => [appearanceId => itemId]]
+     */
+    private function mediaTargets(bool $full): array
+    {
+        $builder = WowAppearance::query()->whereNotNull('item_id');
+        if (! $full) {
+            $builder->whereNull('icon_url');
+        }
+
+        $targets = [];
+
+        /** @var list<array{id: int, item_id: int}> $rows */
+        $rows = $builder->get(['id', 'item_id'])->map(static fn (WowAppearance $wowAppearance): array => [
+            'id' => $wowAppearance->id,
+            'item_id' => (int) $wowAppearance->item_id,
+        ])->all();
+
+        foreach ($rows as $row) {
+            $targets[intdiv($row['item_id'], ItemSearchSweep::WINDOW_SIZE)][$row['id']] = $row['item_id'];
+        }
+
+        return $targets;
+    }
+
+    /**
+     * Balaie des fenêtres de media et pose les icônes des lignes qui les attendent.
+     *
+     * @param  list<int>  $windows
+     * @param  array<int, array<int, int>>  $mediaTargets
+     */
+    private function resolveIcons(array $windows, array $mediaTargets): void
+    {
+        $media = $this->itemSearchSweep->sweepItemMedia($windows);
+
+        /** @var array<int, MediaSearchDocument> $iconByAppearance */
+        $iconByAppearance = [];
+        foreach ($windows as $window) {
+            foreach ($mediaTargets[$window] ?? [] as $appearanceId => $itemId) {
+                $mediaSearchDocument = $media[$itemId] ?? null;
+                if (! $mediaSearchDocument instanceof MediaSearchDocument) {
+                    continue;
+                }
+
+                if ($mediaSearchDocument->iconUrl === null) {
+                    continue;
+                }
+
+                $iconByAppearance[$appearanceId] = $mediaSearchDocument;
             }
         }
 
-        return $best ?? ['name' => null, 'quality' => null, 'item_id' => null];
+        $this->writeIcons($iconByAppearance);
+    }
+
+    /**
+     * @param  array<int, MediaSearchDocument>  $iconByAppearance
+     */
+    private function writeIcons(array $iconByAppearance): void
+    {
+        if ($iconByAppearance === []) {
+            return;
+        }
+
+        foreach (array_chunk($iconByAppearance, self::WRITE_CHUNK, preserve_keys: true) as $chunk) {
+            $rows = [];
+
+            foreach (WowAppearance::query()->whereIn('id', array_keys($chunk))->get() as $wowAppearance) {
+                $mediaSearchDocument = $chunk[$wowAppearance->id];
+                if ($wowAppearance->icon_url === $mediaSearchDocument->iconUrl && $wowAppearance->icon_file_data_id === $mediaSearchDocument->fileDataId) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'id' => $wowAppearance->id,
+                    'name_fr' => $wowAppearance->name_fr,
+                    'slot' => $wowAppearance->slot,
+                    'category' => $wowAppearance->category,
+                    'quality' => $wowAppearance->quality,
+                    'item_id' => $wowAppearance->item_id,
+                    'icon_file_data_id' => $mediaSearchDocument->fileDataId,
+                    'icon_url' => $mediaSearchDocument->iconUrl,
+                    'expansion_id' => $wowAppearance->expansion_id,
+                    'source' => $wowAppearance->source,
+                    'is_active' => $wowAppearance->is_active,
+                ];
+            }
+
+            $this->upsertRows($rows, ['icon_file_data_id', 'icon_url']);
+        }
     }
 
     /**
      * @param  list<array{id: int, name_fr: string, slot: string|null, category: string|null, quality: int|null, item_id: int|null, icon_file_data_id: int|null, icon_url: string|null, expansion_id: int|null, source: string|null, is_active: bool}>  $rows
+     * @param  list<string>  $update
      */
-    private function saveRows(array $rows): void
+    private function upsertRows(array $rows, array $update): void
     {
-        $this->info(sprintf('Saving %d appearances...', count($rows)));
-
-        $count = 0;
-        foreach (array_chunk($rows, 500) as $chunk) {
-            WowAppearance::query()->upsert(
-                $chunk,
-                uniqueBy: ['id'],
-                update: ['name_fr', 'slot', 'category', 'quality', 'item_id', 'icon_file_data_id', 'icon_url', 'expansion_id', 'source', 'is_active'],
-            );
-            $count += count($chunk);
-        }
-
-        $this->info(sprintf('Appearance import complete: %d items.', $count));
-    }
-
-    /**
-     * Supprime les apparences en base qui ne figurent plus dans les index de slots
-     * (anciennes données CSV ou entrées retirées par Blizzard).
-     *
-     * Le balayage porte sur toutes les lignes, actives ou non : ne regarder que les
-     * actives laissait le rebut s'accumuler indéfiniment, une ligne désactivée par une
-     * passe précédente n'étant jamais reconsidérée. fetchSlotIndexes() garantit que
-     * les 18 index ont répondu, sans quoi l'import s'est déjà interrompu.
-     *
-     * @param  array<int, string>  $slotByAppearance
-     */
-    private function deleteStaleRows(array $slotByAppearance): void
-    {
-        /** @var list<int> $existingIds */
-        $existingIds = WowAppearance::query()->pluck('id')->all();
-
-        $staleIds = array_diff($existingIds, array_keys($slotByAppearance));
-        if ($staleIds === []) {
+        if ($rows === []) {
             return;
         }
 
-        foreach (array_chunk($staleIds, 500) as $chunk) {
-            WowAppearance::query()->whereIn('id', $chunk)->delete();
+        foreach (array_chunk($rows, self::WRITE_CHUNK) as $chunk) {
+            WowAppearance::query()->upsert($chunk, uniqueBy: ['id'], update: $update);
         }
 
-        $this->info(sprintf('Deleted %d stale appearances.', count($staleIds)));
+        $this->info(sprintf('  %d appearances written.', count($rows)));
     }
 }
